@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { TelegramFile } from '../../types';
-import { isVideoFile, isAudioFile } from '../../utils';
+import { tauriApi } from '../../api/tauri';
+import { isVideoFile, isAudioFile, resolveFileFolderId } from '../../utils';
 
 interface MediaPlayerProps {
     file: TelegramFile;
@@ -18,10 +18,11 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
     const [streamToken, setStreamToken] = useState<string | null>(null);
 
     useEffect(() => {
-        invoke<string>('cmd_get_stream_token').then(setStreamToken).catch(() => {});
+        tauriApi.getStreamToken().then(setStreamToken).catch(() => {});
     }, []);
 
-    const folderIdParam = activeFolderId !== null ? activeFolderId.toString() : 'home';
+    const folderId = resolveFileFolderId(file, activeFolderId);
+    const folderIdParam = folderId !== null ? folderId.toString() : 'home';
     const streamUrl = streamToken
         ? `http://localhost:14200/stream/${folderIdParam}/${file.id}?token=${streamToken}`
         : null;
@@ -114,7 +115,7 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
                 <div className="mt-4 text-center">
                     <h3 className="text-lg font-medium text-white">{file.name}</h3>
                     <p className="text-sm text-white/50">
-                        Streaming from Telegram Drive
+                        Streaming via SharkDrive
                         {typeof currentIndex === 'number' && typeof totalItems === 'number' && totalItems > 0 && (
                             <span className="ml-2">• {currentIndex + 1}/{totalItems}</span>
                         )}

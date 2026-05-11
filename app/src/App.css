@@ -3,26 +3,26 @@
 /* stylelint-disable at-rule-no-unknown */
 /* Dark Theme (Default) - Using Tailwind v4 @theme directive */
 @theme {
-  --color-telegram-bg: #0e1621;
-  --color-telegram-surface: #17212b;
-  --color-telegram-primary: #ffae00;
-  --color-telegram-secondary: #2481cc;
-  --color-telegram-text: #ffffff;
-  --color-telegram-subtext: #8e9fb3;
-  --color-telegram-border: rgba(255, 255, 255, 0.1);
-  --color-telegram-hover: rgba(255, 255, 255, 0.05);
+  --color-telegram-bg: #060d18;
+  --color-telegram-surface: #0b1729;
+  --color-telegram-primary: #00b4ff;
+  --color-telegram-secondary: #0066ff;
+  --color-telegram-text: #e4f2ff;
+  --color-telegram-subtext: #5a8aaa;
+  --color-telegram-border: rgba(0, 180, 255, 0.12);
+  --color-telegram-hover: rgba(0, 180, 255, 0.06);
 }
 
 /* Light Theme Overrides */
 :root.light {
-  --color-telegram-bg: #f0f2f5;
+  --color-telegram-bg: #eef4fb;
   --color-telegram-surface: #ffffff;
-  --color-telegram-primary: #e69500;
-  --color-telegram-secondary: #2481cc;
-  --color-telegram-text: #1a1a1a;
-  --color-telegram-subtext: #65676b;
-  --color-telegram-border: rgba(0, 0, 0, 0.1);
-  --color-telegram-hover: rgba(0, 0, 0, 0.03);
+  --color-telegram-primary: #0080cc;
+  --color-telegram-secondary: #0055aa;
+  --color-telegram-text: #0b1729;
+  --color-telegram-subtext: #4a6a85;
+  --color-telegram-border: rgba(0, 128, 204, 0.15);
+  --color-telegram-hover: rgba(0, 128, 204, 0.05);
 }
 
 body,
@@ -41,19 +41,19 @@ body,
 
 /* Auth screen gradient background */
 .auth-gradient {
-  background: radial-gradient(120% 120% at 0% 0%, #3ca5ff 0%, #007aff 100%);
+  background: radial-gradient(120% 120% at 0% 0%, #00b4ff 0%, #003d80 50%, #060d18 100%);
 }
 
 :root.light .auth-gradient {
-  background: linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%);
+  background: linear-gradient(135deg, #0080cc 0%, #00b4ff 100%);
 }
 
 /* Glassmorphism Utilities - Dark */
 .glass {
-  background: rgba(23, 33, 43, 0.7);
+  background: rgba(11, 23, 41, 0.75);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(0, 180, 255, 0.1);
 }
 
 :root.light .glass {

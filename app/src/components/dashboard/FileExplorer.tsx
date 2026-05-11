@@ -6,26 +6,47 @@ import { EmptyState } from './EmptyState';
 import { TelegramFile } from '../../types';
 import { ContextMenu } from './ContextMenu';
 import { FileListItem } from './FileListItem';
+import { GalleryView } from './GalleryView';
 
 type SortField = 'name' | 'size' | 'date';
 type SortDirection = 'asc' | 'desc';
+type FilterType = 'all' | 'image' | 'video' | 'audio' | 'doc' | 'other';
+
+const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg', 'heic']);
+const VIDEO_EXT = new Set(['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v']);
+const AUDIO_EXT = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'opus']);
+const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'rtf']);
+
+function getFilterType(name: string): FilterType {
+    const ext = name.split('.').pop()?.toLowerCase() ?? '';
+    if (IMAGE_EXT.has(ext)) return 'image';
+    if (VIDEO_EXT.has(ext)) return 'video';
+    if (AUDIO_EXT.has(ext)) return 'audio';
+    if (DOC_EXT.has(ext)) return 'doc';
+    return 'other';
+}
 
 interface FileExplorerProps {
     files: TelegramFile[];
     loading: boolean;
     error: Error | null;
-    viewMode: 'grid' | 'list';
+    viewMode: 'grid' | 'list' | 'gallery';
     selectedIds: number[];
     activeFolderId: number | null;
     onFileClick: (e: React.MouseEvent, id: number) => void;
-    onDelete: (id: number) => void;
-    onDownload: (id: number, name: string) => void;
+    onDelete: (file: TelegramFile) => void;
+    onDownload: (file: TelegramFile) => void;
     onPreview: (file: TelegramFile, orderedFiles?: TelegramFile[]) => void;
     onManualUpload: () => void;
     onSelectionClear: () => void;
     onDrop?: (e: React.DragEvent, folderId: number) => void;
     onDragStart?: (fileId: number) => void;
     onDragEnd?: () => void;
+    favoriteIds: Set<number>;
+    onToggleFavorite: (id: number) => void;
+    onRename: (file: TelegramFile) => void;
+    onShareLink: (file: TelegramFile) => void;
+    onOpenFolder?: (file: TelegramFile) => void;
 }
 
 
@@ -57,10 +78,12 @@ function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
 
 export function FileExplorer({
     files, loading, error, viewMode, selectedIds, activeFolderId,
-    onFileClick, onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onDrop, onDragStart, onDragEnd
+    onFileClick, onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onDrop, onDragStart, onDragEnd,
+    favoriteIds, onToggleFavorite, onRename, onShareLink, onOpenFolder
 }: FileExplorerProps) {
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+    const [filterType, setFilterType] = useState<FilterType>('all');
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: TelegramFile } | null>(null);
 
     const parentRef = useRef<HTMLDivElement>(null);
@@ -78,22 +101,19 @@ export function FileExplorer({
     }, []);
 
     const sortedFiles = useMemo(() => {
-        return [...files].sort((a, b) => {
+        const filtered = filterType === 'all'
+            ? files
+            : files.filter(f => f.type === 'folder' || getFilterType(f.name) === filterType);
+        return [...filtered].sort((a, b) => {
             let comparison = 0;
             switch (sortField) {
-                case 'name':
-                    comparison = a.name.localeCompare(b.name);
-                    break;
-                case 'size':
-                    comparison = (a.size || 0) - (b.size || 0);
-                    break;
-                case 'date':
-                    comparison = (a.created_at || '').localeCompare(b.created_at || '');
-                    break;
+                case 'name': comparison = a.name.localeCompare(b.name); break;
+                case 'size': comparison = (a.size || 0) - (b.size || 0); break;
+                case 'date': comparison = (a.created_at || '').localeCompare(b.created_at || ''); break;
             }
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [files, sortField, sortDirection]);
+    }, [files, sortField, sortDirection, filterType]);
 
     const handlePreviewRequest = useCallback((file: TelegramFile) => {
         onPreview(file, sortedFiles);
@@ -172,6 +192,18 @@ export function FileExplorer({
         );
     }
 
+    if (viewMode === 'gallery') {
+        return (
+            <GalleryView
+                files={files}
+                activeFolderId={activeFolderId}
+                favoriteIds={favoriteIds}
+                onToggleFavorite={onToggleFavorite}
+                onPreview={(file) => onPreview(file, files)}
+            />
+        );
+    }
+
     return (
         <div
             ref={parentRef}
@@ -183,26 +215,32 @@ export function FileExplorer({
             {viewMode === 'grid' ? (
                 <>
 
-                    <div className="flex items-center gap-2 mb-4 text-xs text-telegram-subtext">
-                        <span>Sort by:</span>
-                        <button
-                            onClick={() => handleSort('name')}
-                            className={`px-2 py-1 rounded flex items-center gap-1 hover:bg-white/5 ${sortField === 'name' ? 'text-telegram-primary' : ''}`}
-                        >
-                            Name <SortIcon field="name" />
-                        </button>
-                        <button
-                            onClick={() => handleSort('size')}
-                            className={`px-2 py-1 rounded flex items-center gap-1 hover:bg-white/5 ${sortField === 'size' ? 'text-telegram-primary' : ''}`}
-                        >
-                            Size <SortIcon field="size" />
-                        </button>
-                        <button
-                            onClick={() => handleSort('date')}
-                            className={`px-2 py-1 rounded flex items-center gap-1 hover:bg-white/5 ${sortField === 'date' ? 'text-telegram-primary' : ''}`}
-                        >
-                            Date <SortIcon field="date" />
-                        </button>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 text-xs text-telegram-subtext">
+                        <div className="flex items-center gap-1">
+                            <span>Sort:</span>
+                            {(['name', 'size', 'date'] as SortField[]).map(f => (
+                                <button key={f} onClick={() => handleSort(f)}
+                                    className={`px-2 py-1 rounded flex items-center gap-1 hover:bg-white/5 capitalize ${sortField === f ? 'text-telegram-primary' : ''}`}>
+                                    {f} <SortIcon field={f} />
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span>Filter:</span>
+                            {([
+                                ['all', 'All'],
+                                ['image', '🖼 Images'],
+                                ['video', '🎬 Videos'],
+                                ['audio', '🎵 Audio'],
+                                ['doc', '📄 Docs'],
+                                ['other', '📦 Other'],
+                            ] as [FilterType, string][]).map(([type, label]) => (
+                                <button key={type} onClick={() => setFilterType(type)}
+                                    className={`px-2 py-1 rounded hover:bg-white/5 transition-colors ${filterType === type ? 'text-telegram-primary bg-telegram-primary/10' : ''}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
 
@@ -245,14 +283,16 @@ export function FileExplorer({
                                                 isSelected={selectedIds.includes(file.id)}
                                                 onClick={(e) => onFileClick(e, file.id)}
                                                 onContextMenu={(e) => handleContextMenu(e, file)}
-                                                onDelete={() => onDelete(file.id)}
-                                                onDownload={() => onDownload(file.id, file.name)}
+                                                onDelete={() => onDelete(file)}
+                                                onDownload={() => onDownload(file)}
                                                 onPreview={() => handlePreviewRequest(file)}
                                                 onDrop={onDrop}
                                                 onDragStart={onDragStart}
                                                 onDragEnd={onDragEnd}
                                                 activeFolderId={activeFolderId}
                                                 height={cardHeight}
+                                                isFavorite={favoriteIds.has(file.id)}
+                                                onToggleFavorite={onToggleFavorite}
                                             />
                                         );
                                     })}
@@ -334,19 +374,27 @@ export function FileExplorer({
                     file={contextMenu.file}
                     onClose={() => setContextMenu(null)}
                     onDownload={() => {
-                        onDownload(contextMenu.file.id, contextMenu.file.name);
+                        onDownload(contextMenu.file);
                         setContextMenu(null);
                     }}
                     onDelete={() => {
-                        onDelete(contextMenu.file.id);
+                        onDelete(contextMenu.file);
                         setContextMenu(null);
                     }}
                     onPreview={() => {
                         if (contextMenu.file.type === 'folder') {
-                            onFileClick({ preventDefault: () => { }, stopPropagation: () => { } } as React.MouseEvent, contextMenu.file.id);
+                            onOpenFolder?.(contextMenu.file);
                         } else {
                             handlePreviewRequest(contextMenu.file);
                         }
+                        setContextMenu(null);
+                    }}
+                    onRename={() => {
+                        onRename(contextMenu.file);
+                        setContextMenu(null);
+                    }}
+                    onShareLink={() => {
+                        onShareLink(contextMenu.file);
                         setContextMenu(null);
                     }}
                 />

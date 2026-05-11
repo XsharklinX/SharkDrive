@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { HardDrive, Folder, Plus, RefreshCw, LogOut } from 'lucide-react';
+import { HardDrive, Folder, Plus, RefreshCw, LogOut, Trash2, RotateCcw, Clock } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
 import { TelegramFolder, BandwidthStats } from '../../types';
+
+export const RECENT_FOLDER_ID = -1;
 
 interface SidebarProps {
     folders: TelegramFolder[];
@@ -10,17 +12,27 @@ interface SidebarProps {
     setActiveFolderId: (id: number | null) => void;
     onDrop: (e: React.DragEvent, folderId: number | null) => void;
     onDelete: (id: number, name: string) => void;
+    onRenameFolder?: (id: number, name: string) => void;
+    onShareFolder?: (id: number, name: string) => void;
+    onToggleEncryption?: (id: number) => void;
+    encryptedFolderIds?: Set<number>;
     onCreate: (name: string) => Promise<void>;
     isSyncing: boolean;
     isConnected: boolean;
     onSync: () => void;
     onLogout: () => void;
     bandwidth: BandwidthStats | null;
+    trashFolderId: number | null;
+    trashedFolders?: { id: number; name: string }[];
+    onRestoreFolder?: (id: number, name: string) => void;
+    recentCount?: number;
 }
 
 export function Sidebar({
-    folders, activeFolderId, setActiveFolderId, onDrop, onDelete, onCreate,
-    isSyncing, isConnected, onSync, onLogout, bandwidth
+    folders, activeFolderId, setActiveFolderId, onDrop, onDelete, onRenameFolder, onShareFolder,
+    onToggleEncryption, encryptedFolderIds = new Set(), onCreate,
+    isSyncing, isConnected, onSync, onLogout, bandwidth, trashFolderId,
+    trashedFolders = [], onRestoreFolder, recentCount = 0
 }: SidebarProps) {
     const [showNewFolderInput, setShowNewFolderInput] = useState(false);
     const [newFolderName, setNewFolderName] = useState("");
@@ -40,7 +52,7 @@ export function Sidebar({
         <aside className="w-64 bg-telegram-surface border-r border-telegram-border flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="p-4 flex items-center gap-2">
                 <img src="/logo.svg" className="w-8 h-8 drop-shadow-lg" alt="Logo" />
-                <span className="font-bold text-lg text-telegram-text tracking-tight">Telegram Drive</span>
+                <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-[#00b4ff] to-[#0066ff] bg-clip-text text-transparent">SharkDrive</span>
             </div>
 
             {/* Scrollable folder list */}
@@ -53,6 +65,46 @@ export function Sidebar({
                     onDrop={(e: React.DragEvent) => onDrop(e, null)}
                     folderId={null}
                 />
+                <SidebarItem
+                    icon={Clock}
+                    label={`Recent${recentCount > 0 ? ` (${recentCount})` : ''}`}
+                    active={activeFolderId === RECENT_FOLDER_ID}
+                    onClick={() => setActiveFolderId(RECENT_FOLDER_ID as unknown as null)}
+                    onDrop={() => {}}
+                    folderId={null}
+                />
+                {trashFolderId !== null && (
+                    <>
+                        <SidebarItem
+                            icon={Trash2}
+                            label={`Trash${trashedFolders.length > 0 ? ` (${trashedFolders.length} folder${trashedFolders.length > 1 ? 's' : ''})` : ''}`}
+                            active={activeFolderId === trashFolderId}
+                            onClick={() => setActiveFolderId(trashFolderId)}
+                            onDrop={(e: React.DragEvent) => onDrop(e, trashFolderId)}
+                            folderId={trashFolderId}
+                        />
+                        {activeFolderId === trashFolderId && trashedFolders.length > 0 && (
+                            <div className="ml-4 space-y-0.5">
+                                <p className="text-[10px] text-telegram-subtext px-3 py-1 font-medium uppercase tracking-wide">Trashed Folders</p>
+                                {trashedFolders.map(f => (
+                                    <div key={f.id} className="flex items-center justify-between px-3 py-1.5 rounded-lg hover:bg-telegram-hover group">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <Folder className="w-3.5 h-3.5 text-telegram-subtext flex-shrink-0" />
+                                            <span className="text-xs text-telegram-subtext truncate">{f.name}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => onRestoreFolder?.(f.id, f.name)}
+                                            className="opacity-0 group-hover:opacity-100 p-1 hover:text-telegram-primary text-telegram-subtext transition-all"
+                                            title="Restore folder"
+                                        >
+                                            <RotateCcw className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
                 {folders.map(folder => (
                     <SidebarItem
                         key={folder.id}
@@ -62,6 +114,10 @@ export function Sidebar({
                         onClick={() => setActiveFolderId(folder.id)}
                         onDrop={(e: React.DragEvent) => onDrop(e, folder.id)}
                         onDelete={() => onDelete(folder.id, folder.name)}
+                        onRename={onRenameFolder ? () => onRenameFolder(folder.id, folder.name) : undefined}
+                        onShareLink={onShareFolder ? () => onShareFolder(folder.id, folder.name) : undefined}
+                        onToggleEncryption={onToggleEncryption ? () => onToggleEncryption(folder.id) : undefined}
+                        isEncrypted={encryptedFolderIds.has(folder.id)}
                         folderId={folder.id}
                     />
                 ))}

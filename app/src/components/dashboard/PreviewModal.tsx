@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, File, ChevronLeft, ChevronRight } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { TelegramFile } from '../../types';
-import { isImageFile } from '../../utils';
+import { tauriApi } from '../../api/tauri';
+import { isImageFile, resolveFileFolderId } from '../../utils';
 
 const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
 const PREVIEW_CACHE_MAX_ITEMS = 8;
@@ -79,7 +79,8 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
 
     useEffect(() => {
         const load = async () => {
-            const key = getPreviewCacheKey(file.id, activeFolderId);
+            const effectiveFolderId = resolveFileFolderId(file, activeFolderId);
+            const key = getPreviewCacheKey(file.id, effectiveFolderId);
             const shouldBypassCache = reloadNonce > 0;
             const requestId = ++latestRequestRef.current;
             const cachedSrc = shouldBypassCache ? null : getCachedPreview(key);
@@ -95,10 +96,7 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
             setLoading(true);
             setError(null);
             try {
-                const path = await invoke<string>('cmd_get_preview', {
-                    messageId: file.id,
-                    folderId: activeFolderId
-                });
+                const path = await tauriApi.getPreview(file.id, effectiveFolderId);
                 if (requestId !== latestRequestRef.current) return;
 
                 if (path) {
@@ -128,14 +126,12 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
         const candidates = [nextFile, prevFile].filter((f): f is TelegramFile => !!f && isSafeToPrefetch(f.name));
 
         candidates.forEach((candidate) => {
-            const key = getPreviewCacheKey(candidate.id, activeFolderId);
+            const candidateFolderId = resolveFileFolderId(candidate, activeFolderId);
+            const key = getPreviewCacheKey(candidate.id, candidateFolderId);
             if (getCachedPreview(key) || pendingPrefetch.has(key)) return;
 
             pendingPrefetch.add(key);
-            invoke<string>('cmd_get_preview', {
-                messageId: candidate.id,
-                folderId: activeFolderId
-            }).then((path) => {
+            tauriApi.getPreview(candidate.id, candidateFolderId).then((path) => {
                 if (!path) return;
                 const normalized = path.startsWith('data:') ? path : convertFileSrc(path);
                 rememberPreview(key, normalized);
@@ -230,7 +226,7 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
                                 className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl bg-black"
                                 alt="Preview"
                                 onError={() => {
-                                    const key = getPreviewCacheKey(file.id, activeFolderId);
+                                    const key = getPreviewCacheKey(file.id, resolveFileFolderId(file, activeFolderId));
                                     forgetPreview(key);
 
                                     if (retryCount < 1) {

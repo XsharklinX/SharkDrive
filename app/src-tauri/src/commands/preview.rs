@@ -2,6 +2,7 @@ use tauri::State;
 use tauri::Manager;
 use grammers_client::types::Media;
 use base64::{Engine as _, engine::general_purpose};
+use image::ImageFormat;
 use crate::TelegramState;
 use crate::bandwidth::BandwidthManager;
 use crate::commands::utils::resolve_peer;
@@ -93,9 +94,7 @@ pub async fn cmd_get_preview(
                 Media::Photo(_) => "jpg".to_string(),
                 _ => "bin".to_string(),
             };
-            let folder_key = folder_id
-                .map(|id| id.to_string())
-                .unwrap_or_else(|| "home".to_string());
+            let folder_key = folder_cache_key(folder_id);
             let save_path = cache_dir.join(format!("{}_{}.{}", folder_key, message_id, ext));
             let save_path_str = save_path.to_string_lossy().to_string();
 
@@ -168,9 +167,27 @@ pub async fn cmd_clean_cache(
         .map_err(|e: tauri::Error| e.to_string())?
         .join("previews");
     if cache_dir.exists() {
-        let _ = std::fs::remove_dir_all(cache_dir);
+        let _ = std::fs::remove_dir_all(&cache_dir);
+    }
+
+    let thumbnail_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| e.to_string())?
+        .join("thumbnails");
+    if thumbnail_dir.exists() {
+        let _ = std::fs::remove_dir_all(thumbnail_dir);
     }
     Ok(())
+}
+
+fn resize_image_thumbnail(input_path: &std::path::Path, output_path: &std::path::Path) -> Result<(), String> {
+    let image = image::open(input_path).map_err(|e| format!("Failed to decode image thumbnail: {}", e))?;
+    let thumbnail = image.thumbnail(320, 320);
+    let mut output = std::fs::File::create(output_path).map_err(|e| format!("Failed to create thumbnail: {}", e))?;
+    thumbnail
+        .write_to(&mut output, ImageFormat::Png)
+        .map_err(|e| format!("Failed to encode thumbnail: {}", e))
 }
 
 /// Get a small thumbnail for inline display in file cards.
@@ -193,12 +210,15 @@ pub async fn cmd_get_thumbnail(
         let _ = std::fs::create_dir_all(&cache_dir);
     }
 
+    let folder_key = folder_cache_key(folder_id);
+    let cache_prefix = format!("{}_{}.", folder_key, message_id);
+
     // Check for any cached thumbnail for this message
     // Look for existing cached file
     if let Ok(entries) = std::fs::read_dir(&cache_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&format!("{}.", message_id)) {
+            if name.starts_with(&cache_prefix) {
                 // Found cached thumbnail, return as base64
                 if let Ok(bytes) = std::fs::read(entry.path()) {
                     let ext = name.rsplit('.').next().unwrap_or("jpg");
@@ -228,40 +248,31 @@ pub async fn cmd_get_thumbnail(
     if let Some(m) = messages.into_iter().flatten().next() {
         if let Some(media) = m.media() {
             // Only get thumbnails for photos and documents with photo thumbnails
-            let (is_image, ext) = match &media {
-                Media::Photo(_) => (true, "jpg".to_string()),
+            let fallback_mime = match &media {
+                Media::Photo(_) => "image/jpeg",
                 Media::Document(d) => {
                     let mime = d.mime_type().unwrap_or("");
                     if mime.starts_with("image/") {
-                        let e = match mime {
-                            "image/png" => "png",
-                            "image/gif" => "gif",
-                            "image/webp" => "webp",
-                            _ => "jpg",
-                        };
-                        (true, e.to_string())
+                        mime
                     } else {
                         // Not an image, return empty - FileCard will show icon
                         return Ok("".to_string());
                     }
                 },
-                _ => return Ok("".to_string()),
+                _ => "",
             };
 
-            if is_image {
-                // Get photo thumbnail (smallest size for speed)
-                let save_path = cache_dir.join(format!("{}.{}", message_id, ext));
-                let save_path_str = save_path.to_string_lossy().to_string();
+            if !fallback_mime.is_empty() {
+                let save_path = cache_dir.join(format!("{}_{}.png", folder_key, message_id));
+                let temp_path = cache_dir.join(format!("{}_{}.orig", folder_key, message_id));
+                let temp_path_str = temp_path.to_string_lossy().to_string();
 
-                // Download the thumbnail/photo
-                if client.download_media(&media, &save_path_str).await.is_ok() {
-                    if let Ok(bytes) = std::fs::read(&save_path) {
-                        let mime = match ext.as_str() {
-                            "png" => "image/png",
-                            "gif" => "image/gif",
-                            "webp" => "image/webp",
-                            _ => "image/jpeg",
-                        };
+                if client.download_media(&media, &temp_path_str).await.is_ok() {
+                    let _ = resize_image_thumbnail(&temp_path, &save_path);
+                    let final_path = if save_path.exists() { &save_path } else { &temp_path };
+                    if let Ok(bytes) = std::fs::read(final_path) {
+                        let _ = std::fs::remove_file(&temp_path);
+                        let mime = if final_path == &save_path { "image/png" } else { fallback_mime };
                         let b64 = general_purpose::STANDARD.encode(&bytes);
                         return Ok(format!("data:{};base64,{}", mime, b64));
                     }
@@ -271,4 +282,10 @@ pub async fn cmd_get_thumbnail(
     }
 
     Ok("".to_string())
+}
+
+fn folder_cache_key(folder_id: Option<i64>) -> String {
+    folder_id
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| "home".to_string())
 }

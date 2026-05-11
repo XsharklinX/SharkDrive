@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { Folder, Eye, Trash2 } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
+import { Folder, Eye, Trash2, Star } from 'lucide-react';
 import { TelegramFile } from '../../types';
+import { tauriApi } from '../../api/tauri';
+import { resolveFileFolderId } from '../../utils';
 import { FileTypeIcon } from '../FileTypeIcon';
 
 interface FileCardProps {
@@ -18,6 +19,8 @@ interface FileCardProps {
     onDragEnd?: () => void;
     activeFolderId?: number | null;
     height?: number;
+    isFavorite?: boolean;
+    onToggleFavorite?: (id: number) => void;
 }
 
 // Check if file is an image type that can have a thumbnail
@@ -26,7 +29,7 @@ function isImageFile(filename: string): boolean {
     return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
 }
 
-export function FileCard({ file, onDelete, onDownload, onPreview, isSelected, onClick, onContextMenu, onDrop, onDragStart, onDragEnd, activeFolderId, height }: FileCardProps) {
+export function FileCard({ file, onDelete, onDownload, onPreview, isSelected, onClick, onContextMenu, onDrop, onDragStart, onDragEnd, activeFolderId, height, isFavorite, onToggleFavorite }: FileCardProps) {
     const isFolder = file.type === 'folder';
     const [isDragOver, setIsDragOver] = useState(false);
     const [thumbnail, setThumbnail] = useState<string | null>(null);
@@ -39,10 +42,7 @@ export function FileCard({ file, onDelete, onDownload, onPreview, isSelected, on
         let cancelled = false;
         setThumbnailLoading(true);
 
-        invoke<string>('cmd_get_thumbnail', {
-            messageId: file.id,
-            folderId: activeFolderId
-        }).then((result) => {
+        tauriApi.getThumbnail(file.id, resolveFileFolderId(file, activeFolderId ?? null)).then((result) => {
             if (!cancelled && result) {
                 setThumbnail(result);
             }
@@ -136,6 +136,15 @@ export function FileCard({ file, onDelete, onDownload, onPreview, isSelected, on
 
                 {/* Quick actions on hover */}
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                    {onToggleFavorite && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onToggleFavorite(file.id); }}
+                            className={`file-action-btn p-1 bg-black/50 rounded-full transition-colors ${isFavorite ? '!opacity-100 text-yellow-400 hover:text-yellow-300' : 'text-white/70 hover:text-yellow-400'}`}
+                            title={isFavorite ? 'Remove from Starred' : 'Add to Starred'}
+                        >
+                            <Star className={`w-3 h-3 ${isFavorite ? 'fill-yellow-400' : ''}`} />
+                        </button>
+                    )}
                     <button onClick={(e) => { e.stopPropagation(); if (onPreview) onPreview() }} className="file-action-btn p-1 bg-black/50 rounded-full hover:bg-telegram-primary hover:text-white text-white/70" title="Preview">
                         <Eye className="w-3 h-3" />
                     </button>

@@ -28,6 +28,10 @@ pub mod preview;
 pub mod utils;
 pub mod network;
 pub mod streaming;
+pub mod encryption;
+pub mod backup;
+pub mod settings;
+pub mod share;
 
 pub use auth::*;
 pub use fs::*;
@@ -35,3 +39,7 @@ pub use preview::*;
 pub use utils::*;
 pub use network::*;
 pub use streaming::*;
+pub use encryption::*;
+pub use backup::*;
+pub use settings::*;
+pub use share::*;

@@ -1,10 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
-import { invoke } from '@tauri-apps/api/core';
 // Use the legacy build — the modern build uses Map.getOrInsertComputed()
 // which isn't available in Tauri's WebKit WebView
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { TelegramFile } from '../../types';
+import { tauriApi } from '../../api/tauri';
+import { resolveFileFolderId } from '../../utils';
 
 // Use Vite's ?url suffix to get a properly bundled asset URL for the worker
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
@@ -32,7 +33,7 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
 
     // Fetch stream token once
     useEffect(() => {
-        invoke<string>('cmd_get_stream_token').then(setStreamToken).catch((err) => {
+        tauriApi.getStreamToken().then(setStreamToken).catch((err) => {
             console.error("Failed to get stream token:", err);
             setError("Failed to initialize stream");
         });
@@ -48,7 +49,8 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
         setPdf(null);
         setNumPages(0);
 
-        const folderIdParam = activeFolderId !== null ? activeFolderId.toString() : 'home';
+        const folderId = resolveFileFolderId(file, activeFolderId);
+        const folderIdParam = folderId !== null ? folderId.toString() : 'home';
         const streamUrl = `http://localhost:14200/stream/${folderIdParam}/${file.id}?token=${streamToken}`;
 
         const loadingTask = pdfjsLib.getDocument(streamUrl);

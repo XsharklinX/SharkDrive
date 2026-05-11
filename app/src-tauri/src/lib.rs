@@ -1,26 +1,27 @@
 pub mod models;
-
 pub mod commands;
 pub mod bandwidth;
+pub mod server;
 
 use tauri::Manager;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tokio::sync::Mutex;
 use std::sync::Arc;
 use commands::TelegramState;
 use commands::streaming::StreamToken;
+use commands::encryption::EncryptionState;
+use commands::backup::BackupState;
+use commands::settings::AppSettings;
+use commands::share::ShareStore;
 use rand::Rng;
 
-pub mod server;
-
-/// Generate a random 32-character hex token for streaming server auth
 fn generate_stream_token() -> String {
     let mut rng = rand::thread_rng();
     let bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// Holds the Actix-web server stop handle so we can shut it down
-/// from the RunEvent::Exit handler for graceful Ctrl+C termination.
 pub struct ActixServerHandle(pub Arc<std::sync::Mutex<Option<actix_web::dev::ServerHandle>>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,8 +29,6 @@ pub fn run() {
     env_logger::init();
 
     let stream_token = generate_stream_token();
-
-    // Shared handle for stopping the Actix server during shutdown
     let server_handle: Arc<std::sync::Mutex<Option<actix_web::dev::ServerHandle>>> =
         Arc::new(std::sync::Mutex::new(None));
     let server_handle_for_setup = server_handle.clone();
@@ -44,6 +43,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(move |app| {
+            // Manage all states
             app.manage(TelegramState {
                 client: Arc::new(Mutex::new(None)),
                 login_token: Arc::new(Mutex::new(None)),
@@ -55,26 +55,66 @@ pub fn run() {
             app.manage(bandwidth::BandwidthManager::new(app.handle()));
             app.manage(StreamToken(stream_token.clone()));
             app.manage(ActixServerHandle(server_handle_for_setup.clone()));
-            
-            // Start Streaming Server on dedicated thread (Actix needs its own runtime)
+            app.manage(EncryptionState::new());
+            app.manage(BackupState::new());
+            app.manage(AppSettings::new());
+
+            let share_store = Arc::new(ShareStore::new());
+            app.manage(share_store.clone());
+
+            // System tray
+            let show_item = MenuItem::with_id(app, "show", "Open SharkDrive", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &sep, &quit_item])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .tooltip("SharkDrive")
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // Start Streaming + Share Server
             let state = Arc::new(app.state::<TelegramState>().inner().clone());
             let token_for_server = stream_token.clone();
             let handle_for_thread = server_handle_for_setup.clone();
             std::thread::spawn(move || {
                 let sys = actix_rt::System::new();
                 sys.block_on(async move {
-                    match server::start_server(state, 14200, token_for_server).await {
+                    match server::start_server(state, share_store, 14200, token_for_server).await {
                         Ok(server) => {
-                            // Store the handle so RunEvent::Exit can stop it
                             *handle_for_thread.lock().unwrap() = Some(server.handle());
-                            // Now await the server — blocks until stopped
                             server.await.ok();
                         }
                         Err(e) => log::error!("Streaming server failed: {}", e),
                     }
                 });
             });
-            
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -100,31 +140,63 @@ pub fn run() {
             commands::cmd_clean_cache,
             commands::cmd_get_thumbnail,
             commands::cmd_get_stream_token,
+            commands::cmd_rename_file,
+            commands::cmd_rename_folder,
+            commands::cmd_get_or_create_trash,
+            commands::cmd_list_dir_files,
+            commands::cmd_soft_delete_folder,
+            commands::cmd_restore_folder,
+            commands::cmd_get_trashed_folders,
+            commands::cmd_get_folder_invite_link,
+            commands::cmd_get_local_ip,
+            // Encryption
+            commands::cmd_set_encryption_key,
+            commands::cmd_clear_encryption_key,
+            commands::cmd_get_encryption_status,
+            // Backup
+            commands::cmd_add_backup_folder,
+            commands::cmd_remove_backup_folder,
+            commands::cmd_get_backup_folders,
+            commands::cmd_update_backup_folder,
+            // Settings
+            commands::cmd_set_close_to_tray,
+            commands::cmd_get_close_to_tray,
+            commands::cmd_set_autostart,
+            commands::cmd_get_autostart,
+            // Share links
+            commands::cmd_create_share_link,
+            commands::cmd_revoke_share_link,
+            // Clipboard
+            commands::cmd_save_clipboard_image,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
     app.run(|app_handle, event| {
-        if let tauri::RunEvent::Exit = event {
-            log::info!("Application exiting — shutting down background services...");
-
-            // 1. Shutdown the grammers network runner
-            let shutdown_arc = app_handle.state::<TelegramState>().runner_shutdown.clone();
-            let runner_tx = shutdown_arc.lock().ok().and_then(|mut g| g.take());
-            if let Some(tx) = runner_tx {
-                log::info!("Signaling network runner shutdown...");
-                let _ = tx.send(());
+        match event {
+            tauri::RunEvent::WindowEvent {
+                event: tauri::WindowEvent::CloseRequested { api, .. },
+                ..
+            } => {
+                let settings = app_handle.state::<AppSettings>();
+                if *settings.close_to_tray.lock().unwrap() {
+                    if let Some(win) = app_handle.get_webview_window("main") {
+                        let _ = win.hide();
+                        api.prevent_close();
+                    }
+                }
             }
+            tauri::RunEvent::Exit => {
+                log::info!("Application exiting — shutting down background services...");
+                let shutdown_arc = app_handle.state::<TelegramState>().runner_shutdown.clone();
+                let runner_tx = shutdown_arc.lock().ok().and_then(|mut g| g.take());
+                if let Some(tx) = runner_tx { let _ = tx.send(()); }
 
-            // 2. Stop the Actix streaming server (graceful)
-            let server_arc = app_handle.state::<ActixServerHandle>().0.clone();
-            let server_handle = server_arc.lock().ok().and_then(|mut g| g.take());
-            if let Some(handle) = server_handle {
-                log::info!("Stopping Actix streaming server...");
-                // stop() sends the signal synchronously; the returned future
-                // tracks drain completion — we don't need to await it on exit.
-                drop(handle.stop(true));
+                let server_arc = app_handle.state::<ActixServerHandle>().0.clone();
+                let server_handle = server_arc.lock().ok().and_then(|mut g| g.take());
+                if let Some(handle) = server_handle { drop(handle.stop(true)); }
             }
+            _ => {}
         }
     });
 }

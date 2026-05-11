@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useState, useEffect, useRef } from 'react';
 import { Store } from '@tauri-apps/plugin-store';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useConfirm } from '../context/ConfirmContext';
 import { TelegramFolder } from '../types';
 import { useNetworkStatus } from './useNetworkStatus';
+import { tauriApi } from '../api/tauri';
 
 export function useTelegramConnection(onLogoutParent: () => void) {
     const queryClient = useQueryClient();
@@ -42,11 +42,16 @@ export function useTelegramConnection(onLogoutParent: () => void) {
                 if (apiIdStr) {
                     try {
                         const apiId = parseInt(apiIdStr as string);
-                        await invoke('cmd_connect', { apiId });
+                        await tauriApi.connect(apiId);
                         setIsConnected(true);
                         queryClient.invalidateQueries({ queryKey: ['files'] });
                     } catch {
-                        const shouldRetry = window.confirm("Failed to connect to Telegram. Retry?");
+                        const shouldRetry = await confirm({
+                            title: "Telegram Connection Failed",
+                            message: "SharkDrive couldn't reconnect to Telegram. Retry now?",
+                            confirmText: "Retry",
+                            variant: 'info'
+                        });
                         if (shouldRetry) {
                             window.location.reload();
                         } else {
@@ -69,9 +74,28 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     }, [queryClient, onLogoutParent]);
 
 
+    const prevOnlineRef = useRef(true);
     useEffect(() => {
-        setIsConnected(networkIsOnline);
-    }, [networkIsOnline]);
+        const wasOffline = !prevOnlineRef.current;
+        prevOnlineRef.current = networkIsOnline;
+
+        if (wasOffline && networkIsOnline && store) {
+            // Network restored — attempt to reconnect to Telegram
+            store.get<string>('api_id').then(apiIdStr => {
+                if (!apiIdStr) return;
+                const apiId = parseInt(apiIdStr);
+                tauriApi.connect(apiId)
+                    .then(() => {
+                        setIsConnected(true);
+                        queryClient.invalidateQueries({ queryKey: ['files'] });
+                        toast.success('Reconnected to Telegram');
+                    })
+                    .catch(() => setIsConnected(false));
+            });
+        } else {
+            setIsConnected(networkIsOnline);
+        }
+    }, [networkIsOnline, store, queryClient]);
 
 
     const isNetworkError = (error: string): boolean => {
@@ -82,7 +106,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const forceLogout = async () => {
         setIsConnected(false);
         try {
-            await invoke('cmd_clean_cache').catch(() => { });
+            await tauriApi.cleanCache().catch(() => { });
             if (store) {
                 await store.delete('api_id');
                 await store.delete('api_hash');
@@ -101,8 +125,8 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         if (!await confirm({ title: "Sign Out", message: "Are you sure you want to sign out? This will disconnect your active session.", confirmText: "Sign Out", variant: 'danger' })) return;
 
         try {
-            await invoke('cmd_logout');
-            await invoke('cmd_clean_cache');
+            await tauriApi.logout();
+            await tauriApi.cleanCache();
             if (store) {
                 await store.delete('api_id');
                 await store.delete('api_hash');
@@ -120,22 +144,30 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         if (!store) return;
         setIsSyncing(true);
         try {
-            const foundFolders = await invoke<TelegramFolder[]>('cmd_scan_folders');
-            const merged = [...folders];
-            let added = 0;
-            for (const f of foundFolders) {
-                if (!merged.find(existing => existing.id === f.id)) {
-                    merged.push(f);
-                    added++;
-                }
-            }
-            if (added > 0) {
-                setFolders(merged);
-                await store.set('folders', merged);
+            const foundFolders = await tauriApi.scanFolders();
+            const previousIds = new Set(folders.map((folder) => folder.id));
+            const updatedIds = new Set(foundFolders.map((folder) => folder.id));
+            const added = foundFolders.filter((folder) => !previousIds.has(folder.id)).length;
+            const removed = folders.filter((folder) => !updatedIds.has(folder.id)).length;
+            const renamed = foundFolders.filter((folder) => {
+                const current = folders.find((candidate) => candidate.id === folder.id);
+                return current && current.name !== folder.name;
+            }).length;
+
+            setFolders(foundFolders);
+            await store.set('folders', foundFolders);
+            await store.save();
+
+            if (activeFolderId !== null && !updatedIds.has(activeFolderId)) {
+                setActiveFolderId(null);
+                await store.set('activeFolderId', null);
                 await store.save();
-                toast.success(`Scan complete. Found ${added} new folders.`);
+            }
+
+            if (added || removed || renamed) {
+                toast.success(`Sync complete. +${added} new, ${renamed} updated, ${removed} removed.`);
             } else {
-                toast.info("Scan complete. No new folders found.");
+                toast.info("Sync complete. No folder changes found.");
             }
         } catch {
             toast.error("Sync failed");
@@ -147,7 +179,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const handleCreateFolder = async (name: string) => {
         if (!store) return;
         try {
-            const newFolder = await invoke<TelegramFolder>('cmd_create_folder', { name });
+            const newFolder = await tauriApi.createFolder(name);
             const updated = [...folders, newFolder];
             setFolders(updated);
             await store.set('folders', updated);
@@ -161,14 +193,14 @@ export function useTelegramConnection(onLogoutParent: () => void) {
 
     const handleFolderDelete = async (folderId: number, folderName: string) => {
         if (!await confirm({
-            title: "Delete Folder",
-            message: `Are you sure you want to delete "${folderName}"?\nThis will delete the channel on Telegram.`,
-            confirmText: "Delete",
+            title: "Move to Trash",
+            message: `Move "${folderName}" to Trash?\nYou can restore it later from the Trash folder.`,
+            confirmText: "Move to Trash",
             variant: 'danger'
         })) return;
 
         try {
-            await invoke('cmd_delete_folder', { folderId });
+            await tauriApi.softDeleteFolder(folderId, folderName);
             const updated = folders.filter(f => f.id !== folderId);
             setFolders(updated);
             if (store) {
@@ -201,6 +233,22 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     };
 
 
+    const handleRenameFolder = async (folderId: number, newName: string) => {
+        try {
+            await tauriApi.renameFolder(folderId, newName);
+            const updated = folders.map(f => f.id === folderId ? { ...f, name: newName } : f);
+            setFolders(updated);
+            if (store) {
+                await store.set('folders', updated);
+                await store.save();
+            }
+            toast.success(`Renamed to "${newName}"`);
+        } catch (e) {
+            toast.error(`Failed to rename folder: ${e}`);
+            throw e;
+        }
+    };
+
     const handleSetActiveFolderId = async (id: number | null) => {
         setActiveFolderId(id);
         if (store) {
@@ -220,6 +268,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         handleSyncFolders,
         handleCreateFolder,
         handleFolderDelete,
+        handleRenameFolder,
         isNetworkError,
         forceLogout
     };

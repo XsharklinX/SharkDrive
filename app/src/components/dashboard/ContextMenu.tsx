@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText } from 'lucide-react';
+import { Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText, Link } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { isMediaFile, isPdfFile } from '../../utils';
 
@@ -11,9 +11,11 @@ interface ContextMenuProps {
     onDownload: () => void;
     onDelete: () => void;
     onPreview: () => void;
+    onRename: () => void;
+    onShareLink: () => void;
 }
 
-export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPreview }: ContextMenuProps) {
+export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPreview, onRename, onShareLink }: ContextMenuProps) {
     const [adjustedPos, setAdjustedPos] = useState({ x, y });
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -36,17 +38,35 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
 
     // Close on outside click
     useEffect(() => {
-        const handleClick = () => onClose();
+        const handlePointerDown = (event: PointerEvent) => {
+            if (!menuRef.current) return;
+            if (!menuRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        const handleContextMenu = (event: MouseEvent) => {
+            if (!menuRef.current) return;
+            if (!menuRef.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
         const handleResize = () => onClose();
 
-        window.addEventListener('click', handleClick);
+        document.addEventListener('pointerdown', handlePointerDown, true);
+        document.addEventListener('contextmenu', handleContextMenu, true);
+        window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('resize', handleResize);
-        window.addEventListener('contextmenu', handleClick); // Close if right click elsewhere
 
         return () => {
-            window.removeEventListener('click', handleClick);
+            document.removeEventListener('pointerdown', handlePointerDown, true);
+            document.removeEventListener('contextmenu', handleContextMenu, true);
+            window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('resize', handleResize);
-            window.removeEventListener('contextmenu', handleClick);
         };
     }, [onClose]);
 
@@ -90,14 +110,21 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
                 </button>
             )}
 
-            <button onClick={onDownload} className="flex items-center gap-2 px-2 py-1.5 text-sm text-telegram-text hover:bg-telegram-hover rounded transition-colors text-left w-full">
-                <HardDrive className="w-4 h-4 text-green-500" />
-                Download
+            {file.type !== 'folder' && (
+                <button onClick={onDownload} className="flex items-center gap-2 px-2 py-1.5 text-sm text-telegram-text hover:bg-telegram-hover rounded transition-colors text-left w-full">
+                    <HardDrive className="w-4 h-4 text-green-500" />
+                    Download
+                </button>
+            )}
+
+            <button onClick={onRename} className="flex items-center gap-2 px-2 py-1.5 text-sm text-telegram-text hover:bg-telegram-hover rounded transition-colors text-left w-full">
+                <Pencil className="w-4 h-4 text-telegram-primary" />
+                Rename
             </button>
 
-            <button disabled className="flex items-center gap-2 px-2 py-1.5 text-sm text-telegram-subtext hover:bg-telegram-hover rounded transition-colors text-left w-full cursor-not-allowed opacity-50">
-                <Pencil className="w-4 h-4" />
-                Rename
+            <button onClick={onShareLink} className="flex items-center gap-2 px-2 py-1.5 text-sm text-telegram-text hover:bg-telegram-hover rounded transition-colors text-left w-full">
+                <Link className="w-4 h-4 text-green-400" />
+                {file.type === 'folder' ? 'Share Folder Link' : 'Share File Link'}
             </button>
 
             <div className="h-px bg-telegram-border my-1" />
