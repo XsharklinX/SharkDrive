@@ -1,4 +1,4 @@
-import { Plus, HardDrive, Folder } from 'lucide-react';
+import { X, HardDrive, Folder, MoveRight } from 'lucide-react';
 import { TelegramFolder } from '../../types';
 
 interface MoveToFolderModalProps {
@@ -10,46 +10,75 @@ interface MoveToFolderModalProps {
 
 export function MoveToFolderModal({ folders, onClose, onSelect, activeFolderId }: MoveToFolderModalProps) {
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-telegram-surface border border-telegram-border rounded-xl w-80 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
-                <div className="p-4 border-b border-telegram-border flex justify-between items-center">
-                    <h3 className="text-telegram-text font-medium">Move to Folder</h3>
-                    <button onClick={onClose} className="text-telegram-subtext hover:text-telegram-text"><Plus className="w-5 h-5 rotate-45" /></button>
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-[linear-gradient(180deg,rgba(4,10,17,0.72),rgba(2,7,13,0.92))] backdrop-blur-lg"
+            onClick={onClose}
+        >
+            <div
+                className="vault-panel flex max-h-[80vh] w-[26rem] flex-col overflow-hidden rounded-2xl shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between border-b border-telegram-border/80 px-5 py-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary">
+                            <MoveRight className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold tracking-tight text-telegram-text">Move Files</h3>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="rounded-lg border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text">
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+
+                <div className="border-b border-telegram-border/70 px-5 py-4 text-sm text-telegram-subtext">
+                    Choose where the selected files should go next. The current folder is hidden from the list.
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
                     {activeFolderId !== null && (
                         <button
                             onClick={() => onSelect(null)}
-                            className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm text-left text-telegram-text hover:bg-telegram-hover transition-colors"
+                            className="flex w-full items-center gap-3 rounded-lg border border-telegram-border bg-white/[0.03] px-4 py-3 text-left text-sm text-telegram-text transition hover:bg-white/[0.05]"
                         >
-                            <div className="w-8 h-8 rounded bg-telegram-primary/20 flex items-center justify-center text-telegram-primary">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-primary/20 bg-telegram-primary/10 text-telegram-primary">
                                 <HardDrive className="w-4 h-4" />
                             </div>
-                            <span className="font-medium">Saved Messages</span>
+                            <div>
+                                <p className="font-medium">Saved Messages</p>
+                                <p className="text-xs text-telegram-subtext">Move back to Saved Messages</p>
+                            </div>
                         </button>
                     )}
 
-                    {folders.map((f: any) => {
-                        if (f.id === activeFolderId) return null;
+                    {folders.map((folder) => {
+                        if (folder.id === activeFolderId) return null;
+
                         return (
                             <button
-                                key={f.id}
-                                onClick={() => onSelect(f.id)}
-                                className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm text-left text-telegram-text hover:bg-telegram-hover transition-colors"
+                                key={folder.id}
+                                onClick={() => onSelect(folder.id)}
+                                className="flex w-full items-center gap-3 rounded-lg border border-telegram-border bg-white/[0.03] px-4 py-3 text-left text-sm text-telegram-text transition hover:bg-white/[0.05]"
                             >
-                                <div className="w-8 h-8 rounded bg-telegram-hover flex items-center justify-center text-telegram-text">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-secondary">
                                     <Folder className="w-4 h-4" />
                                 </div>
-                                <span className="font-medium">{f.name}</span>
+                                <div className="min-w-0">
+                                    <p className="truncate font-medium">{folder.name}</p>
+                                    <p className="text-xs text-telegram-subtext">Available destination folder</p>
+                                </div>
                             </button>
-                        )
+                        );
                     })}
 
                     {folders.length === 0 && activeFolderId === null && (
-                        <div className="p-4 text-center text-xs text-telegram-subtext">No other folders available. Create one first!</div>
+                        <div className="rounded-lg border border-telegram-border bg-white/[0.03] p-5 text-center text-sm text-telegram-subtext">
+                            No other folders available yet. Create one first to move items around.
+                        </div>
                     )}
                 </div>
             </div>
         </div>
-    )
+    );
 }

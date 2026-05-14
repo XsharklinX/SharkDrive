@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Plus, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCheck, List, LayoutGrid, RefreshCcw } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FileCard } from './FileCard';
 import { EmptyState } from './EmptyState';
@@ -11,11 +11,21 @@ import { GalleryView } from './GalleryView';
 type SortField = 'name' | 'size' | 'date';
 type SortDirection = 'asc' | 'desc';
 type FilterType = 'all' | 'image' | 'video' | 'audio' | 'doc' | 'other';
+type ViewMode = 'grid' | 'list' | 'gallery';
 
 const IMAGE_EXT = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg', 'heic']);
 const VIDEO_EXT = new Set(['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v']);
 const AUDIO_EXT = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'opus']);
-const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'rtf']);
+const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'rtf', 'epub']);
+
+const FILTER_LABELS: Record<FilterType, string> = {
+    all: 'All',
+    image: 'Images',
+    video: 'Videos',
+    audio: 'Audio',
+    doc: 'Docs',
+    other: 'Other',
+};
 
 function getFilterType(name: string): FilterType {
     const ext = name.split('.').pop()?.toLowerCase() ?? '';
@@ -30,8 +40,10 @@ interface FileExplorerProps {
     files: TelegramFile[];
     loading: boolean;
     error: Error | null;
-    viewMode: 'grid' | 'list' | 'gallery';
+    viewMode: ViewMode;
+    setViewMode: (mode: ViewMode) => void;
     selectedIds: number[];
+    selectionMode: boolean;
     activeFolderId: number | null;
     onFileClick: (e: React.MouseEvent, id: number) => void;
     onDelete: (file: TelegramFile) => void;
@@ -39,6 +51,7 @@ interface FileExplorerProps {
     onPreview: (file: TelegramFile, orderedFiles?: TelegramFile[]) => void;
     onManualUpload: () => void;
     onSelectionClear: () => void;
+    onToggleSelection: (id: number) => void;
     onDrop?: (e: React.DragEvent, folderId: number) => void;
     onDragStart?: (fileId: number) => void;
     onDragEnd?: () => void;
@@ -47,8 +60,8 @@ interface FileExplorerProps {
     onRename: (file: TelegramFile) => void;
     onShareLink: (file: TelegramFile) => void;
     onOpenFolder?: (file: TelegramFile) => void;
+    onSelectVisible?: () => void;
 }
-
 
 function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
     const [columns, setColumns] = useState(4);
@@ -61,9 +74,9 @@ function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
             const width = containerRef.current?.clientWidth || 800;
             setContainerWidth(width);
             if (width < 640) setColumns(2);
-            else if (width < 768) setColumns(3);
-            else if (width < 1024) setColumns(4);
-            else if (width < 1280) setColumns(5);
+            else if (width < 940) setColumns(3);
+            else if (width < 1260) setColumns(4);
+            else if (width < 1600) setColumns(5);
             else setColumns(6);
         };
 
@@ -76,10 +89,26 @@ function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
     return { columns, containerWidth };
 }
 
+function ExplorerUploadCard({ onManualUpload, height }: { onManualUpload: () => void; height: number }) {
+    return (
+        <button
+            onClick={(e) => {
+                e.stopPropagation();
+                onManualUpload();
+            }}
+            className="flex flex-col items-center justify-center rounded-xl border border-dashed border-telegram-border bg-white/[0.02] text-telegram-subtext transition hover:border-telegram-primary/30 hover:bg-white/[0.03] hover:text-telegram-text"
+            style={{ height: `${height}px` }}
+        >
+            <span className="text-sm font-medium text-telegram-text">Add files</span>
+            <span className="mt-1 text-xs text-telegram-subtext">Upload to this folder</span>
+        </button>
+    );
+}
+
 export function FileExplorer({
-    files, loading, error, viewMode, selectedIds, activeFolderId,
-    onFileClick, onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onDrop, onDragStart, onDragEnd,
-    favoriteIds, onToggleFavorite, onRename, onShareLink, onOpenFolder
+    files, loading, error, viewMode, setViewMode, selectedIds, selectionMode, activeFolderId,
+    onFileClick, onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onToggleSelection, onDrop, onDragStart, onDragEnd,
+    favoriteIds, onToggleFavorite, onRename, onShareLink, onOpenFolder, onSelectVisible,
 }: FileExplorerProps) {
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -89,10 +118,10 @@ export function FileExplorer({
     const parentRef = useRef<HTMLDivElement>(null);
     const { columns, containerWidth } = useGridColumns(parentRef);
 
-    const GAP = 6;
-    const cardWidth = (containerWidth - (GAP * (columns - 1))) / columns;
-    const cardHeight = cardWidth * 0.75; // aspect-[4/3]
-    const rowHeight = Math.max(cardHeight + GAP, 150);
+    const gap = 12;
+    const cardWidth = (containerWidth - (gap * (columns - 1))) / columns;
+    const cardHeight = Math.max(cardWidth * 0.58, 156);
+    const rowHeight = cardHeight + gap;
 
     const handleContextMenu = useCallback((e: React.MouseEvent, file: TelegramFile) => {
         e.preventDefault();
@@ -103,46 +132,67 @@ export function FileExplorer({
     const sortedFiles = useMemo(() => {
         const filtered = filterType === 'all'
             ? files
-            : files.filter(f => f.type === 'folder' || getFilterType(f.name) === filterType);
+            : files.filter((file) => file.type === 'folder' || getFilterType(file.name) === filterType);
+
         return [...filtered].sort((a, b) => {
             let comparison = 0;
             switch (sortField) {
-                case 'name': comparison = a.name.localeCompare(b.name); break;
-                case 'size': comparison = (a.size || 0) - (b.size || 0); break;
-                case 'date': comparison = (a.created_at || '').localeCompare(b.created_at || ''); break;
+                case 'name':
+                    comparison = a.name.localeCompare(b.name);
+                    break;
+                case 'size':
+                    comparison = (a.size || 0) - (b.size || 0);
+                    break;
+                case 'date':
+                    comparison = (a.created_at || '').localeCompare(b.created_at || '');
+                    break;
             }
             return sortDirection === 'asc' ? comparison : -comparison;
         });
     }, [files, sortField, sortDirection, filterType]);
 
+    const filterCounts = useMemo(() => {
+        const counts: Record<FilterType, number> = {
+            all: files.length,
+            image: 0,
+            video: 0,
+            audio: 0,
+            doc: 0,
+            other: 0,
+        };
+
+        for (const file of files) {
+            if (file.type === 'folder') continue;
+            counts[getFilterType(file.name)] += 1;
+        }
+
+        return counts;
+    }, [files]);
+
     const handlePreviewRequest = useCallback((file: TelegramFile) => {
         onPreview(file, sortedFiles);
     }, [onPreview, sortedFiles]);
 
-
     const gridRows = useMemo(() => {
         const rows: (TelegramFile | 'upload')[][] = [];
         const itemsWithUpload: (TelegramFile | 'upload')[] = [...sortedFiles, 'upload'];
-        for (let i = 0; i < itemsWithUpload.length; i += columns) {
-            rows.push(itemsWithUpload.slice(i, i + columns));
+        for (let index = 0; index < itemsWithUpload.length; index += columns) {
+            rows.push(itemsWithUpload.slice(index, index + columns));
         }
         return rows;
     }, [sortedFiles, columns]);
 
+    const listItems = useMemo(() => sortedFiles, [sortedFiles]);
 
-    const listItems = useMemo(() => {
-        return activeFolderId === null ? [...sortedFiles, 'upload' as const] : sortedFiles;
-    }, [sortedFiles, activeFolderId]);
-
+    const hasCustomizedControls = sortField !== 'name' || sortDirection !== 'asc' || filterType !== 'all';
 
     const gridVirtualizer = useVirtualizer({
         count: gridRows.length,
         getScrollElement: () => parentRef.current,
         estimateSize: useCallback(() => rowHeight, [rowHeight]),
         overscan: 2,
-        gap: GAP,
+        gap,
     });
-
 
     useEffect(() => {
         gridVirtualizer.measure();
@@ -151,206 +201,246 @@ export function FileExplorer({
     const listVirtualizer = useVirtualizer({
         count: listItems.length,
         getScrollElement: () => parentRef.current,
-        estimateSize: () => 48,
+        estimateSize: () => 64,
         overscan: 5,
     });
 
     const handleSort = (field: SortField) => {
         if (sortField === field) {
-            setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+            setSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc');
         } else {
             setSortField(field);
             setSortDirection('asc');
         }
     };
 
+    const resetExplorerControls = () => {
+        setSortField('name');
+        setSortDirection('asc');
+        setFilterType('all');
+    };
+
     const SortIcon = ({ field }: { field: SortField }) => {
-        if (sortField !== field) return <ArrowUpDown className="w-3 h-3 opacity-30" />;
+        if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-35" />;
         return sortDirection === 'asc'
-            ? <ArrowUp className="w-3 h-3 text-telegram-primary" />
-            : <ArrowDown className="w-3 h-3 text-telegram-primary" />;
+            ? <ArrowUp className="h-3 w-3 text-telegram-primary" />
+            : <ArrowDown className="h-3 w-3 text-telegram-primary" />;
     };
 
     if (loading) {
         return (
-            <div className="flex-1 p-6 flex justify-center items-center text-telegram-subtext flex-col gap-4">
-                <div className="w-8 h-8 border-4 border-telegram-primary border-t-transparent rounded-full animate-spin"></div>
-                Loading your files...
-            </div>
-        )
-    }
-
-    if (error) {
-        return <div className="flex-1 p-6 flex justify-center items-center text-red-400">Error loading files</div>
-    }
-
-    if (files.length === 0) {
-        return (
-            <div className="flex-1 p-6 overflow-auto">
-                <EmptyState onUpload={onManualUpload} />
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-telegram-subtext">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-telegram-primary/40 border-t-telegram-primary"></div>
+                <p className="text-sm font-medium text-telegram-text">Loading your files...</p>
             </div>
         );
     }
 
-    if (viewMode === 'gallery') {
+    if (error) {
         return (
-            <GalleryView
-                files={files}
-                activeFolderId={activeFolderId}
-                favoriteIds={favoriteIds}
-                onToggleFavorite={onToggleFavorite}
-                onPreview={(file) => onPreview(file, files)}
-            />
+            <div className="flex flex-1 items-center justify-center p-6">
+                <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-6 py-5 text-center text-red-200">
+                    Error loading files
+                </div>
+            </div>
+        );
+    }
+
+    if (files.length === 0) {
+        return (
+            <div className="flex-1 overflow-auto p-6">
+                <EmptyState onUpload={onManualUpload} />
+            </div>
         );
     }
 
     return (
         <div
             ref={parentRef}
-            className="flex-1 p-6 overflow-auto custom-scrollbar"
+            className="flex-1 overflow-auto custom-scrollbar px-6 py-5"
             onClick={(e) => {
                 if (e.target === e.currentTarget) onSelectionClear();
             }}
         >
-            {viewMode === 'grid' ? (
-                <>
-
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 text-xs text-telegram-subtext">
-                        <div className="flex items-center gap-1">
-                            <span>Sort:</span>
-                            {(['name', 'size', 'date'] as SortField[]).map(f => (
-                                <button key={f} onClick={() => handleSort(f)}
-                                    className={`px-2 py-1 rounded flex items-center gap-1 hover:bg-white/5 capitalize ${sortField === f ? 'text-telegram-primary' : ''}`}>
-                                    {f} <SortIcon field={f} />
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <span>Filter:</span>
-                            {([
-                                ['all', 'All'],
-                                ['image', '🖼 Images'],
-                                ['video', '🎬 Videos'],
-                                ['audio', '🎵 Audio'],
-                                ['doc', '📄 Docs'],
-                                ['other', '📦 Other'],
-                            ] as [FilterType, string][]).map(([type, label]) => (
-                                <button key={type} onClick={() => setFilterType(type)}
-                                    className={`px-2 py-1 rounded hover:bg-white/5 transition-colors ${filterType === type ? 'text-telegram-primary bg-telegram-primary/10' : ''}`}>
-                                    {label}
-                                </button>
-                            ))}
-                        </div>
+            <div className="mb-4 border-b border-telegram-border/70 pb-3">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+                    <div className="font-medium text-telegram-text">
+                        {selectionMode ? 'Selection mode' : `${sortedFiles.length} items`}
                     </div>
 
-
-                    <div
-                        className="relative w-full"
-                        style={{ height: `${gridVirtualizer.getTotalSize()}px` }}
+                    <button
+                        onClick={() => {
+                            if (selectedIds.length === sortedFiles.length && sortedFiles.length > 0) onSelectionClear();
+                            else onSelectVisible?.();
+                        }}
+                        className="text-telegram-subtext transition hover:text-telegram-text"
                     >
-                        {gridVirtualizer.getVirtualItems().map((virtualRow) => {
-                            const row = gridRows[virtualRow.index];
-                            return (
-                                <div
-                                    key={virtualRow.key}
-                                    className="absolute top-0 left-0 w-full grid"
-                                    style={{
-                                        height: `${cardHeight}px`,
-                                        transform: `translateY(${virtualRow.start}px)`,
-                                        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-                                        gap: `${GAP}px`,
-                                    }}
-                                >
-                                    {row.map((item) => {
-                                        if (item === 'upload') {
-                                            return (
-                                                <button
-                                                    key="upload"
-                                                    onClick={(e) => { e.stopPropagation(); onManualUpload(); }}
-                                                    className="border-2 border-dashed border-telegram-border rounded-xl flex flex-col items-center justify-center text-telegram-subtext hover:border-telegram-primary hover:text-telegram-primary transition-all group"
-                                                    style={{ height: `${cardHeight}px` }}
-                                                >
-                                                    <Plus className="w-8 h-8 mb-2 group-hover:scale-110 transition-transform" />
-                                                    <span className="text-sm font-medium">Upload File</span>
-                                                </button>
-                                            );
-                                        }
-                                        const file = item;
-                                        return (
-                                            <FileCard
-                                                key={file.id}
-                                                file={file}
-                                                isSelected={selectedIds.includes(file.id)}
-                                                onClick={(e) => onFileClick(e, file.id)}
-                                                onContextMenu={(e) => handleContextMenu(e, file)}
-                                                onDelete={() => onDelete(file)}
-                                                onDownload={() => onDownload(file)}
-                                                onPreview={() => handlePreviewRequest(file)}
-                                                onDrop={onDrop}
-                                                onDragStart={onDragStart}
-                                                onDragEnd={onDragEnd}
-                                                activeFolderId={activeFolderId}
-                                                height={cardHeight}
-                                                isFavorite={favoriteIds.has(file.id)}
-                                                onToggleFavorite={onToggleFavorite}
-                                            />
-                                        );
-                                    })}
-                                </div>
-                            );
-                        })}
+                        <span className="flex items-center gap-1.5">
+                            <CheckCheck className="h-3.5 w-3.5" />
+                            {selectedIds.length === sortedFiles.length && sortedFiles.length > 0 ? 'Clear selection' : 'Select all'}
+                        </span>
+                    </button>
+
+                    {selectionMode && (
+                        <div className="text-xs text-telegram-subtext">
+                            Click files to select more than one.
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-1 text-sm">
+                        {(['all', 'image', 'video', 'audio', 'doc', 'other'] as FilterType[]).map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => setFilterType(type)}
+                                className={`rounded-md px-2 py-1 transition ${filterType === type ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:text-telegram-text'}`}
+                            >
+                                {FILTER_LABELS[type]} <span className="opacity-60">{type === 'all' ? files.length : filterCounts[type]}</span>
+                            </button>
+                        ))}
                     </div>
-                </>
+
+                    <div className="ml-auto flex flex-wrap items-center gap-1 text-sm">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={`rounded-md px-2 py-1 transition ${viewMode === 'grid' ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:text-telegram-text'}`}
+                            title="Grid view"
+                        >
+                            <LayoutGrid className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`rounded-md px-2 py-1 transition ${viewMode === 'list' ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:text-telegram-text'}`}
+                            title="List view"
+                        >
+                            <List className="h-4 w-4" />
+                        </button>
+                        <button
+                            onClick={() => setViewMode('gallery')}
+                            className={`rounded-md px-2 py-1 transition ${viewMode === 'gallery' ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:text-telegram-text'}`}
+                        >
+                            Gallery
+                        </button>
+                        {(['name', 'size', 'date'] as SortField[]).map((field) => (
+                            <button
+                                key={field}
+                                onClick={() => handleSort(field)}
+                                className={`rounded-md px-2 py-1 capitalize transition ${sortField === field ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:text-telegram-text'}`}
+                            >
+                                <span className="flex items-center gap-1">
+                                    {field}
+                                    <SortIcon field={field} />
+                                </span>
+                            </button>
+                        ))}
+                        {hasCustomizedControls && (
+                            <button
+                                onClick={resetExplorerControls}
+                                className="rounded-md px-2 py-1 text-telegram-subtext transition hover:text-telegram-text"
+                            >
+                                <span className="flex items-center gap-1.5">
+                                    <RefreshCcw className="h-3.5 w-3.5" />
+                                    Reset
+                                </span>
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {sortedFiles.length === 0 && viewMode !== 'gallery' ? (
+                <div className="flex flex-col items-center rounded-xl border border-telegram-border bg-white/[0.02] px-6 py-14 text-center">
+                    <p className="text-lg font-semibold text-telegram-text">No files match this filter</p>
+                    <p className="mt-2 max-w-md text-sm text-telegram-subtext">Try another filter or reset the current view.</p>
+                    <button
+                        onClick={resetExplorerControls}
+                        className="mt-4 rounded-xl bg-telegram-primary px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90"
+                    >
+                        Reset view
+                    </button>
+                </div>
+            ) : viewMode === 'gallery' ? (
+                <GalleryView
+                    files={sortedFiles}
+                    activeFolderId={activeFolderId}
+                    favoriteIds={favoriteIds}
+                    onToggleFavorite={onToggleFavorite}
+                    onPreview={(file) => onPreview(file, sortedFiles)}
+                    compact
+                />
+            ) : viewMode === 'grid' ? (
+                <div className="relative w-full" style={{ height: `${gridVirtualizer.getTotalSize()}px` }}>
+                    {gridVirtualizer.getVirtualItems().map((virtualRow) => {
+                        const row = gridRows[virtualRow.index];
+                        return (
+                            <div
+                                key={virtualRow.key}
+                                className="absolute left-0 top-0 grid w-full"
+                                style={{
+                                    height: `${cardHeight}px`,
+                                    transform: `translateY(${virtualRow.start}px)`,
+                                    gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+                                    gap: `${gap}px`,
+                                }}
+                            >
+                                {row.map((item) => {
+                                    if (item === 'upload') {
+                                        return <ExplorerUploadCard key="upload" onManualUpload={onManualUpload} height={cardHeight} />;
+                                    }
+
+                                    return (
+                                        <FileCard
+                                            key={item.id}
+                                            file={item}
+                                            isSelected={selectedIds.includes(item.id)}
+                                            selectionMode={selectionMode}
+                                            onClick={() => item.type === 'folder' ? onOpenFolder?.(item) : handlePreviewRequest(item)}
+                                            onToggleSelection={() => onToggleSelection(item.id)}
+                                            onContextMenu={(e) => handleContextMenu(e, item)}
+                                            onDelete={() => onDelete(item)}
+                                            onDownload={() => onDownload(item)}
+                                            onPreview={() => item.type === 'folder' ? onOpenFolder?.(item) : handlePreviewRequest(item)}
+                                            onDrop={onDrop}
+                                            onDragStart={onDragStart}
+                                            onDragEnd={onDragEnd}
+                                            activeFolderId={activeFolderId}
+                                            height={cardHeight}
+                                            isFavorite={favoriteIds.has(item.id)}
+                                            onToggleFavorite={onToggleFavorite}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        );
+                    })}
+                </div>
             ) : (
-                <div className="flex flex-col w-full">
-                    {/* List Header */}
-                    <div className="grid grid-cols-[2rem_2fr_6rem_8rem] gap-4 px-4 py-2 text-xs font-semibold text-telegram-subtext border-b border-telegram-border mb-2 select-none items-center">
-                        <div className="text-center">#</div>
-                        <button onClick={() => handleSort('name')} className="flex items-center gap-1 hover:text-telegram-text transition-colors">
+                <div className="flex w-full flex-col">
+                    <div className="mb-2 grid grid-cols-[2.5rem_2fr_6rem_7rem] items-center gap-4 px-3 py-2 text-xs font-medium text-telegram-subtext">
+                        <div></div>
+                        <button onClick={() => handleSort('name')} className="flex items-center gap-1 transition-colors hover:text-telegram-text">
                             Name <SortIcon field="name" />
                         </button>
-                        <button onClick={() => handleSort('size')} className="flex items-center gap-1 justify-end hover:text-telegram-text transition-colors">
+                        <button onClick={() => handleSort('size')} className="flex items-center justify-end gap-1 transition-colors hover:text-telegram-text">
                             Size <SortIcon field="size" />
                         </button>
-                        <button onClick={() => handleSort('date')} className="flex items-center gap-1 justify-end hover:text-telegram-text transition-colors">
+                        <button onClick={() => handleSort('date')} className="flex items-center justify-end gap-1 transition-colors hover:text-telegram-text">
                             Date <SortIcon field="date" />
                         </button>
                     </div>
 
-
-                    <div
-                        className="relative w-full"
-                        style={{ height: `${listVirtualizer.getTotalSize()}px` }}
-                    >
+                    <div className="relative w-full" style={{ height: `${listVirtualizer.getTotalSize()}px` }}>
                         {listVirtualizer.getVirtualItems().map((virtualItem) => {
                             const item = listItems[virtualItem.index];
-                            if (item === 'upload') {
-                                return (
-                                    <div
-                                        key="upload"
-                                        className="absolute top-0 left-0 w-full"
-                                        style={{ transform: `translateY(${virtualItem.start}px)` }}
-                                    >
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); onManualUpload(); }}
-                                            className="flex items-center gap-4 px-4 py-3 rounded-lg cursor-pointer border border-dashed border-telegram-border text-telegram-subtext hover:text-telegram-text hover:bg-telegram-hover w-full"
-                                        >
-                                            <div className="w-5 h-5 flex items-center justify-center"><Plus className="w-4 h-4" /></div>
-                                            <span className="text-sm font-medium">Upload File...</span>
-                                        </button>
-                                    </div>
-                                );
-                            }
-                            const file = item;
                             return (
                                 <div
-                                    key={file.id}
-                                    className="absolute top-0 left-0 w-full"
+                                    key={item.id}
+                                    className="absolute left-0 top-0 w-full"
                                     style={{ transform: `translateY(${virtualItem.start}px)` }}
                                 >
                                     <FileListItem
-                                        file={file}
+                                        file={item}
                                         selectedIds={selectedIds}
+                                        selectionMode={selectionMode}
                                         onFileClick={onFileClick}
                                         handleContextMenu={handleContextMenu}
                                         onDragStart={onDragStart}
@@ -400,5 +490,5 @@ export function FileExplorer({
                 />
             )}
         </div>
-    )
+    );
 }

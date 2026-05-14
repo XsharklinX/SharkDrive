@@ -3,14 +3,14 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/caamer20/Telegram-Drive/releases/latest/download/latest.json"
+        "https://updates.sharkdrive.invalid/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDBBRkI4QUZDNjZEMzZCRTIKUldUaWE5Tm0vSXI3Q3JrRDBtY2lZYUtGL3RTR2JuUTNYSCswVjNaVURXa1FSRWRPMzNPZk92YS8K"
     }
   },
   "productName": "SharkDrive",
   "version": "1.5.0",
-  "identifier": "com.sharkdrive.app",
+  "identifier": "com.sharkdrive.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -38,6 +38,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

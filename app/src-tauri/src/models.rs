@@ -4,8 +4,13 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "status", content = "data")]
 pub enum AuthState {
     LoggedOut,
-    AwaitingCode { phone: String, phone_code_hash: String },
-    AwaitingPassword { phone: String },
+    AwaitingCode {
+        phone: String,
+        phone_code_hash: String,
+    },
+    AwaitingPassword {
+        phone: String,
+    },
     LoggedIn,
 }
 
@@ -41,4 +46,11 @@ pub struct Drive {
     pub chat_id: i64,
     pub name: String,
     pub icon: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct BookCardData {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub thumbnail: Option<String>,
 }

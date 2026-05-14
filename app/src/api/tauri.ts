@@ -1,7 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { BandwidthStats, TelegramFile, TelegramFolder } from '../types';
+import type { BandwidthStats, BookCardData, TelegramFile, TelegramFolder } from '../types';
 
 type FileRecord = TelegramFile;
+let streamTokenPromise: Promise<string> | null = null;
 
 export const tauriApi = {
     connect(apiId: number) {
@@ -22,8 +23,11 @@ export const tauriApi = {
     scanFolders() {
         return invoke<TelegramFolder[]>('cmd_scan_folders');
     },
-    createFolder(name: string) {
-        return invoke<TelegramFolder>('cmd_create_folder', { name });
+    createFolder(name: string, parentId?: number | null) {
+        return invoke<TelegramFolder>('cmd_create_folder', { name, parentId });
+    },
+    deleteFolder(folderId: number) {
+        return invoke<boolean>('cmd_delete_folder', { folderId });
     },
     renameFolder(folderId: number, newName: string) {
         return invoke('cmd_rename_folder', { folderId, newName });
@@ -43,6 +47,9 @@ export const tauriApi = {
     moveFiles(messageIds: number[], sourceFolderId: number | null, targetFolderId: number | null) {
         return invoke('cmd_move_files', { messageIds, sourceFolderId, targetFolderId });
     },
+    copyFiles(messageIds: number[], sourceFolderId: number | null, targetFolderId: number | null) {
+        return invoke('cmd_copy_files', { messageIds, sourceFolderId, targetFolderId });
+    },
     renameFile(messageId: number, folderId: number | null, newName: string) {
         return invoke('cmd_rename_file', { messageId, folderId, newName });
     },
@@ -61,8 +68,17 @@ export const tauriApi = {
     getThumbnail(messageId: number, folderId: number | null) {
         return invoke<string>('cmd_get_thumbnail', { messageId, folderId });
     },
+    getBookCardData(messageId: number, folderId: number | null) {
+        return invoke<BookCardData>('cmd_get_book_card_data', { messageId, folderId });
+    },
     getStreamToken() {
-        return invoke<string>('cmd_get_stream_token');
+        if (!streamTokenPromise) {
+            streamTokenPromise = invoke<string>('cmd_get_stream_token').catch((error) => {
+                streamTokenPromise = null;
+                throw error;
+            });
+        }
+        return streamTokenPromise;
     },
     createShareLink(fileId: number, folderId: number | null, filename: string, expiresInMinutes?: number) {
         return invoke<string>('cmd_create_share_link', { fileId, folderId, filename, expiresInMinutes });
@@ -81,5 +97,8 @@ export const tauriApi = {
     },
     updateBackupFolder(localPath: string, remoteFolderId: number | null) {
         return invoke<void>('cmd_update_backup_folder', { localPath, remoteFolderId });
+    },
+    setFolderParent(folderId: number, parentId: number | null) {
+        return invoke<TelegramFolder>('cmd_set_folder_parent', { folderId, parentId });
     },
 };

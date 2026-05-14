@@ -1,20 +1,20 @@
-pub mod models;
-pub mod commands;
 pub mod bandwidth;
+pub mod commands;
+pub mod models;
 pub mod server;
 
-use tauri::Manager;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use commands::TelegramState;
-use commands::streaming::StreamToken;
-use commands::encryption::EncryptionState;
 use commands::backup::BackupState;
+use commands::encryption::EncryptionState;
 use commands::settings::AppSettings;
 use commands::share::ShareStore;
+use commands::streaming::StreamToken;
+use commands::TelegramState;
 use rand::Rng;
+use std::sync::Arc;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Manager;
+use tokio::sync::Mutex;
 
 fn generate_stream_token() -> String {
     let mut rng = rand::thread_rng();
@@ -59,8 +59,15 @@ pub fn run() {
             app.manage(BackupState::new());
             app.manage(AppSettings::new());
 
-            let share_store = Arc::new(ShareStore::new());
+            let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let share_store = Arc::new(ShareStore::new(app_data_dir.join("share_links.json")));
             app.manage(share_store.clone());
+
+            if let Some(window) = app.get_webview_window("main") {
+                if let Some(icon) = app.default_window_icon() {
+                    let _ = window.set_icon(icon.clone());
+                }
+            }
 
             // System tray
             let show_item = MenuItem::with_id(app, "show", "Open SharkDrive", true, None::<&str>)?;
@@ -88,7 +95,8 @@ pub fn run() {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
-                    } = event {
+                    } = event
+                    {
                         let app = tray.app_handle();
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
@@ -128,10 +136,12 @@ pub fn run() {
             commands::cmd_delete_file,
             commands::cmd_download_file,
             commands::cmd_move_files,
+            commands::cmd_copy_files,
             commands::cmd_create_folder,
             commands::cmd_delete_folder,
             commands::cmd_get_bandwidth,
             commands::cmd_get_preview,
+            commands::cmd_get_book_card_data,
             commands::cmd_logout,
             commands::cmd_scan_folders,
             commands::cmd_search_global,
@@ -142,6 +152,7 @@ pub fn run() {
             commands::cmd_get_stream_token,
             commands::cmd_rename_file,
             commands::cmd_rename_folder,
+            commands::cmd_set_folder_parent,
             commands::cmd_get_or_create_trash,
             commands::cmd_list_dir_files,
             commands::cmd_soft_delete_folder,
@@ -172,31 +183,33 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
-        match event {
-            tauri::RunEvent::WindowEvent {
-                event: tauri::WindowEvent::CloseRequested { api, .. },
-                ..
-            } => {
-                let settings = app_handle.state::<AppSettings>();
-                if *settings.close_to_tray.lock().unwrap() {
-                    if let Some(win) = app_handle.get_webview_window("main") {
-                        let _ = win.hide();
-                        api.prevent_close();
-                    }
+    app.run(|app_handle, event| match event {
+        tauri::RunEvent::WindowEvent {
+            event: tauri::WindowEvent::CloseRequested { api, .. },
+            ..
+        } => {
+            let settings = app_handle.state::<AppSettings>();
+            if *settings.close_to_tray.lock().unwrap() {
+                if let Some(win) = app_handle.get_webview_window("main") {
+                    let _ = win.hide();
+                    api.prevent_close();
                 }
             }
-            tauri::RunEvent::Exit => {
-                log::info!("Application exiting — shutting down background services...");
-                let shutdown_arc = app_handle.state::<TelegramState>().runner_shutdown.clone();
-                let runner_tx = shutdown_arc.lock().ok().and_then(|mut g| g.take());
-                if let Some(tx) = runner_tx { let _ = tx.send(()); }
-
-                let server_arc = app_handle.state::<ActixServerHandle>().0.clone();
-                let server_handle = server_arc.lock().ok().and_then(|mut g| g.take());
-                if let Some(handle) = server_handle { drop(handle.stop(true)); }
-            }
-            _ => {}
         }
+        tauri::RunEvent::Exit => {
+            log::info!("Application exiting — shutting down background services...");
+            let shutdown_arc = app_handle.state::<TelegramState>().runner_shutdown.clone();
+            let runner_tx = shutdown_arc.lock().ok().and_then(|mut g| g.take());
+            if let Some(tx) = runner_tx {
+                let _ = tx.send(());
+            }
+
+            let server_arc = app_handle.state::<ActixServerHandle>().0.clone();
+            let server_handle = server_arc.lock().ok().and_then(|mut g| g.take());
+            if let Some(handle) = server_handle {
+                drop(handle.stop(true));
+            }
+        }
+        _ => {}
     });
 }

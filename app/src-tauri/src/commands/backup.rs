@@ -1,10 +1,10 @@
-use tauri::{State, Emitter};
-use serde::{Serialize, Deserialize};
-use notify::{Watcher, RecursiveMode, Event, EventKind};
-use std::sync::Mutex;
-use std::sync::Arc;
+use notify::{Event, EventKind, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tauri::{Emitter, State};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BackupFolder {
@@ -46,7 +46,10 @@ pub fn start_watching(backup: &BackupState, app_handle: tauri::AppHandle) {
 
     let mut watcher = match notify::recommended_watcher(tx) {
         Ok(w) => w,
-        Err(e) => { log::error!("Failed to create file watcher: {}", e); return; }
+        Err(e) => {
+            log::error!("Failed to create file watcher: {}", e);
+            return;
+        }
     };
 
     for (path, _) in &path_map_clone {
@@ -64,10 +67,20 @@ pub fn start_watching(backup: &BackupState, app_handle: tauri::AppHandle) {
                 match event.kind {
                     EventKind::Create(_) | EventKind::Modify(_) => {
                         for event_path in &event.paths {
-                            if !event_path.is_file() { continue; }
+                            if !event_path.is_file() {
+                                continue;
+                            }
                             let path_str = event_path.to_string_lossy().to_string();
-                            let file_name = event_path.file_name().and_then(|name| name.to_str()).unwrap_or_default().to_lowercase();
-                            if file_name.starts_with("~$") || file_name.ends_with(".tmp") || file_name.ends_with(".part") || file_name.ends_with(".crdownload") {
+                            let file_name = event_path
+                                .file_name()
+                                .and_then(|name| name.to_str())
+                                .unwrap_or_default()
+                                .to_lowercase();
+                            if file_name.starts_with("~$")
+                                || file_name.ends_with(".tmp")
+                                || file_name.ends_with(".part")
+                                || file_name.ends_with(".crdownload")
+                            {
                                 continue;
                             }
 
@@ -80,18 +93,24 @@ pub fn start_watching(backup: &BackupState, app_handle: tauri::AppHandle) {
                                     }
                                 }
                                 recent.insert(path_str.clone(), now);
-                                recent.retain(|_, instant| now.duration_since(*instant).as_secs() < 120);
+                                recent.retain(|_, instant| {
+                                    now.duration_since(*instant).as_secs() < 120
+                                });
                             }
 
                             // Find which backup folder this belongs to
-                            let remote_folder_id = path_map_clone.iter()
+                            let remote_folder_id = path_map_clone
+                                .iter()
                                 .find(|(base, _)| path_str.starts_with(base.as_str()))
                                 .map(|(_, fid)| *fid)
                                 .unwrap_or(None);
-                            let _ = app.emit("backup-file-detected", BackupFileEvent {
-                                path: path_str,
-                                remote_folder_id,
-                            });
+                            let _ = app.emit(
+                                "backup-file-detected",
+                                BackupFileEvent {
+                                    path: path_str,
+                                    remote_folder_id,
+                                },
+                            );
                         }
                     }
                     _ => {}
@@ -133,7 +152,10 @@ pub async fn cmd_update_backup_folder(
 ) -> Result<(), String> {
     {
         let mut folders = state.folders.lock().unwrap();
-        if let Some(folder) = folders.iter_mut().find(|folder| folder.local_path == local_path) {
+        if let Some(folder) = folders
+            .iter_mut()
+            .find(|folder| folder.local_path == local_path)
+        {
             folder.remote_folder_id = remote_folder_id;
             folder.enabled = true;
         }

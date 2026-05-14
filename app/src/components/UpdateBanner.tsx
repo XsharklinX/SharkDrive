@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, X, RefreshCw, Sparkles } from 'lucide-react';
+import { Download, X, RefreshCw } from 'lucide-react';
 
 interface UpdateBannerProps {
     available: boolean;
@@ -25,16 +25,14 @@ export function UpdateBanner({
                     initial={{ opacity: 0, y: -50 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -50 }}
-                    className="fixed top-0 left-0 right-0 z-50 p-3 bg-gradient-to-r from-telegram-primary/90 via-blue-500/90 to-purple-500/90 backdrop-blur-sm shadow-lg"
+                    className="fixed left-0 right-0 top-0 z-50 border-b border-telegram-border bg-telegram-primary/95 p-3 shadow-lg backdrop-blur-sm"
                 >
                     <div className="flex items-center justify-center gap-4 max-w-screen-lg mx-auto">
-                        <Sparkles className="w-5 h-5 text-yellow-300 animate-pulse" />
-
-                        <span className="text-white font-medium">
+                        <span className="text-sm font-medium text-white">
                             {downloading ? (
-                                <>Downloading update... {progress}%</>
+                                <>Downloading SharkDrive update... {progress}%</>
                             ) : (
-                                <>A new version ({version}) is available!</>
+                                <>SharkDrive {version} is available.</>
                             )}
                         </span>
 
@@ -52,10 +50,10 @@ export function UpdateBanner({
                         ) : (
                             <button
                                 onClick={onUpdate}
-                                className="flex items-center gap-2 px-4 py-1.5 bg-white text-telegram-primary font-semibold rounded-full hover:bg-white/90 transition-colors shadow-md"
+                                className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5 font-semibold text-telegram-primary transition-colors hover:bg-white/90 shadow-md"
                             >
                                 <Download className="w-4 h-4" />
-                                Update Now
+                                Update
                             </button>
                         )}
 

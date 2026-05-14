@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 
+const SHARKDRIVE_UPDATES_ENABLED = false;
+
 interface UpdateState {
     checking: boolean;
     available: boolean;
@@ -23,6 +25,10 @@ export function useUpdateCheck() {
     const [update, setUpdate] = useState<Update | null>(null);
 
     const checkForUpdates = useCallback(async () => {
+        if (!SHARKDRIVE_UPDATES_ENABLED) {
+            setState(s => ({ ...s, checking: false, available: false, error: null }));
+            return;
+        }
         setState(s => ({ ...s, checking: true, error: null }));
         try {
             const updateInfo = await check();
@@ -48,6 +54,7 @@ export function useUpdateCheck() {
     }, []);
 
     const downloadAndInstall = useCallback(async () => {
+        if (!SHARKDRIVE_UPDATES_ENABLED) return;
         if (!update) return;
 
         setState(s => ({ ...s, downloading: true, progress: 0 }));
@@ -86,6 +93,7 @@ export function useUpdateCheck() {
     }, []);
 
     useEffect(() => {
+        if (!SHARKDRIVE_UPDATES_ENABLED) return;
         const timer = setTimeout(() => {
             checkForUpdates();
         }, 5000);

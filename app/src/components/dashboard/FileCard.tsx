@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
-import { Folder, Eye, Trash2, Star } from 'lucide-react';
+import { Check, Folder, Trash2, Star, Download, Eye, Play } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
-import { resolveFileFolderId } from '../../utils';
+import { isImageFile, isVideoFile, resolveFileFolderId } from '../../utils';
 import { FileTypeIcon } from '../FileTypeIcon';
 
 interface FileCardProps {
@@ -12,7 +12,9 @@ interface FileCardProps {
     onDownload: () => void;
     onPreview?: () => void;
     isSelected: boolean;
-    onClick?: (e: React.MouseEvent) => void;
+    selectionMode?: boolean;
+    onClick?: () => void;
+    onToggleSelection?: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
     onDrop?: (e: React.DragEvent, folderId: number) => void;
     onDragStart?: (fileId: number) => void;
@@ -23,37 +25,86 @@ interface FileCardProps {
     onToggleFavorite?: (id: number) => void;
 }
 
-// Check if file is an image type that can have a thumbnail
-function isImageFile(filename: string): boolean {
-    const ext = filename.split('.').pop()?.toLowerCase() || '';
-    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext);
+function getExtensionLabel(filename: string) {
+    return filename.split('.').pop()?.toUpperCase() || 'FILE';
 }
 
-export function FileCard({ file, onDelete, onDownload, onPreview, isSelected, onClick, onContextMenu, onDrop, onDragStart, onDragEnd, activeFolderId, height, isFavorite, onToggleFavorite }: FileCardProps) {
+function getCreatedLabel(createdAt?: string) {
+    if (!createdAt) return 'Now';
+    const parsed = new Date(createdAt);
+    if (Number.isNaN(parsed.getTime())) return 'Now';
+    return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+export function FileCard({
+    file,
+    onDelete,
+    onDownload,
+    onPreview,
+    isSelected,
+    selectionMode = false,
+    onClick,
+    onToggleSelection,
+    onContextMenu,
+    onDrop,
+    onDragStart,
+    onDragEnd,
+    activeFolderId,
+    height,
+    isFavorite,
+    onToggleFavorite,
+}: FileCardProps) {
     const isFolder = file.type === 'folder';
     const [isDragOver, setIsDragOver] = useState(false);
     const [thumbnail, setThumbnail] = useState<string | null>(null);
     const [thumbnailLoading, setThumbnailLoading] = useState(false);
+    const [streamToken, setStreamToken] = useState<string | null>(null);
+    const [videoReady, setVideoReady] = useState(false);
+    const createdLabel = getCreatedLabel(file.created_at);
+    const supportsThumbnail = !isFolder && (isImageFile(file.name) || isVideoFile(file.name));
+    const isVideo = isVideoFile(file.name);
+    const resolvedFolderId = resolveFileFolderId(file, activeFolderId ?? null);
+    const videoPreviewUrl = isVideo && streamToken
+        ? `http://localhost:14200/stream/${resolvedFolderId ?? 'home'}/${file.id}?token=${streamToken}`
+        : null;
 
-    // Lazy load thumbnail for image files
     useEffect(() => {
-        if (isFolder || !isImageFile(file.name)) return;
+        if (isFolder) return;
 
         let cancelled = false;
-        setThumbnailLoading(true);
+        setThumbnail(null);
+        setVideoReady(false);
 
-        tauriApi.getThumbnail(file.id, resolveFileFolderId(file, activeFolderId ?? null)).then((result) => {
-            if (!cancelled && result) {
-                setThumbnail(result);
-            }
+        if (!supportsThumbnail) return;
+
+        setThumbnailLoading(true);
+        tauriApi.getThumbnail(file.id, resolvedFolderId).then((result) => {
+            if (!cancelled && result) setThumbnail(result);
         }).catch(() => {
-            // Silently fail - will show icon instead
+            // Best-effort thumbnail loading only.
         }).finally(() => {
             if (!cancelled) setThumbnailLoading(false);
         });
 
-        return () => { cancelled = true; };
-    }, [file.id, file.name, activeFolderId, isFolder]);
+        return () => {
+            cancelled = true;
+        };
+    }, [file.id, file.name, isFolder, resolvedFolderId, supportsThumbnail]);
+
+    useEffect(() => {
+        if (!isVideo || thumbnail) return;
+
+        let cancelled = false;
+        tauriApi.getStreamToken()
+            .then((token) => {
+                if (!cancelled) setStreamToken(token);
+            })
+            .catch(() => {});
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isVideo, thumbnail]);
 
     return (
         <div
@@ -88,74 +139,130 @@ export function FileCard({ file, onDelete, onDownload, onPreview, isSelected, on
                 draggable={!isFolder}
                 onDragStart={(e: any) => {
                     if (onDragStart) onDragStart(file.id);
-                    e.dataTransfer.setData("application/x-telegram-file-id", file.id.toString());
+                    e.dataTransfer.setData('application/x-telegram-file-id', file.id.toString());
                     e.dataTransfer.effectAllowed = 'move';
                 }}
                 onDragEnd={() => {
                     if (onDragEnd) onDragEnd();
                 }}
-                whileHover={{ y: -4 }}
-                className={`group cursor-pointer bg-telegram-surface rounded-xl overflow-hidden border hover:shadow-[0_4px_20px_rgba(0,0,0,0.2)] transition-all relative
-                ${isSelected ? 'border-telegram-primary bg-telegram-primary/5 ring-1 ring-telegram-primary' : 'border-telegram-border hover:border-telegram-primary/50'}
-                ${isDragOver ? 'ring-2 ring-telegram-primary bg-telegram-primary/20 scale-105' : ''}`}
+                whileHover={{ y: -1 }}
+                className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-[#0b1521] transition-all
+                ${isSelected ? 'border-telegram-primary/45 ring-1 ring-telegram-primary/25' : 'border-telegram-border hover:border-telegram-primary/20'}
+                ${isDragOver ? 'bg-telegram-primary/10 ring-1 ring-telegram-primary/30' : ''}`}
                 style={height ? { height: `${height}px` } : { aspectRatio: '4/3' }}
             >
-                {/* Thumbnail or Icon */}
                 {thumbnail ? (
-                    <div className="absolute inset-0">
-                        <img
-                            src={thumbnail}
-                            alt={file.name}
-                            className="w-full h-full object-cover"
-                        />
-                        {/* Gradient overlay for text readability */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                    </div>
-                ) : (
-                    <div className="absolute inset-0 flex items-center justify-center p-4">
-                        {isFolder ? (
-                            <Folder className="w-12 h-12 text-telegram-primary" />
-                        ) : thumbnailLoading && isImageFile(file.name) ? (
-                            <div className="w-8 h-8 border-2 border-telegram-primary/30 border-t-telegram-primary rounded-full animate-spin" />
-                        ) : (
-                            <FileTypeIcon filename={file.name} size="lg" />
-                        )}
-                    </div>
+                    <img src={thumbnail} alt={file.name} className="absolute inset-0 h-full w-full object-cover" />
+                ) : null}
+                {!thumbnail && isVideo && videoPreviewUrl ? (
+                    <video
+                        src={videoPreviewUrl}
+                        muted
+                        playsInline
+                        preload="auto"
+                        className={`absolute inset-0 h-full w-full object-cover transition-opacity ${videoReady ? 'opacity-100' : 'opacity-0'}`}
+                        onLoadedData={(event) => {
+                            event.currentTarget.pause();
+                            setVideoReady(true);
+                        }}
+                    />
+                ) : null}
+                {thumbnail ? <div className="absolute inset-0 bg-gradient-to-t from-[#07111b] via-[#07111bcc] to-[#07111b66]" /> : null}
+                {!thumbnail && videoReady ? <div className="absolute inset-0 bg-gradient-to-t from-[#07111b] via-[#07111bcc] to-[#07111b66]" /> : null}
+
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleSelection?.();
+                    }}
+                    className={`absolute left-2.5 top-2.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border transition ${isSelected ? 'border-telegram-primary bg-telegram-primary text-black' : 'border-telegram-border bg-[#0b1521]/90 text-telegram-subtext hover:text-telegram-text'} ${selectionMode ? 'opacity-100' : ''}`}
+                    title={isSelected ? 'Remove from selection' : 'Add to selection'}
+                >
+                    {isSelected ? <Check className="h-3.5 w-3.5" /> : <div className="h-2 w-2 rounded-full border border-current/60" />}
+                </button>
+
+                {!isFolder && (
+                    <span className="absolute right-2.5 top-2.5 z-10 rounded-md border border-telegram-border bg-[#0b1521]/90 px-1.5 py-0.5 text-[10px] text-telegram-subtext">
+                        {getExtensionLabel(file.name)}
+                    </span>
                 )}
 
-                {/* Selection Checkmark */}
-                <div className={`absolute top-2 left-2 w-5 h-5 rounded-full border flex items-center justify-center transition-all z-10 ${isSelected ? 'bg-telegram-primary border-telegram-primary' : 'border-white/50 bg-black/30 opacity-0 group-hover:opacity-100'}`}>
-                    {isSelected && <div className="w-1.5 h-1.5 bg-black rounded-full" />}
+                <div className="absolute inset-0 flex flex-col justify-between p-2.5">
+                    {!thumbnail && !videoReady && (
+                        <div className="flex flex-1 items-center justify-center">
+                            {isFolder ? (
+                                <Folder className="h-10 w-10 text-telegram-primary/80" />
+                            ) : thumbnailLoading && supportsThumbnail ? (
+                                <div className="h-7 w-7 animate-spin rounded-full border-2 border-telegram-primary/30 border-t-telegram-primary" />
+                            ) : (
+                                <FileTypeIcon filename={file.name} size="lg" />
+                            )}
+                        </div>
+                    )}
+                    {(thumbnail || videoReady) && isVideo && (
+                        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white shadow-lg">
+                                <Play className="ml-0.5 h-5 w-5 fill-current" />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className={`mt-auto ${thumbnail ? 'text-white' : 'text-telegram-text'}`}>
+                        <div className="line-clamp-2 text-[12px] font-medium leading-5" title={file.name}>
+                            {file.name}
+                        </div>
+                        <div className={`mt-1.5 flex items-center justify-between text-[10px] ${thumbnail ? 'text-white/70' : 'text-telegram-subtext'}`}>
+                            <span>{isFolder ? 'Folder' : file.sizeStr}</span>
+                            <span>{createdLabel}</span>
+                        </div>
+                    </div>
                 </div>
 
-                {/* File info overlay at bottom */}
-                <div className={`absolute bottom-0 left-0 right-0 p-3 ${thumbnail ? 'text-white' : 'text-telegram-text'}`}>
-                    <h3 className="text-sm font-medium truncate w-full" title={file.name}>{file.name}</h3>
-                    <p className={`text-xs mt-0.5 ${thumbnail ? 'text-white/70' : 'text-telegram-subtext'}`}>{file.sizeStr}</p>
-                </div>
-
-                {/* Quick actions on hover */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1 z-10">
+                <div className="absolute bottom-2 right-2 z-10 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                     {onToggleFavorite && (
                         <button
-                            onClick={(e) => { e.stopPropagation(); onToggleFavorite(file.id); }}
-                            className={`file-action-btn p-1 bg-black/50 rounded-full transition-colors ${isFavorite ? '!opacity-100 text-yellow-400 hover:text-yellow-300' : 'text-white/70 hover:text-yellow-400'}`}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleFavorite(file.id);
+                            }}
+                            className={`rounded-md p-1 transition ${isFavorite ? 'bg-yellow-400/14 text-yellow-300' : 'bg-[#0b1521]/90 text-telegram-subtext hover:text-yellow-300'}`}
                             title={isFavorite ? 'Remove from Starred' : 'Add to Starred'}
                         >
-                            <Star className={`w-3 h-3 ${isFavorite ? 'fill-yellow-400' : ''}`} />
+                            <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-yellow-300' : ''}`} />
                         </button>
                     )}
-                    <button onClick={(e) => { e.stopPropagation(); if (onPreview) onPreview() }} className="file-action-btn p-1 bg-black/50 rounded-full hover:bg-telegram-primary hover:text-white text-white/70" title="Preview">
-                        <Eye className="w-3 h-3" />
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (onPreview) onPreview();
+                        }}
+                        className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
+                        title={isFolder ? 'Open Folder' : 'Preview'}
+                    >
+                        <Eye className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); onDownload() }} className="file-action-btn p-1 bg-black/50 rounded-full hover:bg-green-500 hover:text-white text-white/70" title="Download">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3 h-3"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDownload();
+                        }}
+                        className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
+                        title="Download"
+                    >
+                        <Download className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="file-action-btn p-1 bg-black/50 rounded-full hover:bg-red-500 hover:text-white text-white/70" title="Delete">
-                        <Trash2 className="w-3 h-3" />
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete();
+                        }}
+                        className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-red-300"
+                        title="Delete"
+                    >
+                        <Trash2 className="h-3.5 w-3.5" />
                     </button>
                 </div>
             </motion.div>
         </div>
-    )
+    );
 }

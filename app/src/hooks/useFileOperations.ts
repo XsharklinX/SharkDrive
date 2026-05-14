@@ -73,12 +73,5 @@ export function useFileOperations(
         handleDelete,
         handleBulkDelete,
         handleBulkMove,
-        handleGlobalSearch: async (query: string) => {
-            try {
-                return await tauriApi.searchGlobal(query);
-            } catch {
-                return [];
-            }
-        }
     };
 }

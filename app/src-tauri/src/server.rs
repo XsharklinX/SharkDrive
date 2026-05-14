@@ -1,8 +1,11 @@
-use actix_web::{get, web, App, HttpServer, HttpResponse, Responder, middleware::DefaultHeaders};
-use actix_cors::Cors;
-use crate::commands::TelegramState;
-use crate::commands::utils::resolve_peer;
 use crate::commands::share::ShareStore;
+use crate::commands::utils::resolve_peer;
+use crate::commands::TelegramState;
+use actix_cors::Cors;
+use actix_web::{
+    get, http::header, middleware::DefaultHeaders, web, App, HttpRequest, HttpResponse, HttpServer,
+    Responder,
+};
 use grammers_client::types::Media;
 
 use std::sync::Arc;
@@ -17,8 +20,30 @@ struct StreamQuery {
     token: Option<String>,
 }
 
+fn parse_range_header(range_header: &str, size: i64) -> Option<(i64, i64)> {
+    if size <= 0 || !range_header.starts_with("bytes=") {
+        return None;
+    }
+
+    let range_value = &range_header[6..];
+    let (start_raw, end_raw) = range_value.split_once('-')?;
+    let start = start_raw.parse::<i64>().ok()?;
+    let end = if end_raw.is_empty() {
+        size - 1
+    } else {
+        end_raw.parse::<i64>().ok()?
+    };
+
+    if start < 0 || start >= size {
+        return None;
+    }
+
+    Some((start, end.min(size - 1)))
+}
+
 #[get("/stream/{folder_id}/{message_id}")]
 async fn stream_media(
+    req: HttpRequest,
     path: web::Path<(String, i32)>,
     query: web::Query<StreamQuery>,
     data: web::Data<Arc<TelegramState>>,
@@ -26,12 +51,12 @@ async fn stream_media(
 ) -> impl Responder {
     // Validate session token
     match &query.token {
-        Some(t) if t == &token_data.token => {},
+        Some(t) if t == &token_data.token => {}
         _ => return HttpResponse::Forbidden().body("Invalid or missing stream token"),
     }
 
     let (folder_id_str, message_id) = path.into_inner();
-    
+
     // Parse folder ID
     let folder_id = if folder_id_str == "me" || folder_id_str == "home" || folder_id_str == "null" {
         None
@@ -42,27 +67,117 @@ async fn stream_media(
         }
     };
 
-    let client_opt = {
-        data.client.lock().await.clone()
-    };
+    let client_opt = { data.client.lock().await.clone() };
 
     if let Some(client) = client_opt {
         match resolve_peer(&client, folder_id).await {
             Ok(peer) => {
                 // Try to fetch message efficiently
-                 match client.get_messages_by_id(peer, &[message_id]).await {
+                match client.get_messages_by_id(peer, &[message_id]).await {
                     Ok(messages) => {
                         if let Some(Some(msg)) = messages.first() {
                             if let Some(media) = msg.media() {
                                 let size = match &media {
                                     Media::Document(d) => d.size(),
-                                    Media::Photo(_) => 0, 
+                                    Media::Photo(_) => 0,
                                     _ => 0,
                                 };
-                                
+
                                 let mime = mime_type_from_media(&media);
-                                
-                                // Create chunk-streaming response
+                                let range_header = req
+                                    .headers()
+                                    .get(header::RANGE)
+                                    .and_then(|value| value.to_str().ok())
+                                    .map(|value| value.to_string());
+
+                                if let Some(range_header) = range_header {
+                                    if let Some((start, end)) =
+                                        parse_range_header(&range_header, size)
+                                    {
+                                        const STREAM_CHUNK_SIZE: i32 = 4 * 1024;
+                                        let aligned_start = (start / STREAM_CHUNK_SIZE as i64)
+                                            * STREAM_CHUNK_SIZE as i64;
+                                        let skip_bytes = (start - aligned_start) as usize;
+                                        let content_length = (end - start + 1) as usize;
+                                        let mut sent = 0usize;
+                                        let mut first_chunk = true;
+                                        let mut download_iter = client
+                                            .iter_download(&media)
+                                            .chunk_size(STREAM_CHUNK_SIZE)
+                                            .skip_chunks(
+                                                (aligned_start / STREAM_CHUNK_SIZE as i64) as i32,
+                                            );
+
+                                        let stream = async_stream::stream! {
+                                            while let Some(chunk) = download_iter.next().await.transpose() {
+                                                match chunk {
+                                                    Ok(bytes) => {
+                                                        let bytes = if first_chunk {
+                                                            first_chunk = false;
+                                                            if skip_bytes >= bytes.len() {
+                                                                continue;
+                                                            }
+                                                            bytes[skip_bytes..].to_vec()
+                                                        } else {
+                                                            bytes
+                                                        };
+
+                                                        if bytes.is_empty() {
+                                                            continue;
+                                                        }
+
+                                                        let remaining = content_length.saturating_sub(sent);
+                                                        if remaining == 0 {
+                                                            break;
+                                                        }
+
+                                                        let slice = if bytes.len() > remaining {
+                                                            bytes[..remaining].to_vec()
+                                                        } else {
+                                                            bytes
+                                                        };
+
+                                                        sent += slice.len();
+                                                        yield Ok::<_, actix_web::Error>(web::Bytes::from(slice));
+
+                                                        if sent >= content_length {
+                                                            break;
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        log::error!("Range stream error: {}", e);
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        };
+
+                                        return HttpResponse::PartialContent()
+                                            .insert_header((header::CONTENT_TYPE, mime))
+                                            .insert_header((
+                                                header::CONTENT_LENGTH,
+                                                content_length.to_string(),
+                                            ))
+                                            .insert_header((
+                                                header::CONTENT_RANGE,
+                                                format!("bytes {}-{}/{}", start, end, size),
+                                            ))
+                                            .insert_header((header::ACCEPT_RANGES, "bytes"))
+                                            .insert_header((
+                                                "Cache-Control",
+                                                "private, max-age=120",
+                                            ))
+                                            .streaming(stream);
+                                    }
+
+                                    return HttpResponse::RangeNotSatisfiable()
+                                        .insert_header((
+                                            header::CONTENT_RANGE,
+                                            format!("bytes */{}", size.max(0)),
+                                        ))
+                                        .finish();
+                                }
+
                                 let mut download_iter = client.iter_download(&media);
                                 let stream = async_stream::stream! {
                                     while let Some(chunk) = download_iter.next().await.transpose() {
@@ -75,19 +190,21 @@ async fn stream_media(
                                         }
                                     }
                                 };
-                                
+
                                 return HttpResponse::Ok()
-                                    .insert_header(("Content-Type", mime)) 
-                                    .insert_header(("Content-Length", size.to_string()))
+                                    .insert_header((header::CONTENT_TYPE, mime))
+                                    .insert_header((header::CONTENT_LENGTH, size.to_string()))
+                                    .insert_header((header::ACCEPT_RANGES, "bytes"))
                                     .insert_header(("Cache-Control", "private, max-age=120"))
                                     .streaming(stream);
                             }
                         }
                         HttpResponse::NotFound().body("Message or media not found")
-                    },
-                    Err(e) => HttpResponse::InternalServerError().body(format!("Failed to fetch message: {}", e)),
-                 }
-            },
+                    }
+                    Err(e) => HttpResponse::InternalServerError()
+                        .body(format!("Failed to fetch message: {}", e)),
+                }
+            }
             Err(e) => HttpResponse::BadRequest().body(format!("Peer resolution failed: {}", e)),
         }
     } else {
@@ -131,7 +248,12 @@ async fn share_file(
     if let Some(Some(msg)) = messages.first() {
         if let Some(media) = msg.media() {
             let (size, mime) = match &media {
-                Media::Document(d) => (d.size(), d.mime_type().unwrap_or("application/octet-stream").to_string()),
+                Media::Document(d) => (
+                    d.size(),
+                    d.mime_type()
+                        .unwrap_or("application/octet-stream")
+                        .to_string(),
+                ),
                 _ => (0, "application/octet-stream".to_string()),
             };
             let disposition = format!("attachment; filename=\"{}\"", entry.filename);
@@ -160,7 +282,10 @@ async fn share_file(
 
 fn mime_type_from_media(media: &Media) -> String {
     match media {
-        Media::Document(d) => d.mime_type().unwrap_or("application/octet-stream").to_string(),
+        Media::Document(d) => d
+            .mime_type()
+            .unwrap_or("application/octet-stream")
+            .to_string(),
         _ => "application/octet-stream".to_string(),
     }
 }

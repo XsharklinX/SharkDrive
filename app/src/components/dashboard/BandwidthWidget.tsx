@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, ArrowDown, Activity, RefreshCw } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Activity, ArrowDown, ArrowUp, RefreshCw } from 'lucide-react';
 import { BandwidthStats } from '../../types';
 import { formatBytes } from '../../utils';
 
@@ -16,14 +16,17 @@ export function BandwidthWidget({ bandwidth }: BandwidthWidgetProps) {
 
     useEffect(() => {
         if (!bandwidth) return;
+
         const now = Date.now();
         const dt = (now - lastTickRef.current) / 1000;
+
         if (prevRef.current && dt > 0) {
             const up = Math.max(0, bandwidth.up_bytes - prevRef.current.up_bytes);
             const down = Math.max(0, bandwidth.down_bytes - prevRef.current.down_bytes);
             setUpSpeed(Math.round(up / dt));
             setDownSpeed(Math.round(down / dt));
         }
+
         prevRef.current = bandwidth;
         lastTickRef.current = now;
     }, [bandwidth]);
@@ -38,70 +41,68 @@ export function BandwidthWidget({ bandwidth }: BandwidthWidgetProps) {
 
     return (
         <div
-            className="mt-3 cursor-pointer select-none"
-            onClick={() => setExpanded(v => !v)}
-            title="Click to expand bandwidth details"
+            className="mt-3 cursor-pointer select-none rounded-2xl border border-telegram-border bg-white/[0.02] p-3"
+            onClick={() => setExpanded((value) => !value)}
+            title="Click to expand usage details"
         >
-            {/* Header row */}
-            <div className="flex items-center justify-between text-xs text-telegram-subtext mb-1.5">
+            <div className="mb-1.5 flex items-center justify-between text-xs text-telegram-subtext">
                 <div className="flex items-center gap-1">
-                    <Activity className={`w-3 h-3 ${isActive ? 'text-telegram-primary animate-pulse' : ''}`} />
-                    <span>Used Today</span>
+                    <Activity className={`h-3 w-3 ${isActive ? 'animate-pulse text-telegram-primary' : ''}`} />
+                    <span>Usage Today</span>
                 </div>
-                <span className="text-[10px] opacity-60">{expanded ? '▲' : '▼'}</span>
+                <span className="text-[10px] opacity-60">{expanded ? '^' : 'v'}</span>
             </div>
 
-            {/* Progress bar */}
-            <div className="w-full bg-telegram-border rounded-full h-1.5 overflow-hidden">
-                <div className="h-full rounded-full flex overflow-hidden transition-all duration-700">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-telegram-border/70">
+                <div className="flex h-full overflow-hidden rounded-full transition-all duration-700">
                     <div
-                        className="bg-telegram-primary h-full transition-all duration-700"
+                        className="h-full bg-telegram-primary transition-all duration-700"
                         style={{ width: `${upPercent.toFixed(1)}%` }}
                     />
                     <div
-                        className="bg-blue-400 h-full transition-all duration-700"
+                        className="h-full bg-blue-400 transition-all duration-700"
                         style={{ width: `${(percent - upPercent).toFixed(1)}%` }}
                     />
                 </div>
             </div>
 
-            {/* Summary row */}
-            <div className="flex justify-between text-[10px] opacity-70 mt-1">
+            <div className="mt-1 flex justify-between text-[10px] opacity-70">
                 <span>{formatBytes(totalBytes)}</span>
                 <span>/ 250 GB</span>
             </div>
 
-            {/* Expanded detail */}
             {expanded && (
                 <div className="mt-2 space-y-1 border-t border-telegram-border pt-2">
                     <div className="flex items-center justify-between text-[10px]">
                         <div className="flex items-center gap-1 text-telegram-primary">
-                            <ArrowUp className="w-3 h-3" />
+                            <ArrowUp className="h-3 w-3" />
                             <span>Upload</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-telegram-subtext">{formatBytes(bandwidth.up_bytes)}</span>
                             {upSpeed > 0 && (
-                                <span className="text-telegram-primary font-medium">{formatBytes(upSpeed)}/s</span>
+                                <span className="font-medium text-telegram-primary">{formatBytes(upSpeed)}/s</span>
                             )}
                         </div>
                     </div>
+
                     <div className="flex items-center justify-between text-[10px]">
                         <div className="flex items-center gap-1 text-blue-400">
-                            <ArrowDown className="w-3 h-3" />
+                            <ArrowDown className="h-3 w-3" />
                             <span>Download</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-telegram-subtext">{formatBytes(bandwidth.down_bytes)}</span>
                             {downSpeed > 0 && (
-                                <span className="text-blue-400 font-medium">{formatBytes(downSpeed)}/s</span>
+                                <span className="font-medium text-blue-400">{formatBytes(downSpeed)}/s</span>
                             )}
                         </div>
                     </div>
+
                     {bandwidth.date && (
-                        <div className="flex items-center gap-1 text-[10px] text-telegram-subtext/60 pt-1">
-                            <RefreshCw className="w-2.5 h-2.5" />
-                            <span>Resets daily · {bandwidth.date}</span>
+                        <div className="flex items-center gap-1 pt-1 text-[10px] text-telegram-subtext/60">
+                            <RefreshCw className="h-2.5 w-2.5" />
+                            <span>Resets daily - {bandwidth.date}</span>
                         </div>
                     )}
                 </div>

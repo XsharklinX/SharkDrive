@@ -1,10 +1,10 @@
+use grammers_client::types::{LoginToken, PasswordToken};
+use grammers_client::Client;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use grammers_client::{Client};
-use grammers_client::types::{LoginToken, PasswordToken};
 
 /// Tracks the lifecycle of the Telegram connection
-/// 
+///
 /// IMPORTANT: The `runner_shutdown` field is critical for preventing stack overflow.
 /// When reconnecting, we MUST shutdown the old runner before spawning a new one.
 /// Without this, runner tasks accumulate and exhaust the thread stack.
@@ -23,23 +23,23 @@ pub struct TelegramState {
 }
 
 pub mod auth;
-pub mod fs;
-pub mod preview;
-pub mod utils;
-pub mod network;
-pub mod streaming;
-pub mod encryption;
 pub mod backup;
+pub mod encryption;
+pub mod fs;
+pub mod network;
+pub mod preview;
 pub mod settings;
 pub mod share;
+pub mod streaming;
+pub mod utils;
 
 pub use auth::*;
-pub use fs::*;
-pub use preview::*;
-pub use utils::*;
-pub use network::*;
-pub use streaming::*;
-pub use encryption::*;
 pub use backup::*;
+pub use encryption::*;
+pub use fs::*;
+pub use network::*;
+pub use preview::*;
 pub use settings::*;
 pub use share::*;
+pub use streaming::*;
+pub use utils::*;

@@ -56,10 +56,17 @@ export function useFileUpload(
         if (!store || initialized) return;
         store.get<QueueItem[]>('uploadQueue').then((saved) => {
             if (saved && saved.length > 0) {
-                const pending = saved.filter(i => i.status === 'pending');
-                if (pending.length > 0) {
-                    setUploadQueue(pending);
-                    toast.info(`Restored ${pending.length} pending uploads`);
+                const resumable = saved
+                    .filter(i => i.status === 'pending' || i.status === 'uploading')
+                    .map((item) => ({
+                        ...item,
+                        status: 'pending' as const,
+                        progress: item.status === 'uploading' ? item.progress : undefined,
+                        error: undefined,
+                    }));
+                if (resumable.length > 0) {
+                    setUploadQueue(resumable);
+                    toast.info(`Restored ${resumable.length} pending upload${resumable.length > 1 ? 's' : ''}`);
                 }
             }
             setInitialized(true);
@@ -68,8 +75,8 @@ export function useFileUpload(
 
     useEffect(() => {
         if (!store || !initialized) return;
-        const pending = uploadQueue.filter(i => i.status === 'pending');
-        store.set('uploadQueue', pending).then(() => store.save());
+        const resumable = uploadQueue.filter(i => i.status === 'pending' || i.status === 'uploading');
+        store.set('uploadQueue', resumable).then(() => store.save());
     }, [store, uploadQueue, initialized]);
 
     useEffect(() => {

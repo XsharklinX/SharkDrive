@@ -29,17 +29,20 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
 
     if (isBrowser) {
         return (
-            <div className="flex flex-col items-center justify-center h-full max-w-lg mx-auto p-8 text-center">
-                <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6">
-                    <ShieldCheck className="w-10 h-10 text-red-500" />
-                </div>
-                <h1 className="text-2xl font-bold text-white mb-4">Desktop App Required</h1>
-                <p className="text-gray-400 mb-6 leading-relaxed">
-                    You are viewing the internal development server in a browser.
-                    This application cannot function here because it requires access to the system backend (Rust).
-                </p>
-                <div className="p-4 bg-gray-800 rounded-xl border border-gray-700 text-sm text-gray-300">
-                    Please open the <strong>SharkDrive</strong> window in your OS taskbar/dock to continue.
+            <div className="flex h-full max-w-2xl mx-auto items-center justify-center p-8 text-center">
+                <div className="vault-panel w-full rounded-2xl px-8 py-12">
+                    <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-[1.6rem] border border-telegram-border bg-white/[0.04]">
+                        <ShieldCheck className="w-10 h-10 text-telegram-primary" />
+                    </div>
+                    <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">Desktop Runtime Required</p>
+                    <h1 className="mt-3 mb-4 text-3xl font-bold tracking-tight text-white">SharkDrive runs as a desktop app</h1>
+                    <p className="text-gray-400 mb-6 leading-relaxed max-w-xl mx-auto">
+                        You are viewing the development server in a regular browser tab.
+                        The full experience needs the local Tauri backend to access Telegram, local files, and desktop features.
+                    </p>
+                    <div className="rounded-[1.3rem] border border-telegram-border bg-white/[0.03] p-4 text-sm text-gray-300">
+                        Open the <strong>SharkDrive</strong> desktop window from your taskbar or dock to continue using the real app.
+                    </div>
                 </div>
             </div>
         )
@@ -200,7 +203,7 @@ export function AuthWizard({ onLogin }: { onLogin: () => void }) {
                         <img src="/logo.svg" alt="Logo" className="w-full h-full" />
                     </div>
                     <h1 className="text-2xl font-bold text-white mb-1 tracking-tight">SharkDrive</h1>
-                    <p className="text-sm text-white/60 font-medium">Self-Hosted Secure Storage</p>
+                    <p className="text-sm font-medium text-white/60">Telegram cloud drive</p>
                 </div>
 
                 <AnimatePresence mode="wait">

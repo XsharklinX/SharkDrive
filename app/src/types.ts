@@ -16,6 +16,12 @@ export interface TelegramFolder {
     parent_id?: number;
 }
 
+export interface BookCardData {
+    title?: string | null;
+    author?: string | null;
+    thumbnail?: string | null;
+}
+
 export interface QueueItem {
     id: string;
     path: string;

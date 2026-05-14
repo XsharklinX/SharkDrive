@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
@@ -41,20 +41,20 @@ export function SettingsModal({
         invoke<BackupFolder[]>('cmd_get_backup_folders').then(setBackupFolders).catch(() => {});
     }, []);
 
-    const handleCloseToTray = async (val: boolean) => {
-        setCloseToTray(val);
-        await invoke('cmd_set_close_to_tray', { enabled: val });
-        toast.success(val ? 'App will minimize to tray on close' : 'App will exit on close');
+    const handleCloseToTray = async (value: boolean) => {
+        setCloseToTray(value);
+        await invoke('cmd_set_close_to_tray', { enabled: value });
+        toast.success(value ? 'App will minimize to tray on close' : 'App will exit on close');
     };
 
-    const handleAutostart = async (val: boolean) => {
-        setAutostart(val);
+    const handleAutostart = async (value: boolean) => {
+        setAutostart(value);
         try {
-            await invoke('cmd_set_autostart', { enabled: val });
-            toast.success(val ? 'SharkDrive will start with Windows' : 'Removed from startup');
+            await invoke('cmd_set_autostart', { enabled: value });
+            toast.success(value ? 'SharkDrive will start with Windows' : 'Removed from startup');
         } catch (e) {
             toast.error(`Startup setting failed: ${e}`);
-            setAutostart(!val);
+            setAutostart(!value);
         }
     };
 
@@ -63,6 +63,7 @@ export function SettingsModal({
             toast.error('Enter a password');
             return;
         }
+
         setLoading(true);
         try {
             await invoke('cmd_set_encryption_key', { password });
@@ -128,251 +129,321 @@ export function SettingsModal({
         { label: 'Every hour', value: 60 },
     ];
 
+    const tabs: { id: Tab; label: string; icon: typeof Monitor; description: string }[] = [
+        { id: 'general', label: 'General', icon: Monitor, description: 'App behavior, startup and sync cadence' },
+        { id: 'encryption', label: 'Encryption', icon: Shield, description: 'Key loading, recovery and local security' },
+        { id: 'backup', label: 'Auto Backup', icon: FolderSync, description: 'Watched folders and remote destinations' },
+        { id: 'activity', label: 'Activity', icon: History, description: 'Local history of app actions' },
+    ];
+
     return (
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[linear-gradient(180deg,rgba(4,10,17,0.72),rgba(2,7,13,0.92))] backdrop-blur-lg"
             onClick={onClose}
         >
             <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-telegram-surface border border-telegram-border rounded-2xl w-full max-w-2xl mx-4 shadow-2xl overflow-hidden"
+                className="vault-panel mx-4 flex w-full max-w-5xl overflow-hidden rounded-2xl shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex items-center justify-between p-5 border-b border-telegram-border">
-                    <div className="flex items-center gap-2">
-                        <Settings className="w-4 h-4 text-telegram-primary" />
-                        <h2 className="font-semibold text-telegram-text">Settings</h2>
-                    </div>
-                    <button onClick={onClose} className="p-1 hover:bg-telegram-hover rounded text-telegram-subtext">
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-
-                <div className="flex border-b border-telegram-border">
-                    {([
-                        { id: 'general', label: 'General', icon: Monitor },
-                        { id: 'encryption', label: 'Encryption', icon: Shield },
-                        { id: 'backup', label: 'Auto Backup', icon: FolderSync },
-                        { id: 'activity', label: 'Activity', icon: History },
-                    ] as { id: Tab; label: string; icon: React.FC<{ className?: string }> }[]).map(({ id, label, icon: Icon }) => (
-                        <button
-                            key={id}
-                            onClick={() => setTab(id)}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors border-b-2 -mb-px ${
-                                tab === id
-                                    ? 'border-telegram-primary text-telegram-primary'
-                                    : 'border-transparent text-telegram-subtext hover:text-telegram-text'
-                            }`}
-                        >
-                            <Icon className="w-3.5 h-3.5" />
-                            {label}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="p-5 space-y-5 max-h-[500px] overflow-y-auto">
-                    {tab === 'general' && (
-                        <>
+                <aside className="w-72 border-r border-telegram-border/80 bg-black/10 p-5">
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary">
+                                <Settings className="w-5 h-5" />
+                            </div>
                             <div>
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Clock className="w-3.5 h-3.5 text-telegram-primary" />
-                                    <span className="text-sm font-medium text-telegram-text">Auto Sync</span>
-                                </div>
-                                <div className="grid grid-cols-5 gap-1.5">
-                                    {syncOptions.map((opt) => (
-                                        <button
-                                            key={opt.value}
-                                            onClick={() => {
-                                                onAutoSyncChange(opt.value);
-                                                toast.success(opt.value > 0 ? `Auto sync every ${opt.label.toLowerCase()}` : 'Auto sync disabled');
-                                            }}
-                                            className={`py-1.5 text-xs rounded-lg transition-colors ${
-                                                autoSyncInterval === opt.value
-                                                    ? 'bg-telegram-primary text-white'
-                                                    : 'bg-telegram-hover text-telegram-subtext hover:text-telegram-text'
-                                            }`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                {autoSyncInterval > 0 && (
-                                    <p className="text-[11px] text-telegram-subtext mt-1.5">
-                                        Folder list will sync every {autoSyncInterval} minute{autoSyncInterval > 1 ? 's' : ''}
-                                    </p>
-                                )}
+                                <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">Settings</p>
+                                <h2 className="text-lg font-semibold tracking-tight text-telegram-text">Settings</h2>
                             </div>
+                        </div>
+                        <button onClick={onClose} className="rounded-lg border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
 
-                            <div className="h-px bg-telegram-border" />
+                    <p className="mt-4 text-sm leading-6 text-telegram-subtext">
+                        Manage sync, startup, encryption, backups and activity.
+                    </p>
 
-                            <ToggleRow
-                                icon={<Monitor className="w-3.5 h-3.5" />}
-                                title="Minimize to Tray"
-                                description="When closing, hide to system tray instead of exiting"
-                                checked={closeToTray}
-                                onChange={handleCloseToTray}
-                            />
-
-                            <div className="h-px bg-telegram-border" />
-
-                            <ToggleRow
-                                icon={<LogIn className="w-3.5 h-3.5" />}
-                                title="Run at Startup"
-                                description="Launch SharkDrive automatically when Windows starts"
-                                checked={autostart}
-                                onChange={handleAutostart}
-                            />
-                        </>
-                    )}
-
-                    {tab === 'encryption' && (
-                        <>
-                            <div className="p-3 rounded-lg bg-telegram-hover border border-telegram-border text-xs text-telegram-subtext">
-                                Files are encrypted locally with AES-256-GCM before uploading. The key never leaves your device.
-                            </div>
-
-                            {encryptionEnabled ? (
-                                <div className="space-y-3">
-                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                                        <Shield className="w-4 h-4 text-green-400" />
-                                        <span className="text-sm text-green-400 font-medium">Encryption Active</span>
-                                    </div>
-                                    <p className="text-xs text-telegram-subtext">
-                                        Encrypted files can be previewed and downloaded while this key is loaded in memory.
-                                    </p>
-                                    <button
-                                        onClick={handleDisableEncryption}
-                                        className="w-full py-2 text-sm text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-lg transition-colors"
-                                    >
-                                        Disable Encryption
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200">
-                                        If an encrypted file fails to open, load the same password here and try again.
+                    <div className="mt-6 space-y-2">
+                        {tabs.map(({ id, label, icon: Icon, description }) => (
+                            <button
+                                key={id}
+                                onClick={() => setTab(id)}
+                                className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                                    tab === id
+                                        ? 'border-telegram-primary/30 bg-telegram-primary/10 text-telegram-text'
+                                        : 'border-telegram-border bg-white/[0.02] text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'
+                                }`}
+                            >
+                                <div className="flex items-start gap-3">
+                                    <div className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg ${tab === id ? 'bg-telegram-primary/15 text-telegram-primary' : 'bg-white/[0.05]'}`}>
+                                        <Icon className="w-4 h-4" />
                                     </div>
                                     <div>
-                                        <label className="text-xs text-telegram-subtext mb-1.5 block">Encryption Password</label>
-                                        <div className="relative">
-                                            <input
-                                                type={showPass ? 'text' : 'password'}
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                onKeyDown={(e) => e.key === 'Enter' && handleSetEncryption()}
-                                                placeholder="Enter a strong password..."
-                                                className="w-full bg-telegram-hover border border-telegram-border rounded-lg px-3 py-2 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70 pr-10"
-                                            />
-                                            <button
-                                                onClick={() => setShowPass((value) => !value)}
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-telegram-subtext hover:text-telegram-text"
-                                            >
-                                                {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                            </button>
-                                        </div>
+                                        <p className="text-sm font-medium">{label}</p>
+                                        <p className="mt-1 text-xs leading-5">{description}</p>
                                     </div>
-                                    <button
-                                        onClick={handleSetEncryption}
-                                        disabled={loading || !password.trim()}
-                                        className="w-full py-2 text-sm font-medium bg-telegram-primary text-white rounded-lg hover:bg-telegram-primary/90 transition-colors disabled:opacity-50"
-                                    >
-                                        {loading ? 'Setting up...' : 'Enable Encryption'}
-                                    </button>
                                 </div>
-                            )}
-                        </>
-                    )}
-
-                    {tab === 'backup' && (
-                        <>
-                            <div className="p-3 rounded-lg bg-telegram-hover border border-telegram-border text-xs text-telegram-subtext">
-                                Watched folders auto-upload new and changed files to SharkDrive. Duplicate file events are debounced and remote duplicates are skipped automatically.
-                            </div>
-
-                            <button
-                                onClick={handleAddBackupFolder}
-                                className="w-full flex items-center justify-center gap-2 py-2 text-sm text-telegram-primary bg-telegram-primary/10 hover:bg-telegram-primary/20 rounded-lg transition-colors border border-telegram-primary/20"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Add Folder to Watch
                             </button>
+                        ))}
+                    </div>
+                </aside>
 
-                            {backupFolders.length === 0 ? (
-                                <p className="text-xs text-telegram-subtext text-center py-4">No folders being watched</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {backupFolders.map((folder) => (
-                                        <div key={folder.local_path} className="p-2.5 bg-telegram-hover rounded-lg space-y-2">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs text-telegram-text font-medium truncate">{folder.local_path}</p>
-                                                    <p className="text-[10px] text-telegram-subtext">
-                                                        Auto-backup is active for new and modified files
-                                                    </p>
-                                                </div>
+                <div className="flex-1">
+                    <div className="border-b border-telegram-border/80 px-6 py-5">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">Section</p>
+                                <h3 className="mt-1 text-xl font-semibold tracking-tight text-telegram-text">
+                                    {tab === 'general' && 'General'}
+                                    {tab === 'encryption' && 'Encryption'}
+                                    {tab === 'backup' && 'Auto Backup'}
+                                    {tab === 'activity' && 'Activity'}
+                                </h3>
+                            </div>
+                            <div className="text-xs text-telegram-subtext">
+                                SharkDrive
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="max-h-[640px] space-y-5 overflow-y-auto p-6">
+                        {tab === 'general' && (
+                            <>
+                                <SectionCard
+                                    title="Auto Sync"
+                                    icon={<Clock className="w-4 h-4" />}
+                                    description="Refresh your folders automatically without waiting for a manual sync."
+                                >
+                                    <div className="grid grid-cols-5 gap-2">
+                                        {syncOptions.map((opt) => (
+                                            <button
+                                                key={opt.value}
+                                                onClick={() => {
+                                                    onAutoSyncChange(opt.value);
+                                                    toast.success(opt.value > 0 ? `Auto sync every ${opt.label.toLowerCase()}` : 'Auto sync disabled');
+                                                }}
+                                                className={`rounded-2xl border px-3 py-2 text-xs font-medium transition ${
+                                                    autoSyncInterval === opt.value
+                                                        ? 'border-telegram-primary/35 bg-telegram-primary/14 text-telegram-primary'
+                                                        : 'border-telegram-border bg-white/[0.03] text-telegram-subtext hover:text-telegram-text'
+                                                }`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {autoSyncInterval > 0 && (
+                                        <p className="text-xs text-telegram-subtext">
+                                            Folder list will sync every {autoSyncInterval} minute{autoSyncInterval > 1 ? 's' : ''}.
+                                        </p>
+                                    )}
+                                </SectionCard>
+
+                                <SectionCard
+                                    title="Desktop Behavior"
+                                    icon={<Monitor className="w-4 h-4" />}
+                                    description="Choose how SharkDrive behaves when you close the window or start Windows."
+                                >
+                                    <div className="space-y-4">
+                                        <ToggleRow
+                                            icon={<Monitor className="w-3.5 h-3.5" />}
+                                            title="Minimize to Tray"
+                                            description="Hide to the system tray instead of exiting."
+                                            checked={closeToTray}
+                                            onChange={handleCloseToTray}
+                                        />
+                                        <div className="h-px bg-telegram-border" />
+                                        <ToggleRow
+                                            icon={<LogIn className="w-3.5 h-3.5" />}
+                                            title="Run at Startup"
+                                            description="Launch SharkDrive automatically when Windows starts."
+                                            checked={autostart}
+                                            onChange={handleAutostart}
+                                        />
+                                    </div>
+                                </SectionCard>
+                            </>
+                        )}
+
+                        {tab === 'encryption' && (
+                            <SectionCard
+                                title="Local Encryption"
+                                icon={<Shield className="w-4 h-4" />}
+                                description="Files are encrypted on this device before upload. The key stays local."
+                            >
+                                {encryptionEnabled ? (
+                                    <div className="space-y-4">
+                                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                                            <div className="flex items-center gap-2 text-sm font-medium text-emerald-300">
+                                                <Shield className="w-4 h-4" />
+                                                Encryption active
+                                            </div>
+                                            <p className="mt-2 text-xs text-emerald-100/80">
+                                                Encrypted files can be previewed and downloaded while your password is loaded.
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={handleDisableEncryption}
+                                            className="rounded-xl bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-300 transition hover:bg-red-500/18"
+                                        >
+                                            Disable Encryption
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-100/90">
+                                            If an encrypted file fails to open later, load the same password here and retry preview or download.
+                                        </div>
+                                        <div>
+                                            <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-telegram-subtext">Encryption Password</label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showPass ? 'text' : 'password'}
+                                                    value={password}
+                                                    onChange={(e) => setPassword(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSetEncryption()}
+                                                    placeholder="Enter a strong password..."
+                                                    className="w-full rounded-xl border border-telegram-border bg-white/[0.03] px-4 py-3 pr-11 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                                />
                                                 <button
-                                                    onClick={() => handleRemoveBackupFolder(folder.local_path)}
-                                                    className="ml-2 p-1 hover:bg-red-500/10 text-telegram-subtext hover:text-red-400 rounded transition-colors"
+                                                    onClick={() => setShowPass((value) => !value)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-telegram-subtext transition hover:text-telegram-text"
                                                 >
-                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                                 </button>
                                             </div>
-
-                                            <div>
-                                                <label className="text-[10px] uppercase tracking-wide text-telegram-subtext block mb-1">Destination</label>
-                                                <select
-                                                    value={folder.remote_folder_id ?? ''}
-                                                    onChange={(event) => handleBackupDestinationChange(folder.local_path, event.target.value === '' ? null : Number(event.target.value))}
-                                                    className="w-full bg-telegram-surface border border-telegram-border rounded-lg px-3 py-2 text-xs text-telegram-text focus:outline-none focus:border-telegram-primary/70"
-                                                >
-                                                    <option value="">Saved Messages</option>
-                                                    {folders.map((remoteFolder) => (
-                                                        <option key={remoteFolder.id} value={remoteFolder.id}>{remoteFolder.name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
+                                        <button
+                                            onClick={handleSetEncryption}
+                                            disabled={loading || !password.trim()}
+                                            className="rounded-xl bg-telegram-primary px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+                                        >
+                                            {loading ? 'Setting up...' : 'Enable Encryption'}
+                                        </button>
+                                    </div>
+                                )}
+                            </SectionCard>
+                        )}
 
-                    {tab === 'activity' && (
-                        <>
-                            <div className="p-3 rounded-lg bg-telegram-hover border border-telegram-border text-xs text-telegram-subtext">
-                                Latest local activity from uploads, downloads, previews, sharing, backup automation and encryption recovery prompts.
-                            </div>
+                        {tab === 'backup' && (
+                            <SectionCard
+                                title="Watched Folders"
+                                icon={<FolderSync className="w-4 h-4" />}
+                                description="Auto-upload new and changed files. Duplicate events are ignored automatically."
+                            >
+                                <button
+                                    onClick={handleAddBackupFolder}
+                                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-telegram-primary/25 bg-telegram-primary/10 py-3 text-sm font-medium text-telegram-primary transition hover:bg-telegram-primary/16"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Add Folder to Watch
+                                </button>
 
-                            {activity.length === 0 ? (
-                                <p className="text-xs text-telegram-subtext text-center py-4">No activity recorded yet</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {activity.map((entry) => (
-                                        <div key={entry.id} className="p-2.5 bg-telegram-hover rounded-lg">
-                                            <div className="flex items-center justify-between gap-3">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs text-telegram-text font-medium">{entry.message}</p>
-                                                    {entry.fileName && <p className="text-[10px] text-telegram-subtext truncate">{entry.fileName}</p>}
+                                {backupFolders.length === 0 ? (
+                                    <p className="py-4 text-center text-xs text-telegram-subtext">No folders being watched yet.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {backupFolders.map((folder) => (
+                                            <div key={folder.local_path} className="rounded-xl border border-telegram-border bg-white/[0.03] p-4">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-medium text-telegram-text">{folder.local_path}</p>
+                                                        <p className="mt-1 text-xs text-telegram-subtext">New and modified files will be queued automatically.</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleRemoveBackupFolder(folder.local_path)}
+                                                        className="rounded-xl p-2 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-400"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
-                                                <span className="text-[10px] text-telegram-subtext whitespace-nowrap">
-                                                    {new Date(entry.timestamp).toLocaleString()}
-                                                </span>
+
+                                                <div className="mt-4">
+                                                    <label className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-telegram-subtext">Destination</label>
+                                                    <select
+                                                        value={folder.remote_folder_id ?? ''}
+                                                        onChange={(event) => handleBackupDestinationChange(folder.local_path, event.target.value === '' ? null : Number(event.target.value))}
+                                                        className="w-full rounded-xl border border-telegram-border bg-white/[0.02] px-3 py-2.5 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                                    >
+                                                        <option value="">Saved Messages</option>
+                                                        {folders.map((remoteFolder) => (
+                                                            <option key={remoteFolder.id} value={remoteFolder.id}>{remoteFolder.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </>
-                    )}
+                                        ))}
+                                    </div>
+                                )}
+                            </SectionCard>
+                        )}
+
+                        {tab === 'activity' && (
+                            <SectionCard
+                                title="Local Activity"
+                                icon={<History className="w-4 h-4" />}
+                                description="Uploads, downloads, previews, shares, backups and encryption prompts."
+                            >
+                                {activity.length === 0 ? (
+                                    <p className="py-4 text-center text-xs text-telegram-subtext">No activity recorded yet.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {activity.map((entry) => (
+                                            <div key={entry.id} className="rounded-xl border border-telegram-border bg-white/[0.03] px-4 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-medium text-telegram-text">{entry.message}</p>
+                                                        {entry.fileName && <p className="mt-1 truncate text-xs text-telegram-subtext">{entry.fileName}</p>}
+                                                    </div>
+                                                    <span className="whitespace-nowrap text-[11px] text-telegram-subtext">
+                                                        {new Date(entry.timestamp).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </SectionCard>
+                        )}
+                    </div>
                 </div>
             </motion.div>
         </motion.div>
+    );
+}
+
+function SectionCard({
+    title,
+    icon,
+    description,
+    children,
+}: {
+    title: string;
+    icon: ReactNode;
+    description: string;
+    children: ReactNode;
+}) {
+    return (
+        <section className="rounded-xl border border-telegram-border bg-white/[0.03] p-5">
+            <div className="mb-4 flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary">
+                    {icon}
+                </div>
+                <div>
+                    <h4 className="text-sm font-semibold text-telegram-text">{title}</h4>
+                    <p className="mt-1 text-xs leading-5 text-telegram-subtext">{description}</p>
+                </div>
+            </div>
+            <div className="space-y-4">{children}</div>
+        </section>
     );
 }
 
@@ -383,16 +454,16 @@ function ToggleRow({
     checked,
     onChange,
 }: {
-    icon: React.ReactNode;
+    icon: ReactNode;
     title: string;
     description: string;
     checked: boolean;
     onChange: (value: boolean) => void;
 }) {
     return (
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
             <div className="flex items-start gap-2.5">
-                <span className="text-telegram-primary mt-0.5">{icon}</span>
+                <span className="mt-0.5 text-telegram-primary">{icon}</span>
                 <div>
                     <p className="text-sm font-medium text-telegram-text">{title}</p>
                     <p className="text-xs text-telegram-subtext">{description}</p>
@@ -407,10 +478,10 @@ function ToggleRow({
                     width: '44px',
                     height: '24px',
                     borderRadius: '12px',
-                    backgroundColor: checked ? 'var(--color-telegram-primary, #00b4ff)' : 'rgba(90,138,170,0.4)',
+                    backgroundColor: checked ? 'var(--color-telegram-primary, #52e3c2)' : 'rgba(90,138,170,0.4)',
                     position: 'relative',
                     transition: 'background-color 0.2s',
-                    border: 'none',
+                    border: '1px solid rgba(126, 164, 191, 0.18)',
                     cursor: 'pointer',
                     padding: 0,
                 }}

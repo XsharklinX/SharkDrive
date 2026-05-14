@@ -16,6 +16,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const [store, setStore] = useState<Store | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isConnected, setIsConnected] = useState(true);
+    const pendingFolderIdsRef = useRef<Set<number>>(new Set());
 
 
     const networkIsOnline = useNetworkStatus();
@@ -145,17 +146,27 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         setIsSyncing(true);
         try {
             const foundFolders = await tauriApi.scanFolders();
+            const foundIds = new Set(foundFolders.map((folder) => folder.id));
+            const preservedPendingFolders = folders.filter((folder) => pendingFolderIdsRef.current.has(folder.id) && !foundIds.has(folder.id));
+            const mergedFolders = preservedPendingFolders.length > 0
+                ? [...foundFolders, ...preservedPendingFolders]
+                : foundFolders;
+
+            for (const folder of foundFolders) {
+                pendingFolderIdsRef.current.delete(folder.id);
+            }
+
             const previousIds = new Set(folders.map((folder) => folder.id));
-            const updatedIds = new Set(foundFolders.map((folder) => folder.id));
-            const added = foundFolders.filter((folder) => !previousIds.has(folder.id)).length;
+            const updatedIds = new Set(mergedFolders.map((folder) => folder.id));
+            const added = mergedFolders.filter((folder) => !previousIds.has(folder.id)).length;
             const removed = folders.filter((folder) => !updatedIds.has(folder.id)).length;
-            const renamed = foundFolders.filter((folder) => {
+            const renamed = mergedFolders.filter((folder) => {
                 const current = folders.find((candidate) => candidate.id === folder.id);
                 return current && current.name !== folder.name;
             }).length;
 
-            setFolders(foundFolders);
-            await store.set('folders', foundFolders);
+            setFolders(mergedFolders);
+            await store.set('folders', mergedFolders);
             await store.save();
 
             if (activeFolderId !== null && !updatedIds.has(activeFolderId)) {
@@ -176,15 +187,16 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         }
     };
 
-    const handleCreateFolder = async (name: string) => {
+    const handleCreateFolder = async (name: string, parentId: number | null = null) => {
         if (!store) return;
         try {
-            const newFolder = await tauriApi.createFolder(name);
+            const newFolder = await tauriApi.createFolder(name, parentId);
+            pendingFolderIdsRef.current.add(newFolder.id);
             const updated = [...folders, newFolder];
             setFolders(updated);
             await store.set('folders', updated);
             await store.save();
-            toast.success(`Folder "${name}" created.`);
+            toast.success(parentId ? `Subfolder "${name}" created.` : `Folder "${name}" created.`);
         } catch (e) {
             toast.error("Failed to create folder: " + e);
             throw e;
@@ -193,14 +205,15 @@ export function useTelegramConnection(onLogoutParent: () => void) {
 
     const handleFolderDelete = async (folderId: number, folderName: string) => {
         if (!await confirm({
-            title: "Move to Trash",
-            message: `Move "${folderName}" to Trash?\nYou can restore it later from the Trash folder.`,
-            confirmText: "Move to Trash",
+            title: "Delete Folder",
+            message: `Delete "${folderName}" from SharkDrive and Telegram?\nThis cannot be undone.`,
+            confirmText: "Delete Folder",
             variant: 'danger'
         })) return;
 
         try {
-            await tauriApi.softDeleteFolder(folderId, folderName);
+            await tauriApi.deleteFolder(folderId);
+            pendingFolderIdsRef.current.delete(folderId);
             const updated = folders.filter(f => f.id !== folderId);
             setFolders(updated);
             if (store) {
@@ -208,7 +221,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
                 await store.save();
             }
             if (activeFolderId === folderId) setActiveFolderId(null);
-            toast.success(`Folder "${folderName}" deleted.`);
+            toast.success(`Folder "${folderName}" deleted from Telegram.`);
         } catch (e: unknown) {
             const errStr = String(e);
             if (errStr.includes("not found")) {
@@ -227,7 +240,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
                     if (activeFolderId === folderId) setActiveFolderId(null);
                 }
             } else {
-                toast.error(`Failed to delete folder: ${e}`);
+                toast.error(`Failed to delete folder from Telegram: ${e}`);
             }
         }
     };
@@ -245,6 +258,22 @@ export function useTelegramConnection(onLogoutParent: () => void) {
             toast.success(`Renamed to "${newName}"`);
         } catch (e) {
             toast.error(`Failed to rename folder: ${e}`);
+            throw e;
+        }
+    };
+
+    const handleSetFolderParent = async (folderId: number, parentId: number | null) => {
+        try {
+            const updatedFolder = await tauriApi.setFolderParent(folderId, parentId);
+            const updated = folders.map((folder) => folder.id === folderId ? updatedFolder : folder);
+            setFolders(updated);
+            if (store) {
+                await store.set('folders', updated);
+                await store.save();
+            }
+            toast.success(parentId ? 'Folder moved into collection.' : 'Folder moved to root.');
+        } catch (e) {
+            toast.error(`Failed to move folder: ${e}`);
             throw e;
         }
     };
@@ -269,6 +298,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         handleCreateFolder,
         handleFolderDelete,
         handleRenameFolder,
+        handleSetFolderParent,
         isNetworkError,
         forceLogout
     };

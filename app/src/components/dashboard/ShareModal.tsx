@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Link, Copy, Check, Wifi, Send } from 'lucide-react';
+import { X, Link, Copy, Check, Wifi, Send, Shield, TimerReset } from 'lucide-react';
 import { toast } from 'sonner';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
@@ -21,7 +21,7 @@ export function ShareModal({ file, activeFolderId, onClose }: ShareModalProps) {
     const [expiresInMinutes, setExpiresInMinutes] = useState(60);
 
     useEffect(() => {
-        tauriApi.getLocalIp().then(ip => setLocalIp(ip)).catch(() => {});
+        tauriApi.getLocalIp().then((ip) => setLocalIp(ip)).catch(() => {});
     }, [file, activeFolderId]);
 
     useEffect(() => {
@@ -32,7 +32,6 @@ export function ShareModal({ file, activeFolderId, onClose }: ShareModalProps) {
         }).catch(() => {});
     }, [file, activeFolderId, expiresInMinutes]);
 
-    // Build LAN URL replacing localhost with actual IP
     const lanUrl = shareUrl.replace('localhost', localIp);
 
     const copyToClipboard = async (text: string, key: string) => {
@@ -47,6 +46,7 @@ export function ShareModal({ file, activeFolderId, onClose }: ShareModalProps) {
             toast.error("Can't share Saved Messages");
             return;
         }
+
         setLoadingInvite(true);
         try {
             const link = await tauriApi.getFolderInviteLink(activeFolderId);
@@ -63,46 +63,51 @@ export function ShareModal({ file, activeFolderId, onClose }: ShareModalProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[linear-gradient(180deg,rgba(4,10,17,0.72),rgba(2,7,13,0.92))] backdrop-blur-lg"
             onClick={onClose}
         >
             <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-telegram-surface border border-telegram-border rounded-2xl w-full max-w-md mx-4 shadow-2xl"
-                onClick={e => e.stopPropagation()}
+                className="vault-panel mx-4 w-full max-w-2xl rounded-2xl shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
             >
-                {/* Header */}
-                <div className="flex items-center justify-between p-5 border-b border-telegram-border">
-                    <div className="flex items-center gap-2">
-                        <Link className="w-4 h-4 text-telegram-primary" />
+                <div className="flex items-center justify-between border-b border-telegram-border/80 p-6">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary">
+                            <Link className="w-5 h-5" />
+                        </div>
                         <div>
-                            <h2 className="font-semibold text-telegram-text text-sm">Share File</h2>
-                            <p className="text-[11px] text-telegram-subtext truncate max-w-[240px]">{file.name}</p>
+                            <h2 className="text-lg font-semibold tracking-tight text-telegram-text">{file.type === 'folder' ? 'Share Folder' : 'Share File'}</h2>
+                            <p className="max-w-[340px] truncate text-xs text-telegram-subtext">{file.name}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} className="p-1 hover:bg-telegram-hover rounded text-telegram-subtext">
+                    <button onClick={onClose} className="rounded-lg border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
 
-                <div className="p-5 space-y-4">
-                    {/* LAN Share */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <Wifi className="w-3.5 h-3.5 text-telegram-primary" />
-                            <span className="text-xs font-medium text-telegram-text">Local Network Link</span>
+                <div className="grid gap-4 p-6 lg:grid-cols-[1.2fr,0.9fr]">
+                    <section className="rounded-xl border border-telegram-border bg-white/[0.03] p-5">
+                        <div className="mb-4 flex items-start gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary">
+                                <Wifi className="w-4 h-4" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-telegram-text">Local Link</h3>
+                                <p className="mt-1 text-xs leading-5 text-telegram-subtext">
+                                    Anyone on your Wi-Fi can open this while SharkDrive is running. The link expires automatically.
+                                </p>
+                            </div>
                         </div>
-                        <p className="text-[11px] text-telegram-subtext mb-2">
-                            Anyone on your Wi-Fi can download this file while SharkDrive is running. The link now expires automatically.
-                        </p>
-                        <div className="mb-2">
-                            <label className="text-[10px] uppercase tracking-wide text-telegram-subtext block mb-1">Expiration</label>
+
+                        <div className="mb-4">
+                            <label className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-telegram-subtext">Expiration</label>
                             <select
                                 value={expiresInMinutes}
                                 onChange={(event) => setExpiresInMinutes(Number(event.target.value))}
-                                className="w-full bg-telegram-hover border border-telegram-border rounded-lg px-3 py-2 text-xs text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                className="w-full rounded-xl border border-telegram-border bg-white/[0.03] px-3 py-2.5 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70"
                             >
                                 <option value={15}>15 minutes</option>
                                 <option value={60}>1 hour</option>
@@ -110,51 +115,69 @@ export function ShareModal({ file, activeFolderId, onClose }: ShareModalProps) {
                                 <option value={1440}>24 hours</option>
                             </select>
                         </div>
-                        <div className="flex items-center gap-2 bg-telegram-hover rounded-lg px-3 py-2">
-                            <span className="text-xs text-telegram-text flex-1 truncate font-mono">{lanUrl || 'Generating...'}</span>
+
+                        <div className="flex items-center gap-2 rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                            <span className="flex-1 truncate font-mono text-xs text-telegram-text">{lanUrl || 'Generating...'}</span>
                             <button
                                 onClick={() => lanUrl && copyToClipboard(lanUrl, 'lan')}
-                                className="text-telegram-subtext hover:text-telegram-primary transition-colors flex-shrink-0"
+                                className="flex-shrink-0 text-telegram-subtext transition hover:text-telegram-primary"
                             >
                                 {copied === 'lan' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
                             </button>
                         </div>
-                        <p className="text-[10px] text-telegram-subtext mt-1">
+
+                        <div className="mt-4 flex items-center gap-2 rounded-lg border border-telegram-border bg-white/[0.02] px-3 py-2 text-xs text-telegram-subtext">
+                            <TimerReset className="w-3.5 h-3.5 text-telegram-secondary" />
                             Expires in {expiresInMinutes >= 1440 ? '24 hours' : expiresInMinutes >= 360 ? '6 hours' : expiresInMinutes >= 60 ? '1 hour' : '15 minutes'}.
-                        </p>
-                    </div>
-
-                    <div className="h-px bg-telegram-border" />
-
-                    {/* Telegram Folder Share */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <Send className="w-3.5 h-3.5 text-blue-400" />
-                            <span className="text-xs font-medium text-telegram-text">Share Folder via Telegram</span>
                         </div>
-                        <p className="text-[11px] text-telegram-subtext mb-2">
-                            Generate a Telegram invite link. Anyone with it can join the folder channel and access all files through Telegram.
-                        </p>
+                    </section>
+
+                    <section className="rounded-xl border border-telegram-border bg-white/[0.03] p-5">
+                        <div className="mb-4 flex items-start gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-blue-300">
+                                <Send className="w-4 h-4" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-telegram-text">Telegram Invite</h3>
+                                <p className="mt-1 text-xs leading-5 text-telegram-subtext">
+                                    Create a Telegram invite link for this folder when you want long-term access.
+                                </p>
+                            </div>
+                        </div>
+
                         {folderInviteLink ? (
-                            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
-                                <span className="text-xs text-blue-300 flex-1 truncate font-mono">{folderInviteLink}</span>
-                                <button
-                                    onClick={() => copyToClipboard(folderInviteLink, 'invite')}
-                                    className="text-telegram-subtext hover:text-blue-400 transition-colors flex-shrink-0"
-                                >
-                                    {copied === 'invite' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                                </button>
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3">
+                                    <span className="flex-1 truncate font-mono text-xs text-blue-200">{folderInviteLink}</span>
+                                    <button
+                                        onClick={() => copyToClipboard(folderInviteLink, 'invite')}
+                                        className="flex-shrink-0 text-telegram-subtext transition hover:text-blue-400"
+                                    >
+                                        {copied === 'invite' ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                                <div className="rounded-lg border border-blue-500/15 bg-blue-500/[0.08] px-3 py-2 text-xs text-blue-100/80">
+                                    Anyone with the invite can join the Telegram folder and access the files available there.
+                                </div>
                             </div>
                         ) : (
                             <button
                                 onClick={handleGetFolderLink}
                                 disabled={loadingInvite || activeFolderId === null}
-                                className="w-full py-2 text-xs font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg transition-colors border border-blue-500/20 disabled:opacity-50"
+                                className="w-full rounded-xl border border-blue-500/20 bg-blue-500/10 py-3 text-sm font-medium text-blue-300 transition hover:bg-blue-500/18 disabled:opacity-50"
                             >
                                 {loadingInvite ? 'Generating...' : activeFolderId === null ? 'Not available for Saved Messages' : 'Get Telegram Invite Link'}
                             </button>
                         )}
-                    </div>
+
+                        <div className="mt-4 rounded-lg border border-telegram-border bg-black/10 px-3 py-3 text-xs text-telegram-subtext">
+                            <div className="mb-2 flex items-center gap-2 text-telegram-text">
+                                <Shield className="w-3.5 h-3.5 text-telegram-primary" />
+                                Sharing notes
+                            </div>
+                            <p>Local links are temporary. Telegram invites follow Telegram channel access rules and stay separate from expiring file links.</p>
+                        </div>
+                    </section>
                 </div>
             </motion.div>
         </motion.div>

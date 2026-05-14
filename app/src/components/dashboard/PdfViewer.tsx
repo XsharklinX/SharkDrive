@@ -1,13 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
-// Use the legacy build — the modern build uses Map.getOrInsertComputed()
-// which isn't available in Tauri's WebKit WebView
+import { useEffect, useState, useRef, type MouseEvent } from 'react';
+import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, FileText, Shield } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { resolveFileFolderId } from '../../utils';
 
-// Use Vite's ?url suffix to get a properly bundled asset URL for the worker
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -31,15 +28,13 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
     const containerRef = useRef<HTMLDivElement>(null);
     const pdfRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
 
-    // Fetch stream token once
     useEffect(() => {
         tauriApi.getStreamToken().then(setStreamToken).catch((err) => {
-            console.error("Failed to get stream token:", err);
-            setError("Failed to initialize stream");
+            console.error('Failed to get stream token:', err);
+            setError('Failed to initialize stream');
         });
     }, []);
 
-    // Load PDF document when stream URL is ready or file changes
     useEffect(() => {
         if (!streamToken) return;
 
@@ -61,10 +56,11 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
                     pdfDoc.destroy();
                     return;
                 }
-                // Destroy previous document if any
+
                 if (pdfRef.current) {
                     pdfRef.current.destroy();
                 }
+
                 pdfRef.current = pdfDoc;
                 setPdf(pdfDoc);
                 setNumPages(pdfDoc.numPages);
@@ -72,8 +68,8 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
             },
             (err) => {
                 if (cancelled) return;
-                console.error("Error loading PDF:", err);
-                setError("Failed to load PDF document.");
+                console.error('Error loading PDF:', err);
+                setError('Failed to load PDF document.');
                 setLoading(false);
             }
         );
@@ -84,7 +80,6 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
         };
     }, [streamToken, activeFolderId, file.id]);
 
-    // Cleanup PDF document on unmount
     useEffect(() => {
         return () => {
             if (pdfRef.current) {
@@ -94,7 +89,6 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
         };
     }, []);
 
-    // Keyboard shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             const target = e.target as HTMLElement;
@@ -124,12 +118,12 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
 
             if (e.key === '=' || key === '+') {
                 e.preventDefault();
-                setScale(s => Math.min(s + 0.2, 3));
+                setScale((value) => Math.min(value + 0.2, 3));
             }
 
             if (e.key === '-') {
                 e.preventDefault();
-                setScale(s => Math.max(s - 0.2, 0.5));
+                setScale((value) => Math.max(value - 0.2, 0.5));
             }
         };
 
@@ -137,48 +131,71 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose, onNext, onPrev]);
 
-    const handleZoomIn = (e: React.MouseEvent) => {
+    const handleZoomIn = (e: MouseEvent) => {
         e.stopPropagation();
-        setScale(s => Math.min(s + 0.2, 3));
+        setScale((value) => Math.min(value + 0.2, 3));
     };
 
-    const handleZoomOut = (e: React.MouseEvent) => {
+    const handleZoomOut = (e: MouseEvent) => {
         e.stopPropagation();
-        setScale(s => Math.max(s - 0.2, 0.5));
+        setScale((value) => Math.max(value - 0.2, 0.5));
     };
 
-    const handleFitWidth = (e: React.MouseEvent) => {
+    const handleFitWidth = (e: MouseEvent) => {
         e.stopPropagation();
         setScale(1.2);
     };
 
     return (
-        <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col p-4 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
-            {/* Header / Controls */}
-            <div className="absolute top-4 left-0 right-0 flex justify-between items-center px-8 z-10 pointer-events-none">
-                <div className="text-white bg-black/40 backdrop-blur-md px-4 py-2 rounded-full pointer-events-auto border border-white/10">
-                    <h3 className="text-sm font-medium px-2 max-w-sm truncate">{file.name}</h3>
+        <div
+            className="fixed inset-0 z-[200] flex flex-col bg-[linear-gradient(180deg,rgba(4,10,17,0.82),rgba(2,7,13,0.96))] p-4 backdrop-blur-lg animate-in fade-in duration-200"
+            onClick={onClose}
+        >
+            <div className="pointer-events-none absolute left-0 right-0 top-4 z-10 flex items-start justify-between gap-4 px-6">
+                <div className="pointer-events-auto flex min-w-0 items-center gap-3 rounded-lg border border-telegram-border bg-telegram-surface/95 px-4 py-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-secondary">
+                        <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                        <h3 className="max-w-sm truncate text-sm font-semibold text-telegram-text">{file.name}</h3>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-2 pointer-events-auto bg-black/40 backdrop-blur-md p-1.5 rounded-full border border-white/10">
-                    <button onClick={handleZoomOut} className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Zoom Out (-)">
-                        <ZoomOut className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs text-white/90 font-medium min-w-[3rem] text-center">{Math.round(scale * 100)}%</span>
-                    <button onClick={handleZoomIn} className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Zoom In (+)">
-                        <ZoomIn className="w-4 h-4" />
-                    </button>
-                    <div className="w-px h-4 bg-white/20 mx-1"></div>
-                    <button onClick={handleFitWidth} className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors" title="Fit Width">
-                        <Maximize className="w-4 h-4" />
+                <div className="pointer-events-auto flex items-center gap-2">
+                    {file.is_encrypted && (
+                        <div className="flex items-center gap-2 rounded-full border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-xs text-yellow-200">
+                            <Shield className="w-3.5 h-3.5" />
+                            Encrypted PDF
+                        </div>
+                    )}
+
+                    <div className="flex items-center gap-2 rounded-full border border-telegram-border bg-telegram-surface/95 p-1.5">
+                        <button onClick={handleZoomOut} className="rounded-full p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom Out (-)">
+                            <ZoomOut className="w-4 h-4" />
+                        </button>
+                        <span className="min-w-[3rem] text-center text-xs font-medium text-telegram-text">{Math.round(scale * 100)}%</span>
+                        <button onClick={handleZoomIn} className="rounded-full p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom In (+)">
+                            <ZoomIn className="w-4 h-4" />
+                        </button>
+                        <div className="mx-1 h-4 w-px bg-telegram-border"></div>
+                        <button onClick={handleFitWidth} className="rounded-full p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Fit Width">
+                            <Maximize className="w-4 h-4" />
+                        </button>
+                    </div>
+
+                    <button
+                        onClick={onClose}
+                        className="rounded-lg border border-telegram-border bg-telegram-surface/95 p-3 text-telegram-subtext transition hover:text-telegram-text"
+                        title="Close document"
+                    >
+                        <X className="w-5 h-5" />
                     </button>
                 </div>
             </div>
 
-            {/* Navigation Buttons */}
             <button
                 onClick={(e) => { e.stopPropagation(); onPrev?.(); }}
-                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/50 hover:text-white bg-black/40 backdrop-blur-md hover:bg-black/60 rounded-full transition-all z-10 border border-white/10"
+                className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-lg border border-telegram-border bg-telegram-surface/95 p-3 text-telegram-subtext transition hover:text-telegram-text"
                 title="Previous file (ArrowLeft / J)"
             >
                 <ChevronLeft className="w-6 h-6" />
@@ -186,42 +203,34 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
 
             <button
                 onClick={(e) => { e.stopPropagation(); onNext?.(); }}
-                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/50 hover:text-white bg-black/40 backdrop-blur-md hover:bg-black/60 rounded-full transition-all z-10 border border-white/10"
+                className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-lg border border-telegram-border bg-telegram-surface/95 p-3 text-telegram-subtext transition hover:text-telegram-text"
                 title="Next file (ArrowRight / L)"
             >
                 <ChevronRight className="w-6 h-6" />
             </button>
 
-            <button
-                onClick={onClose}
-                className="absolute top-4 right-4 p-3 text-white/50 hover:text-white bg-black/40 backdrop-blur-md hover:bg-black/60 rounded-full transition-all z-10 border border-white/10"
-            >
-                <X className="w-6 h-6" />
-            </button>
-
-            {/* Scrollable Document Container */}
             <div
                 ref={containerRef}
-                className="flex-1 w-full overflow-auto custom-scrollbar flex flex-col items-center pt-20 pb-8 relative"
+                className="relative flex flex-1 w-full flex-col items-center overflow-auto custom-scrollbar pt-22 pb-8"
                 onClick={(e) => e.stopPropagation()}
             >
                 {loading && (
-                    <div className="flex flex-col items-center justify-center flex-1 text-white absolute inset-0">
-                        <div className="w-10 h-10 border-4 border-telegram-primary border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p>Loading document...</p>
-                        <p className="text-xs text-white/50 mt-1">Downloading from Telegram...</p>
+                    <div className="absolute inset-0 flex flex-1 flex-col items-center justify-center text-telegram-text">
+                        <div className="mb-4 w-10 h-10 border-4 border-telegram-secondary/40 border-t-telegram-secondary rounded-full animate-spin"></div>
+                        <p className="text-sm font-medium">Loading document...</p>
+                        <p className="mt-1 text-xs text-telegram-subtext">Loading pages from Telegram storage.</p>
                     </div>
                 )}
 
                 {error && (
-                    <div className="flex flex-col items-center justify-center text-white bg-red-500/20 p-6 rounded-xl border border-red-500/50 mt-20">
-                        <p className="font-bold mb-2">Error</p>
+                    <div className="mt-20 flex flex-col items-center justify-center rounded-xl border border-red-500/25 bg-red-500/8 p-6 text-red-100">
+                        <p className="mb-2 text-sm font-semibold">Document error</p>
                         <p className="text-sm">{error}</p>
                     </div>
                 )}
 
                 {pdf && numPages > 0 && (
-                    <div className="flex flex-col gap-4 w-full items-center">
+                    <div className="flex w-full flex-col items-center gap-4">
                         {Array.from({ length: numPages }, (_, index) => (
                             <PdfPage
                                 key={`${file.id}_page_${index + 1}`}
@@ -234,10 +243,9 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
                 )}
             </div>
 
-            {/* Footer Navigation Info */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-sm bg-black/40 backdrop-blur-md px-4 py-1.5 rounded-full pointer-events-none border border-white/10">
+            <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-telegram-border bg-telegram-surface/92 px-4 py-2 text-sm text-telegram-subtext">
                 {typeof currentIndex === 'number' && typeof totalItems === 'number' && totalItems > 0 && (
-                    <span className="mr-3 border-r border-white/20 pr-3">File {currentIndex + 1} of {totalItems}</span>
+                    <span className="mr-3 border-r border-telegram-border pr-3">File {currentIndex + 1} of {totalItems}</span>
                 )}
                 <span>{numPages} {numPages === 1 ? 'page' : 'pages'}</span>
             </div>
@@ -245,7 +253,6 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
     );
 }
 
-// Individual Page Component — lazy-loaded via IntersectionObserver
 function PdfPage({ pageNumber, pdf, scale }: { pageNumber: number; pdf: pdfjsLib.PDFDocumentProxy; scale: number }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const renderTaskRef = useRef<ReturnType<pdfjsLib.PDFPageProxy['render']> | null>(null);
@@ -253,7 +260,6 @@ function PdfPage({ pageNumber, pdf, scale }: { pageNumber: number; pdf: pdfjsLib
     const containerRef = useRef<HTMLDivElement>(null);
     const [page, setPage] = useState<pdfjsLib.PDFPageProxy | null>(null);
 
-    // Intersection Observer — load page data when within 1000px of viewport
     useEffect(() => {
         const el = containerRef.current;
         if (!el) return;
@@ -271,23 +277,21 @@ function PdfPage({ pageNumber, pdf, scale }: { pageNumber: number; pdf: pdfjsLib
         return () => observer.disconnect();
     }, []);
 
-    // Fetch the PDF page object when visible
     useEffect(() => {
         if (!isVisible || !pdf) return;
 
         let cancelled = false;
-        pdf.getPage(pageNumber).then(loadedPage => {
+        pdf.getPage(pageNumber).then((loadedPage) => {
             if (!cancelled) {
                 setPage(loadedPage);
             }
-        }).catch(err => console.error(`Error loading page ${pageNumber}:`, err));
+        }).catch((err) => console.error(`Error loading page ${pageNumber}:`, err));
 
         return () => {
             cancelled = true;
         };
     }, [isVisible, pdf, pageNumber]);
 
-    // Render the page to canvas — re-runs when page loads or scale changes
     useEffect(() => {
         if (!page || !canvasRef.current || !isVisible) return;
 
@@ -297,26 +301,23 @@ function PdfPage({ pageNumber, pdf, scale }: { pageNumber: number; pdf: pdfjsLib
 
         if (!context) return;
 
-        // Cancel any in-flight render before starting a new one
         if (renderTaskRef.current) {
             renderTaskRef.current.cancel();
             renderTaskRef.current = null;
         }
 
-        // Size canvas and clear before render to avoid stale frame flash
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         context.clearRect(0, 0, viewport.width, viewport.height);
 
         const renderTask = page.render({
             canvasContext: context,
-            viewport: viewport,
-            canvas: canvas,
+            viewport,
+            canvas,
         });
         renderTaskRef.current = renderTask;
 
         renderTask.promise.catch((err) => {
-            // RenderingCancelledException is expected during zoom — ignore it
             if (err?.name !== 'RenderingCancelledException') {
                 console.error(`Render error on page ${pageNumber}:`, err);
             }
@@ -328,23 +329,22 @@ function PdfPage({ pageNumber, pdf, scale }: { pageNumber: number; pdf: pdfjsLib
         };
     }, [page, scale, isVisible, pageNumber]);
 
-    // Estimated dimensions for the placeholder before page loads (US Letter @ 96 DPI)
     const estimatedHeight = 1056 * scale;
     const estimatedWidth = 816 * scale;
 
     return (
         <div
             ref={containerRef}
-            className="relative flex flex-col items-center my-2 shadow-[0_10px_40px_rgba(0,0,0,0.5)] rounded-lg overflow-hidden bg-white/5 transition-shadow"
+            className="relative my-2 flex flex-col items-center overflow-hidden rounded-lg border border-telegram-border bg-telegram-surface/95 p-3 shadow-[0_10px_40px_rgba(0,0,0,0.38)] transition-shadow"
             style={{
                 minHeight: !page ? `${estimatedHeight}px` : undefined,
                 minWidth: !page ? `${estimatedWidth}px` : undefined,
             }}
         >
-            <canvas ref={canvasRef} className="max-w-full h-auto bg-white" />
+            <canvas ref={canvasRef} className="h-auto max-w-full rounded-[1rem] bg-white" />
 
             {!page && isVisible && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-white/30">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-white/30">
                     <div className="w-8 h-8 border-2 border-white/20 border-t-white/60 rounded-full animate-spin"></div>
                 </div>
             )}

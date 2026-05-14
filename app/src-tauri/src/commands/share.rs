@@ -1,10 +1,11 @@
-use tauri::State;
-use std::sync::Mutex;
-use std::collections::HashMap;
 use rand::Rng;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::State;
 
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ShareEntry {
     pub file_id: i32,
     pub folder_id: Option<i64>,
@@ -14,11 +15,32 @@ pub struct ShareEntry {
 
 pub struct ShareStore {
     pub shares: Mutex<HashMap<String, ShareEntry>>,
+    store_path: PathBuf,
 }
 
 impl ShareStore {
-    pub fn new() -> Self {
-        Self { shares: Mutex::new(HashMap::new()) }
+    pub fn new(store_path: PathBuf) -> Self {
+        let shares = std::fs::read_to_string(&store_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<HashMap<String, ShareEntry>>(&raw).ok())
+            .unwrap_or_default();
+
+        Self {
+            shares: Mutex::new(shares),
+            store_path,
+        }
+    }
+
+    fn persist(&self) {
+        if let Some(parent) = self.store_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
+        if let Ok(shares) = self.shares.lock() {
+            if let Ok(serialized) = serde_json::to_string_pretty(&*shares) {
+                let _ = std::fs::write(&self.store_path, serialized);
+            }
+        }
     }
 
     pub fn purge_expired(&self) {
@@ -27,9 +49,21 @@ impl ShareStore {
             .map(|duration| duration.as_millis())
             .unwrap_or(0);
 
+        let mut changed = false;
         self.shares.lock().unwrap().retain(|_, entry| {
-            entry.expires_at_epoch_ms.map(|expires_at| expires_at > now).unwrap_or(true)
+            let keep = entry
+                .expires_at_epoch_ms
+                .map(|expires_at| expires_at > now)
+                .unwrap_or(true);
+            if !keep {
+                changed = true;
+            }
+            keep
         });
+
+        if changed {
+            self.persist();
+        }
     }
 }
 
@@ -55,13 +89,20 @@ pub async fn cmd_create_share_link(
                 .map(|duration| duration.as_millis() + (minutes as u128 * 60_000))
                 .unwrap_or(minutes as u128 * 60_000)
         });
-    state.shares.lock().unwrap().insert(token.clone(), ShareEntry {
-        file_id,
-        folder_id,
-        filename: filename.clone(),
-        expires_at_epoch_ms,
-    });
-    Ok(format!("http://localhost:14200/share/{}/{}", token, filename))
+    state.shares.lock().unwrap().insert(
+        token.clone(),
+        ShareEntry {
+            file_id,
+            folder_id,
+            filename: filename.clone(),
+            expires_at_epoch_ms,
+        },
+    );
+    state.persist();
+    Ok(format!(
+        "http://localhost:14200/share/{}/{}",
+        token, filename
+    ))
 }
 
 #[tauri::command]
@@ -71,5 +112,6 @@ pub async fn cmd_revoke_share_link(
 ) -> Result<(), String> {
     state.purge_expired();
     state.shares.lock().unwrap().remove(&token);
+    state.persist();
     Ok(())
 }
