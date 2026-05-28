@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Activity, ChevronDown, Clock, Folder, HardDrive, LogOut, Plus, RefreshCw, Star } from 'lucide-react';
+import { Activity, BarChart2, ChevronDown, Clock, Folder, HardDrive, LogOut, Plus, RefreshCw, Star } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
 import { ActivityEntry, BandwidthStats, TelegramFolder } from '../../types';
+import { formatBytes } from '../../utils';
 
 function timeAgo(isoTimestamp: string): string {
     const diff = Date.now() - new Date(isoTimestamp).getTime();
@@ -40,6 +41,8 @@ interface SidebarProps {
     folderFileCounts?: Record<number, number>;
     onMoveFolderTo?: (folderId: number) => void;
     activity?: ActivityEntry[];
+    vaultBadge?: { fileCount: number; totalBytes: number };
+    onOpenVault?: () => void;
 }
 
 export function Sidebar({
@@ -66,6 +69,8 @@ export function Sidebar({
     folderFileCounts = {},
     onMoveFolderTo,
     activity = [],
+    vaultBadge,
+    onOpenVault,
 }: SidebarProps) {
     const [showNewFolderInput, setShowNewFolderInput] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -164,12 +169,29 @@ export function Sidebar({
     return (
         <aside className="vault-sidebar flex w-64 flex-col border-r border-telegram-border/80 text-telegram-text" onClick={(e) => e.stopPropagation()}>
             <div className="border-b border-telegram-border/70 px-4 py-5">
-                <div className="flex items-center gap-3">
-                    <img src="/logo.svg" className="h-7 w-7" alt="Logo" />
-                    <div>
-                        <span className="block text-lg font-semibold tracking-tight text-telegram-text">SharkDrive</span>
-                        <span className="block text-xs text-telegram-subtext">Telegram cloud drive</span>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <img src="/logo.svg" className="h-7 w-7" alt="Logo" />
+                        <div>
+                            <span className="block text-lg font-semibold tracking-tight text-telegram-text">SharkDrive</span>
+                            {vaultBadge && vaultBadge.fileCount > 0 ? (
+                                <span className="block text-xs text-telegram-subtext">
+                                    {vaultBadge.fileCount.toLocaleString()} files · {formatBytes(vaultBadge.totalBytes)}
+                                </span>
+                            ) : (
+                                <span className="block text-xs text-telegram-subtext">Telegram cloud drive</span>
+                            )}
+                        </div>
                     </div>
+                    {onOpenVault && (
+                        <button
+                            onClick={onOpenVault}
+                            title="Vault Dashboard"
+                            className="rounded-lg p-1.5 text-telegram-subtext transition hover:bg-white/[0.06] hover:text-telegram-primary"
+                        >
+                            <BarChart2 className="h-4 w-4" />
+                        </button>
+                    )}
                 </div>
                 <div className="mt-4 flex items-center gap-2 text-xs text-telegram-subtext">
                     <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`} />

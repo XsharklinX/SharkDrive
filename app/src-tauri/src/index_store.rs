@@ -148,3 +148,43 @@ fn now_ms() -> i64 {
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or_default()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_store() -> PersistentIndexState {
+        PersistentIndexState::new(PathBuf::from("/tmp/test_index_store_unused.json"))
+    }
+
+    #[test]
+    fn cache_miss_returns_none() {
+        let store = make_store();
+        assert!(store.get_folder_size_cache(999).is_none());
+    }
+
+    #[test]
+    fn cache_round_trip() {
+        let store = make_store();
+        store.set_folder_size_cache(42, 17, 1024 * 1024);
+        let result = store.get_folder_size_cache(42);
+        assert_eq!(result, Some((17, 1024 * 1024)));
+    }
+
+    #[test]
+    fn cache_overwrites_previous_value() {
+        let store = make_store();
+        store.set_folder_size_cache(10, 5, 500);
+        store.set_folder_size_cache(10, 8, 800);
+        assert_eq!(store.get_folder_size_cache(10), Some((8, 800)));
+    }
+
+    #[test]
+    fn cache_independent_per_folder() {
+        let store = make_store();
+        store.set_folder_size_cache(1, 3, 300);
+        store.set_folder_size_cache(2, 7, 700);
+        assert_eq!(store.get_folder_size_cache(1), Some((3, 300)));
+        assert_eq!(store.get_folder_size_cache(2), Some((7, 700)));
+    }
+}

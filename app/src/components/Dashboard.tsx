@@ -24,6 +24,8 @@ import { MediaPlayer } from './dashboard/MediaPlayer';
 import { DragDropOverlay } from './dashboard/DragDropOverlay';
 import { ExternalDropBlocker } from './dashboard/ExternalDropBlocker';
 import { PdfViewer } from './dashboard/PdfViewer';
+import { VaultModal } from './dashboard/VaultModal';
+import { ErrorBoundary } from './ErrorBoundary';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -59,6 +61,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     const [renameTarget, setRenameTarget] = useState<TelegramFile | null>(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showVault, setShowVault] = useState(false);
     const [shareTarget, setShareTarget] = useState<TelegramFile | null>(null);
     const [autoSyncInterval, setAutoSyncInterval] = useState(0);
     const [movingFolderId, setMovingFolderId] = useState<number | null>(null);
@@ -252,6 +255,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             }
         }
         return counts;
+    }, [allIndexedRaw]);
+
+    const vaultBadge = useMemo(() => {
+        const fileCount = allIndexedRaw.filter(f => f.icon_type !== 'folder').length;
+        const totalBytes = allIndexedRaw.reduce((sum, f) => sum + (f.size ?? 0), 0);
+        return { fileCount, totalBytes };
     }, [allIndexedRaw]);
 
     const {
@@ -564,6 +573,15 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         activity={activity}
                     />
                 )}
+                {showVault && (
+                    <VaultModal
+                        key="vault-modal"
+                        files={allIndexedRaw.filter(f => f.icon_type !== 'folder')}
+                        folders={folders}
+                        activity={activity}
+                        onClose={() => setShowVault(false)}
+                    />
+                )}
                 {shareTarget && (
                     <ShareModal
                         key="share-modal"
@@ -605,28 +623,32 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     />
                 )}
                 {playingFile && (
-                    <MediaPlayer
-                        file={playingFile}
-                        onClose={() => setPlayingFile(null)}
-                        onNext={handleNextPreview}
-                        onPrev={handlePrevPreview}
-                        currentIndex={previewContextIndex}
-                        totalItems={previewContextFiles.length}
-                        activeFolderId={activeFolderId}
-                        key="media-player"
-                    />
+                    <ErrorBoundary onDismiss={() => setPlayingFile(null)} key="media-player-boundary">
+                        <MediaPlayer
+                            file={playingFile}
+                            onClose={() => setPlayingFile(null)}
+                            onNext={handleNextPreview}
+                            onPrev={handlePrevPreview}
+                            currentIndex={previewContextIndex}
+                            totalItems={previewContextFiles.length}
+                            activeFolderId={activeFolderId}
+                            key="media-player"
+                        />
+                    </ErrorBoundary>
                 )}
                 {pdfFile && (
-                    <PdfViewer
-                        file={pdfFile}
-                        onClose={() => setPdfFile(null)}
-                        onNext={handleNextPreview}
-                        onPrev={handlePrevPreview}
-                        currentIndex={previewContextIndex}
-                        totalItems={previewContextFiles.length}
-                        activeFolderId={activeFolderId}
-                        key="pdf-viewer"
-                    />
+                    <ErrorBoundary onDismiss={() => setPdfFile(null)} key="pdf-viewer-boundary">
+                        <PdfViewer
+                            file={pdfFile}
+                            onClose={() => setPdfFile(null)}
+                            onNext={handleNextPreview}
+                            onPrev={handlePrevPreview}
+                            currentIndex={previewContextIndex}
+                            totalItems={previewContextFiles.length}
+                            activeFolderId={activeFolderId}
+                            key="pdf-viewer"
+                        />
+                    </ErrorBoundary>
                 )}
                 {isDragging && !isDraggingInternally && <DragDropOverlay key="drag-drop-overlay" />}
             </AnimatePresence>
@@ -655,6 +677,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 folderFileCounts={folderFileCounts}
                 onMoveFolderTo={(folderId) => setMovingFolderId(folderId)}
                 activity={activity}
+                vaultBadge={vaultBadge}
+                onOpenVault={() => setShowVault(true)}
             />
 
             <main className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.015] to-transparent" onClick={(e) => {
@@ -753,17 +777,19 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             </main>
 
             {previewFile && (
-                <PreviewModal
-                    file={previewFile}
-                    activeFolderId={activeFolderId}
-                    onClose={() => setPreviewFile(null)}
-                    onNext={handleNextPreview}
-                    onPrev={handlePrevPreview}
-                    currentIndex={previewContextIndex}
-                    totalItems={previewContextFiles.length}
-                    nextFile={previewNeighborState.nextFile}
-                    prevFile={previewNeighborState.prevFile}
-                />
+                <ErrorBoundary onDismiss={() => setPreviewFile(null)}>
+                    <PreviewModal
+                        file={previewFile}
+                        activeFolderId={activeFolderId}
+                        onClose={() => setPreviewFile(null)}
+                        onNext={handleNextPreview}
+                        onPrev={handlePrevPreview}
+                        currentIndex={previewContextIndex}
+                        totalItems={previewContextFiles.length}
+                        nextFile={previewNeighborState.nextFile}
+                        prevFile={previewNeighborState.prevFile}
+                    />
+                </ErrorBoundary>
             )}
             <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex max-h-[calc(100vh-2rem)] flex-col gap-3">
                 <div className="pointer-events-auto">

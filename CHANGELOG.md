@@ -4,6 +4,29 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [1.8.0] - 2026-05-28
+
+### Vault Dashboard
+
+- **Storage statistics modal** — `VaultModal` accessible via the BarChart icon in the sidebar header. Shows total file count, total size, and a donut chart breakdown by type (Images / Videos / Audio / Docs / Other) with per-category counts and sizes. Pure SVG, zero extra dependencies.
+- **Top 5 folders** — Relative progress bars showing the heaviest folders by byte total.
+- **Upload trend chart** — SVG polyline over the last 30 days, built from activity log upload events. Includes gradient fill and axis labels.
+- **Sidebar badge** — "X files · Y GB" replaces the "Telegram cloud drive" subtitle in the sidebar header once the index has data.
+- **Export CSV** — Uses `tauri-plugin-dialog` save dialog to pick a path, then `cmd_export_csv` (Rust) writes name, size_bytes, date, and folder for every indexed file. Fields containing commas are RFC 4180 quoted.
+
+---
+
+## [1.7.0] - 2026-05-28
+
+### Rendimiento & Estabilidad
+
+- **Granular error boundaries** — `ErrorBoundary` extended with `onDismiss?: () => void`. PreviewModal, MediaPlayer, and PdfViewer are each wrapped; a crash closes only that modal instead of taking down the whole app.
+- **View-aware skeleton screens** — List-view loading state now shows 16 rows matching the `grid-cols-[2.5rem_1fr_6rem_7rem]` layout. Grid/gallery keep the existing card pulse skeleton.
+- **Rust retry logic** — `is_retryable_error()` and `with_retry()` added to `commands/utils.rs`. `cmd_get_files` and `cmd_search_global` retry up to 3 times (1 s / 2 s backoff) on connection, timeout, reset, and pipe errors.
+- **Rust unit tests** — 7 tests for `parse_search_filters` and 4 tests for `PersistentIndexState` folder-size cache. **18 tests passing total.**
+
+---
+
 ## [1.6.0] - 2026-05-28
 
 ### UX Refinements

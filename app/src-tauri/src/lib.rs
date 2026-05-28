@@ -186,6 +186,7 @@ pub fn run() {
             // Clipboard
             commands::cmd_save_clipboard_image,
             commands::cmd_get_file_size,
+            commands::cmd_export_csv,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

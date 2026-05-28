@@ -273,6 +273,22 @@ export function FileExplorer({
     };
 
     if (loading) {
+        if (viewMode === 'list') {
+            return (
+                <div className="flex-1 overflow-auto p-6">
+                    <div className="flex flex-col gap-0.5">
+                        {Array.from({ length: 16 }).map((_, i) => (
+                            <div key={i} className="grid animate-pulse grid-cols-[2.5rem_minmax(0,1fr)_6rem_7rem] items-center gap-3 rounded-lg px-3 py-2.5">
+                                <div className="h-8 w-8 rounded-lg bg-white/[0.04]" />
+                                <div className="h-3.5 w-2/3 rounded bg-white/[0.04]" />
+                                <div className="h-3 w-12 rounded bg-white/[0.03]" />
+                                <div className="h-3 w-20 rounded bg-white/[0.03]" />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
         return (
             <div className="grid flex-1 content-start gap-3 p-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
                 {Array.from({ length: 12 }).map((_, index) => (

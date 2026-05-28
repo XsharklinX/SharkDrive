@@ -5,7 +5,7 @@ use tauri::State;
 use crate::commands::fs::caption::{
     build_caption, display_name_from_metadata, parse_caption_metadata,
 };
-use crate::commands::utils::{map_error, resolve_peer};
+use crate::commands::utils::{is_retryable_error, map_error, resolve_peer};
 use crate::index_store::PersistentIndexState;
 use crate::models::FileMetadata;
 use crate::TelegramState;
@@ -362,18 +362,48 @@ pub async fn cmd_get_files(
 ) -> Result<Vec<FileMetadata>, String> {
     let client_opt = { state.client.lock().await.clone() };
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
-    let mut files = Vec::new();
 
-    let peer = resolve_peer(&client, folder_id, &state).await?;
-    let mut msgs = client.iter_messages(&peer);
-    while let Some(msg) = msgs.next().await.map_err(|e| e.to_string())? {
-        if let Some(file) = message_to_file_metadata(&msg, folder_id) {
-            files.push(file);
+    let delays: &[u64] = &[1, 2];
+    let mut last_err = String::new();
+    for attempt in 0..=2usize {
+        if attempt > 0 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(delays[attempt - 1])).await;
         }
+        let peer = match resolve_peer(&client, folder_id, &state).await {
+            Ok(p) => p,
+            Err(e) if is_retryable_error(&e) => { last_err = e; continue; }
+            Err(e) => return Err(e),
+        };
+        let mut files = Vec::new();
+        let mut msgs = client.iter_messages(&peer);
+        let mut fetch_err: Option<String> = None;
+        loop {
+            match msgs.next().await {
+                Ok(Some(msg)) => {
+                    if let Some(file) = message_to_file_metadata(&msg, folder_id) {
+                        files.push(file);
+                    }
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    let s = e.to_string();
+                    if is_retryable_error(&s) {
+                        fetch_err = Some(s);
+                    } else {
+                        return Err(s);
+                    }
+                    break;
+                }
+            }
+        }
+        if let Some(e) = fetch_err {
+            last_err = e;
+            continue;
+        }
+        index_state.set_files(folder_id, files.clone());
+        return Ok(files);
     }
-
-    index_state.set_files(folder_id, files.clone());
-    Ok(files)
+    Err(last_err)
 }
 
 #[tauri::command]
@@ -412,23 +442,37 @@ pub async fn cmd_search_global(
         }
     }
 
-    let result = client
-        .invoke(&tl::functions::messages::SearchGlobal {
-            q: query,
-            filter: tl::enums::MessagesFilter::InputMessagesFilterDocument,
-            min_date: 0,
-            max_date: 0,
-            offset_rate: 0,
-            offset_peer: tl::enums::InputPeer::Empty,
-            offset_id: 0,
-            limit: 50,
-            folder_id: None,
-            broadcasts_only: false,
-            groups_only: false,
-            users_only: false,
-        })
-        .await
-        .map_err(map_error)?;
+    let delays: &[u64] = &[1, 2];
+    let mut result_opt: Option<tl::enums::messages::Messages> = None;
+    let mut last_err = String::new();
+    for attempt in 0..=2usize {
+        if attempt > 0 {
+            tokio::time::sleep(tokio::time::Duration::from_secs(delays[attempt - 1])).await;
+        }
+        match client
+            .invoke(&tl::functions::messages::SearchGlobal {
+                q: query.clone(),
+                filter: tl::enums::MessagesFilter::InputMessagesFilterDocument,
+                min_date: 0,
+                max_date: 0,
+                offset_rate: 0,
+                offset_peer: tl::enums::InputPeer::Empty,
+                offset_id: 0,
+                limit: 50,
+                folder_id: None,
+                broadcasts_only: false,
+                groups_only: false,
+                users_only: false,
+            })
+            .await
+            .map_err(map_error)
+        {
+            Ok(r) => { result_opt = Some(r); break; }
+            Err(e) if is_retryable_error(&e) => last_err = e,
+            Err(e) => return Err(e),
+        }
+    }
+    let result = result_opt.ok_or(last_err)?;
 
     let mut push_message = |message: tl::types::Message| {
         if let Some(file) = raw_message_to_file_metadata(&message) {
@@ -518,6 +562,36 @@ pub async fn cmd_get_all_indexed_files(
 }
 
 #[tauri::command]
+pub async fn cmd_export_csv(
+    save_path: String,
+    index_state: State<'_, PersistentIndexState>,
+) -> Result<(), String> {
+    let files = index_state.get_all_files();
+    let folder_map = index_state.folder_name_map();
+    let mut csv = "name,size_bytes,date,folder\n".to_string();
+    for f in &files {
+        let folder_name = folder_map
+            .get(&f.folder_id)
+            .map(String::as_str)
+            .unwrap_or("Saved Messages");
+        let date = &f.created_at;
+        // Escape fields that may contain commas by quoting them
+        let name = if f.name.contains(',') || f.name.contains('"') {
+            format!("\"{}\"", f.name.replace('"', "\"\""))
+        } else {
+            f.name.clone()
+        };
+        let folder = if folder_name.contains(',') || folder_name.contains('"') {
+            format!("\"{}\"", folder_name.replace('"', "\"\""))
+        } else {
+            folder_name.to_string()
+        };
+        csv.push_str(&format!("{},{},{},{}\n", name, f.size, date, folder));
+    }
+    std::fs::write(&save_path, csv).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn cmd_rename_file(
     message_id: i32,
     folder_id: Option<i64>,
@@ -566,4 +640,64 @@ pub async fn cmd_rename_file(
         .map_err(map_error)?;
 
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_plain_text_terms() {
+        let f = parse_search_filters("hello world");
+        assert_eq!(f.text, vec!["hello", "world"]);
+        assert!(f.file_type.is_none());
+        assert!(f.ext.is_none());
+        assert!(f.encrypted.is_none());
+        assert!(f.min_bytes.is_none());
+        assert!(f.max_bytes.is_none());
+    }
+
+    #[test]
+    fn parse_type_filter() {
+        let f = parse_search_filters("type:image report");
+        assert_eq!(f.file_type.as_deref(), Some("image"));
+        assert_eq!(f.text, vec!["report"]);
+    }
+
+    #[test]
+    fn parse_ext_filter_strips_dot() {
+        let f = parse_search_filters("ext:.pdf");
+        assert_eq!(f.ext.as_deref(), Some("pdf"));
+        let f2 = parse_search_filters("ext:pdf");
+        assert_eq!(f2.ext.as_deref(), Some("pdf"));
+    }
+
+    #[test]
+    fn parse_min_max_bytes() {
+        let f = parse_search_filters("min:1mb max:500kb");
+        assert_eq!(f.min_bytes, Some(1024 * 1024));
+        assert_eq!(f.max_bytes, Some(500 * 1024));
+    }
+
+    #[test]
+    fn parse_encrypted_variants() {
+        assert_eq!(parse_search_filters("encrypted:true").encrypted, Some(true));
+        assert_eq!(parse_search_filters("enc:1").encrypted, Some(true));
+        assert_eq!(parse_search_filters("enc:false").encrypted, Some(false));
+        assert_eq!(parse_search_filters("enc:no").encrypted, Some(false));
+    }
+
+    #[test]
+    fn parse_folder_filter() {
+        let f = parse_search_filters("folder:work docs");
+        assert_eq!(f.folder.as_deref(), Some("work"));
+        assert_eq!(f.text, vec!["docs"]);
+    }
+
+    #[test]
+    fn parse_empty_query() {
+        let f = parse_search_filters("   ");
+        assert!(f.text.is_empty());
+        assert!(f.file_type.is_none());
+    }
 }

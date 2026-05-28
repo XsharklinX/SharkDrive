@@ -1,3 +1,4 @@
+use tokio::time::{sleep, Duration};
 use crate::bandwidth::BandwidthManager;
 use crate::commands::TelegramState;
 use grammers_client::types::Peer;
@@ -88,6 +89,34 @@ pub fn cmd_get_file_size(path: String) -> Result<u64, String> {
     std::fs::metadata(&path)
         .map(|m| m.len())
         .map_err(|e| format!("Failed to read file size: {}", e))
+}
+
+pub fn is_retryable_error(err: &str) -> bool {
+    err.contains("connection")
+        || err.contains("timed out")
+        || err.contains("reset by peer")
+        || err.contains("broken pipe")
+        || err.contains("temporarily unavailable")
+}
+
+pub async fn with_retry<F, Fut, T>(mut f: F) -> Result<T, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    let delays = [1u64, 2];
+    let mut last_err = String::new();
+    for (attempt, &delay) in std::iter::once(&0u64).chain(delays.iter()).enumerate() {
+        if attempt > 0 {
+            sleep(Duration::from_secs(delay)).await;
+        }
+        match f().await {
+            Ok(v) => return Ok(v),
+            Err(e) if is_retryable_error(&e) => last_err = e,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last_err)
 }
 
 pub fn map_error(e: impl std::fmt::Display) -> String {
