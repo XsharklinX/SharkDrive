@@ -3,9 +3,11 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
-import { Clock, Eye, EyeOff, FolderSync, History, LogIn, Monitor, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, Clock, Copy, Eye, EyeOff, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { ActivityEntry, BackupFolder, TelegramFolder } from '../../types';
+import { ActivityEntry, BackupFolder, ShareLinkInfo, TelegramFolder } from '../../types';
+import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
+import { tauriApi } from '../../api/tauri';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -15,9 +17,11 @@ interface SettingsModalProps {
     onEncryptionToggle: (enabled: boolean, password?: string) => void;
     folders: TelegramFolder[];
     activity: ActivityEntry[];
+    shortcuts: KeyboardShortcutMap;
+    onShortcutsChange: (shortcuts: KeyboardShortcutMap) => void;
 }
 
-type Tab = 'general' | 'encryption' | 'backup' | 'activity';
+type Tab = 'general' | 'encryption' | 'backup' | 'sharing' | 'shortcuts' | 'activity';
 type ActivityFilter = ActivityEntry['type'] | 'all';
 
 export function SettingsModal({
@@ -28,6 +32,8 @@ export function SettingsModal({
     onEncryptionToggle,
     folders,
     activity,
+    shortcuts,
+    onShortcutsChange,
 }: SettingsModalProps) {
     const [tab, setTab] = useState<Tab>('general');
     const [closeToTray, setCloseToTray] = useState(false);
@@ -37,12 +43,24 @@ export function SettingsModal({
     const [backupFolders, setBackupFolders] = useState<BackupFolder[]>([]);
     const [loading, setLoading] = useState(false);
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
+    const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
+    const [shareLinks, setShareLinks] = useState<ShareLinkInfo[]>([]);
+    const [shareLinksLoading, setShareLinksLoading] = useState(false);
 
     useEffect(() => {
         invoke<boolean>('cmd_get_close_to_tray').then(setCloseToTray).catch(() => {});
         invoke<boolean>('cmd_get_autostart').then(setAutostart).catch(() => {});
         invoke<BackupFolder[]>('cmd_get_backup_folders').then(setBackupFolders).catch(() => {});
     }, []);
+
+    useEffect(() => {
+        if (tab !== 'sharing') return;
+        setShareLinksLoading(true);
+        tauriApi.listShareLinks()
+            .then(setShareLinks)
+            .catch((error) => toast.error(`Failed to load share links: ${error}`))
+            .finally(() => setShareLinksLoading(false));
+    }, [tab]);
 
     const handleCloseToTray = async (value: boolean) => {
         try {
@@ -144,11 +162,48 @@ export function SettingsModal({
         { id: 'general', label: 'General', icon: Monitor, description: 'App behavior, startup and sync cadence' },
         { id: 'encryption', label: 'Encryption', icon: Shield, description: 'Key loading, recovery and local security' },
         { id: 'backup', label: 'Auto Backup', icon: FolderSync, description: 'Watched folders and remote destinations' },
+        { id: 'sharing', label: 'Sharing', icon: Link2, description: 'Active links, expiry and download counts' },
+        { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, description: 'Keyboard actions and conflict checks' },
         { id: 'activity', label: 'Activity', icon: History, description: 'Local history of app actions' },
     ];
     const visibleActivity = activityFilter === 'all' ? activity : activity.filter((entry) => entry.type === activityFilter);
     const activityFilters: ActivityFilter[] = ['all', 'upload', 'download', 'copy', 'share', 'preview', 'backup', 'security'];
     const activityListRef = useRef<HTMLDivElement>(null);
+    const shortcutActions = Object.keys(DEFAULT_SHORTCUTS) as ShortcutAction[];
+    const normalizedShortcutEntries = shortcutActions.map((action) => ({
+        action,
+        value: normalizeShortcut(shortcuts[action] || DEFAULT_SHORTCUTS[action]),
+    }));
+    const conflictValues = new Set(
+        normalizedShortcutEntries
+            .map((entry) => entry.value)
+            .filter((value, index, list) => value && list.indexOf(value) !== index)
+    );
+    const updateShortcut = (action: ShortcutAction, value: string) => {
+        onShortcutsChange({
+            ...shortcuts,
+            [action]: normalizeShortcut(value),
+        });
+    };
+    const formatShareExpiry = (value?: number | null) => {
+        if (!value) return 'Never';
+        const diff = value - Date.now();
+        if (diff <= 0) return 'Expired';
+        const minutes = Math.ceil(diff / 60_000);
+        if (minutes < 60) return `${minutes}m`;
+        const hours = Math.ceil(minutes / 60);
+        if (hours < 48) return `${hours}h`;
+        return `${Math.ceil(hours / 24)}d`;
+    };
+    const revokeShareLink = async (token: string) => {
+        try {
+            await tauriApi.revokeShareLink(token);
+            setShareLinks((links) => links.filter((link) => link.token !== token));
+            toast.info('Share link revoked');
+        } catch (error) {
+            toast.error(`Failed to revoke link: ${error}`);
+        }
+    };
     const activityVirtualizer = useVirtualizer({
         count: visibleActivity.length,
         getScrollElement: () => activityListRef.current,
@@ -225,6 +280,8 @@ export function SettingsModal({
                                     {tab === 'general' && 'General'}
                                     {tab === 'encryption' && 'Encryption'}
                                     {tab === 'backup' && 'Auto Backup'}
+                                    {tab === 'sharing' && 'Sharing'}
+                                    {tab === 'shortcuts' && 'Shortcuts'}
                                     {tab === 'activity' && 'Activity'}
                                 </h3>
                             </div>
@@ -425,6 +482,109 @@ export function SettingsModal({
                                         ))}
                                     </div>
                                 )}
+                            </SectionCard>
+                        )}
+
+                        {tab === 'sharing' && (
+                            <SectionCard
+                                title="Active Share Links"
+                                icon={<Link2 className="w-4 h-4" />}
+                                description="Local expiring links currently available while SharkDrive is running."
+                            >
+                                {shareLinksLoading ? (
+                                    <p className="py-4 text-center text-sm text-telegram-subtext">Loading links...</p>
+                                ) : shareLinks.length === 0 ? (
+                                    <p className="py-4 text-center text-sm text-telegram-subtext">No active share links.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {shareLinks.map((link) => (
+                                            <div key={link.token} className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-medium text-telegram-text">{link.filename}</p>
+                                                        <p className="mt-1 truncate font-mono text-xs text-telegram-subtext">{link.url}</p>
+                                                    </div>
+                                                    <div className="flex shrink-0 items-center gap-1">
+                                                        <button
+                                                            onClick={() => navigator.clipboard.writeText(link.url).then(() => toast.success('Copied'))}
+                                                            className="rounded-lg p-2 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text"
+                                                            title="Copy link"
+                                                        >
+                                                            <Copy className="h-4 w-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => revokeShareLink(link.token)}
+                                                            className="rounded-lg p-2 text-red-300 transition hover:bg-red-500/10"
+                                                            title="Revoke link"
+                                                        >
+                                                            <Ban className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-telegram-subtext">
+                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">Expires: {formatShareExpiry(link.expires_at_epoch_ms)}</span>
+                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">Downloads: {link.download_count}</span>
+                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">Token: {link.token.slice(0, 8)}...</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </SectionCard>
+                        )}
+
+                        {tab === 'shortcuts' && (
+                            <SectionCard
+                                title="Keyboard Shortcuts"
+                                icon={<Keyboard className="w-4 h-4" />}
+                                description="Keep fast actions available without adding more visible controls to the explorer."
+                            >
+                                {conflictValues.size > 0 && (
+                                    <div className="flex items-start gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-xs text-amber-100">
+                                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                                        Two or more actions use the same shortcut. Change one before relying on keyboard actions.
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    {shortcutActions.map((action) => {
+                                        const value = normalizeShortcut(shortcuts[action] || DEFAULT_SHORTCUTS[action]);
+                                        const hasConflict = conflictValues.has(value);
+                                        return (
+                                            <div key={action} className="flex items-center justify-between gap-3 rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                                <div>
+                                                    <p className="text-sm font-medium text-telegram-text">{SHORTCUT_LABELS[action]}</p>
+                                                    <p className="mt-0.5 text-xs text-telegram-subtext">Default: {DEFAULT_SHORTCUTS[action]}</p>
+                                                </div>
+                                                <button
+                                                    onKeyDown={(event) => {
+                                                        if (recordingShortcut !== action) return;
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        const next = shortcutFromEvent(event.nativeEvent);
+                                                        if (next) updateShortcut(action, next);
+                                                        setRecordingShortcut(null);
+                                                    }}
+                                                    onClick={() => setRecordingShortcut(action)}
+                                                    className={`min-w-28 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                                                        hasConflict
+                                                            ? 'border-amber-400/40 bg-amber-400/10 text-amber-200'
+                                                            : recordingShortcut === action
+                                                                ? 'border-telegram-primary/60 bg-telegram-primary/12 text-telegram-primary'
+                                                                : 'border-telegram-border bg-white/[0.03] text-telegram-text hover:border-telegram-primary/35'
+                                                    }`}
+                                                >
+                                                    {recordingShortcut === action ? 'Press keys...' : value}
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <button
+                                    onClick={() => onShortcutsChange(DEFAULT_SHORTCUTS)}
+                                    className="rounded-xl border border-telegram-border px-4 py-2.5 text-sm text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
+                                >
+                                    Reset shortcuts
+                                </button>
                             </SectionCard>
                         )}
 

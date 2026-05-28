@@ -12,12 +12,15 @@ interface UseDashboardSearchOptions {
     favoriteIds: Set<number>;
     folderNameResolver: FolderNameResolver;
     handleGlobalSearch: (query: string) => Promise<TelegramFile[]>;
+    decorateFile?: (file: TelegramFile, fallbackFolderId: number | null) => TelegramFile;
 }
 
 function shouldUseRemoteSearch(query: string, localMatchCount: number) {
     const lower = query.toLowerCase();
     if (
         lower.includes('folder:')
+        || lower.includes('tag:')
+        || lower.includes('#')
         || lower.includes('encrypted:')
         || lower.includes('enc:')
         || lower.includes('type:')
@@ -38,6 +41,7 @@ export function useDashboardSearch({
     favoriteIds,
     folderNameResolver,
     handleGlobalSearch,
+    decorateFile,
 }: UseDashboardSearchOptions) {
     const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -53,15 +57,18 @@ export function useDashboardSearch({
         let cancelled = false;
         tauriApi.getAllIndexedFiles().then((files) => {
             if (!cancelled) {
-                setAllIndexedFiles(files.map((f) => ({
-                    ...f,
-                    sizeStr: formatBytes(f.size),
-                    type: (f.icon_type === 'folder' ? 'folder' : 'file') as 'folder' | 'file',
-                })));
+                setAllIndexedFiles(files.map((f) => {
+                    const normalized = {
+                        ...f,
+                        sizeStr: formatBytes(f.size),
+                        type: (f.icon_type === 'folder' ? 'folder' : 'file') as 'folder' | 'file',
+                    };
+                    return decorateFile ? decorateFile(normalized, normalized.folder_id ?? activeFolderId) : normalized;
+                }));
             }
         }).catch(() => {});
         return () => { cancelled = true; };
-    }, [searchActive]);
+    }, [activeFolderId, decorateFile, searchActive]);
 
     const indexedFiles = useMemo(() => {
         const merged = new Map<string, TelegramFile>();
@@ -97,11 +104,14 @@ export function useDashboardSearch({
         const timer = setTimeout(async () => {
             setIsSearching(true);
             try {
-                const remoteResults = (await handleGlobalSearch(deferredSearchTerm)).map((file) => ({
-                    ...file,
-                    sizeStr: formatBytes(file.size),
-                    type: 'file' as const,
-                }));
+                const remoteResults = (await handleGlobalSearch(deferredSearchTerm)).map((file) => {
+                    const normalized = {
+                        ...file,
+                        sizeStr: formatBytes(file.size),
+                        type: 'file' as const,
+                    };
+                    return decorateFile ? decorateFile(normalized, normalized.folder_id ?? activeFolderId) : normalized;
+                });
 
                 const merged = new Map<string, TelegramFile>();
                 for (const file of localMatches) {
@@ -122,7 +132,7 @@ export function useDashboardSearch({
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [activeFolderId, deferredSearchTerm, folderNameResolver, handleGlobalSearch, indexedFiles]);
+    }, [activeFolderId, decorateFile, deferredSearchTerm, folderNameResolver, handleGlobalSearch, indexedFiles]);
 
     const baseFiles = useMemo(() => (
         deferredSearchTerm.length > 2

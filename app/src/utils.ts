@@ -21,6 +21,7 @@ const endsWithAny = (name: string, exts: readonly string[]) => {
     return exts.some(ext => lower.endsWith(ext));
 };
 
+export const isTextPreviewFile = (name: string) => /\.(txt|md|markdown|csv|json)$/i.test(name);
 export const isMediaFile   = (name: string) => endsWithAny(name, MEDIA_EXTENSIONS);
 export const isVideoFile   = (name: string) => endsWithAny(name, VIDEO_EXTENSIONS);
 export const isAudioFile   = (name: string) => endsWithAny(name, AUDIO_EXTENSIONS);
@@ -46,6 +47,7 @@ type SearchFilters = {
     ext?: string;
     encrypted?: boolean;
     folder?: string;
+    tag?: string;
     minBytes?: number;
     maxBytes?: number;
 };
@@ -100,6 +102,16 @@ export const parseAdvancedSearch = (query: string): SearchFilters => {
             continue;
         }
 
+        if (lower.startsWith('tag:')) {
+            filters.tag = lower.slice(4).replace(/^#/, '');
+            continue;
+        }
+
+        if (lower.startsWith('#') && lower.length > 1) {
+            filters.tag = lower.slice(1);
+            continue;
+        }
+
         if (lower.startsWith('min:')) {
             filters.minBytes = parseByteValue(lower.slice(4)) ?? undefined;
             continue;
@@ -136,8 +148,11 @@ export const matchesAdvancedSearch = (
     const name = file.name.toLowerCase();
     const ext = name.split('.').pop()?.toLowerCase() ?? '';
     const folderName = folderNameResolver?.(typeof file.folder_id === 'number' ? file.folder_id : null)?.toLowerCase() ?? '';
+    const tags = (file.tags ?? []).map((tag) => tag.toLowerCase());
+    const note = file.quick_note?.toLowerCase() ?? '';
+    const textHaystack = `${name} ${tags.join(' ')} ${note}`;
 
-    if (filters.text.length > 0 && !filters.text.every((token) => name.includes(token))) {
+    if (filters.text.length > 0 && !filters.text.every((token) => textHaystack.includes(token))) {
         return false;
     }
 
@@ -159,6 +174,13 @@ export const matchesAdvancedSearch = (
             return false;
         }
         if (!isSavedMessages && !folderName.includes(filters.folder)) {
+            return false;
+        }
+    }
+
+    if (filters.tag) {
+        const requestedTag = filters.tag;
+        if (!tags.some((tag) => tag === requestedTag || tag.includes(requestedTag))) {
             return false;
         }
     }

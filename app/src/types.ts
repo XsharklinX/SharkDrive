@@ -8,6 +8,11 @@ export interface TelegramFile {
     icon_type?: string;
     type?: 'folder' | 'file';
     is_encrypted?: boolean;
+    sha256?: string;
+    mime_type?: string;
+    file_ext?: string;
+    tags?: string[];
+    quick_note?: string;
 }
 
 export interface TelegramFolder {
@@ -26,12 +31,13 @@ export interface QueueItem {
     id: string;
     path: string;
     folderId: number | null;
-    status: 'pending' | 'uploading' | 'success' | 'error' | 'cancelled' | 'skipped';
+    status: 'pending' | 'uploading' | 'success' | 'error' | 'cancelled' | 'skipped' | 'duplicate';
     error?: string;
     progress?: number;
     encrypt?: boolean;
     size?: number;
     startedAt?: number;
+    skipDedup?: boolean;
 }
 
 export interface BandwidthStats {
@@ -71,4 +77,15 @@ export interface ActivityEntry {
     timestamp: string;
     fileName?: string;
     folderId?: number | null;
+}
+
+export interface ShareLinkInfo {
+    token: string;
+    file_id: number;
+    folder_id?: number | null;
+    filename: string;
+    expires_at_epoch_ms?: number | null;
+    created_at_epoch_ms: number;
+    download_count: number;
+    url: string;
 }

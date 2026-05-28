@@ -18,12 +18,13 @@ interface FileListItemProps {
     onDownload: (file: TelegramFile) => void;
     onDelete: (file: TelegramFile) => void;
     onInlineRename?: (id: number, newName: string) => void;
+    folderColor?: string;
 }
 
 export function FileListItem({
     file, selectedIds, selectionMode = false, onFileClick, handleContextMenu,
     onDragStart, onDragEnd, onDrop,
-    onPreview, onDownload, onDelete, onInlineRename
+    onPreview, onDownload, onDelete, onInlineRename, folderColor
 }: FileListItemProps) {
     const isFolder = file.type === 'folder';
     const isSelected = selectedIds.includes(file.id);
@@ -90,8 +91,11 @@ export function FileListItem({
                 >
                     {isSelected ? <Check className="h-3 w-3" /> : <div className="h-2 w-2 rounded-full border border-current/60" />}
                 </button>
-                <div className="flex h-7 w-7 items-center justify-center rounded-md border border-telegram-border bg-white/[0.03]">
-                    {isFolder ? <Folder className="w-4 h-4 text-telegram-primary" /> : <FileTypeIcon filename={file.name} className="w-4 h-4" />}
+                <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md border border-telegram-border bg-white/[0.03]"
+                    style={isFolder && folderColor ? { color: folderColor, borderColor: `${folderColor}55`, backgroundColor: `${folderColor}14` } : undefined}
+                >
+                    {isFolder ? <Folder className="w-4 h-4" /> : <FileTypeIcon filename={file.name} className="w-4 h-4" />}
                 </div>
             </div>
             <div className="truncate text-sm text-telegram-text font-medium relative pr-8">

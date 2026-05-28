@@ -1,5 +1,27 @@
 import { useEffect, useCallback } from 'react';
 
+export type ShortcutAction = 'selectAll' | 'delete' | 'rename' | 'escape' | 'search' | 'open';
+
+export type KeyboardShortcutMap = Record<ShortcutAction, string>;
+
+export const DEFAULT_SHORTCUTS: KeyboardShortcutMap = {
+    selectAll: 'Ctrl+A',
+    delete: 'Delete',
+    rename: 'F2',
+    escape: 'Escape',
+    search: 'Ctrl+F',
+    open: 'Enter',
+};
+
+export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
+    selectAll: 'Select all',
+    delete: 'Delete selected',
+    rename: 'Rename selected',
+    escape: 'Close or clear',
+    search: 'Focus search',
+    open: 'Open or preview',
+};
+
 interface UseKeyboardShortcutsProps {
     onSelectAll: () => void;
     onDelete: () => void;
@@ -7,7 +29,41 @@ interface UseKeyboardShortcutsProps {
     onSearch: () => void;
     onRename?: () => void;
     onEnter?: () => void;
+    shortcuts?: Partial<KeyboardShortcutMap>;
     enabled?: boolean;
+}
+
+export function normalizeShortcut(input: string) {
+    return input
+        .split('+')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+            const lower = part.toLowerCase();
+            if (lower === 'cmd' || lower === 'meta' || lower === 'control' || lower === 'ctrl') return 'Ctrl';
+            if (lower === 'alt' || lower === 'option') return 'Alt';
+            if (lower === 'shift') return 'Shift';
+            if (lower === 'esc') return 'Escape';
+            if (lower === 'space') return 'Space';
+            if (part.length === 1) return part.toUpperCase();
+            return part.charAt(0).toUpperCase() + part.slice(1);
+        })
+        .join('+');
+}
+
+export function shortcutFromEvent(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>) {
+    const parts: string[] = [];
+    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey && e.key !== 'Shift') parts.push('Shift');
+
+    const rawKey = e.key === ' ' ? 'Space' : e.key;
+    const key = rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
+    if (!['Control', 'Meta', 'Alt', 'Shift'].includes(key)) {
+        parts.push(key);
+    }
+
+    return parts.join('+');
 }
 
 export function useKeyboardShortcuts({
@@ -17,66 +73,64 @@ export function useKeyboardShortcuts({
     onSearch,
     onRename,
     onEnter,
+    shortcuts,
     enabled = true
 }: UseKeyboardShortcutsProps) {
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
         if (!enabled) return;
+        const effectiveShortcuts: KeyboardShortcutMap = {
+            ...DEFAULT_SHORTCUTS,
+            ...shortcuts,
+        };
+        const combo = shortcutFromEvent(e);
 
         // Don't trigger shortcuts when typing in inputs
         const target = e.target as HTMLElement;
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-            // Only allow Escape in inputs
-            if (e.key === 'Escape') {
+            if (combo === normalizeShortcut(effectiveShortcuts.escape)) {
                 (target as HTMLInputElement).blur();
                 onEscape();
             }
             return;
         }
 
-        const isMod = e.metaKey || e.ctrlKey;
-
-        // Cmd/Ctrl + A - Select All
-        if (isMod && e.key === 'a') {
+        if (combo === normalizeShortcut(effectiveShortcuts.selectAll)) {
             e.preventDefault();
             onSelectAll();
             return;
         }
 
-        // Cmd/Ctrl + F - Focus Search
-        if (isMod && e.key === 'f') {
+        if (combo === normalizeShortcut(effectiveShortcuts.search)) {
             e.preventDefault();
             onSearch();
             return;
         }
 
-        // Delete / Backspace - Delete selected
-        if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (combo === normalizeShortcut(effectiveShortcuts.delete) || (effectiveShortcuts.delete === 'Delete' && combo === 'Backspace')) {
             e.preventDefault();
             onDelete();
             return;
         }
 
-        // F2 - Rename selected
-        if (e.key === 'F2') {
+        if (combo === normalizeShortcut(effectiveShortcuts.rename)) {
             e.preventDefault();
             onRename?.();
             return;
         }
 
-        // Escape - Clear selection
-        if (e.key === 'Escape') {
+        if (combo === normalizeShortcut(effectiveShortcuts.escape)) {
             e.preventDefault();
             onEscape();
             return;
         }
-        // Enter - Open / Preview
-        if (e.key === 'Enter') {
+
+        if (combo === normalizeShortcut(effectiveShortcuts.open)) {
             e.preventDefault();
             onEnter?.();
             return;
         }
-    }, [enabled, onSelectAll, onDelete, onEscape, onSearch, onRename, onEnter]);
+    }, [enabled, shortcuts, onSelectAll, onDelete, onEscape, onSearch, onRename, onEnter]);
 
     useEffect(() => {
         window.addEventListener('keydown', handleKeyDown);

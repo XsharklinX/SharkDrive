@@ -183,10 +183,13 @@ pub fn run() {
             // Share links
             commands::cmd_create_share_link,
             commands::cmd_revoke_share_link,
+            commands::cmd_list_share_links,
             // Clipboard
             commands::cmd_save_clipboard_image,
             commands::cmd_get_file_size,
             commands::cmd_export_csv,
+            commands::cmd_duplicate_file,
+            commands::cmd_batch_rename,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

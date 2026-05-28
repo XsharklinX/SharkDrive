@@ -1,7 +1,7 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 1.5.0  
-> **Last updated:** 2026-05-12  
+> **Version:** 2.1.0  
+> **Last updated:** 2026-05-28  
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 
 ---
@@ -221,6 +221,9 @@ The old monolithic `fs.rs` has been split into:
 
 - share links are no longer memory-only
 - durable share state is stored locally and restored on restart
+- share entries include creation time, expiration, and `download_count`
+- Settings exposes active share links with copy/revoke actions
+- file share links can be generated in bulk from selection and exported as QR PNG client-side
 
 ---
 
@@ -253,3 +256,4 @@ These are the active product and engineering priorities:
 - finish extracting dashboard state into hooks
 - revisit updater only when SharkDrive has its own real release feed
 - add more tests around caption parsing and encryption behavior as features evolve
+

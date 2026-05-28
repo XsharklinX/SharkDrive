@@ -11,6 +11,22 @@ pub struct ShareEntry {
     pub folder_id: Option<i64>,
     pub filename: String,
     pub expires_at_epoch_ms: Option<u128>,
+    #[serde(default)]
+    pub created_at_epoch_ms: u128,
+    #[serde(default)]
+    pub download_count: u64,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct ShareLinkInfo {
+    pub token: String,
+    pub file_id: i32,
+    pub folder_id: Option<i64>,
+    pub filename: String,
+    pub expires_at_epoch_ms: Option<u128>,
+    pub created_at_epoch_ms: u128,
+    pub download_count: u64,
+    pub url: String,
 }
 
 pub struct ShareStore {
@@ -67,6 +83,15 @@ impl ShareStore {
             self.persist();
         }
     }
+
+    pub fn increment_download_count(&self, token: &str) {
+        if let Ok(mut shares) = self.shares.lock() {
+            if let Some(entry) = shares.get_mut(token) {
+                entry.download_count = entry.download_count.saturating_add(1);
+            }
+        }
+        self.persist();
+    }
 }
 
 #[tauri::command]
@@ -91,6 +116,10 @@ pub async fn cmd_create_share_link(
                 .map(|duration| duration.as_millis() + (minutes as u128 * 60_000))
                 .unwrap_or(minutes as u128 * 60_000)
         });
+    let created_at_epoch_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
     state.shares.lock().map_err(|e| e.to_string())?.insert(
         token.clone(),
         ShareEntry {
@@ -98,6 +127,8 @@ pub async fn cmd_create_share_link(
             folder_id,
             filename: filename.clone(),
             expires_at_epoch_ms,
+            created_at_epoch_ms,
+            download_count: 0,
         },
     );
     state.persist();
@@ -117,4 +148,29 @@ pub async fn cmd_revoke_share_link(
     state.shares.lock().map_err(|e| e.to_string())?.remove(&token);
     state.persist();
     Ok(())
+}
+
+#[tauri::command]
+pub async fn cmd_list_share_links(state: State<'_, ShareStore>) -> Result<Vec<ShareLinkInfo>, String> {
+    state.purge_expired();
+    let shares = state.shares.lock().map_err(|e| e.to_string())?;
+    let mut links: Vec<ShareLinkInfo> = shares
+        .iter()
+        .map(|(token, entry)| ShareLinkInfo {
+            token: token.clone(),
+            file_id: entry.file_id,
+            folder_id: entry.folder_id,
+            filename: entry.filename.clone(),
+            expires_at_epoch_ms: entry.expires_at_epoch_ms,
+            created_at_epoch_ms: entry.created_at_epoch_ms,
+            download_count: entry.download_count,
+            url: format!(
+                "http://localhost:14200/share/{}/{}",
+                token,
+                urlencoding::encode(&entry.filename)
+            ),
+        })
+        .collect();
+    links.sort_by(|a, b| b.created_at_epoch_ms.cmp(&a.created_at_epoch_ms));
+    Ok(links)
 }

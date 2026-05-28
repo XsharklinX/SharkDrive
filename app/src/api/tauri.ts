@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { BandwidthStats, BookCardData, TelegramFile, TelegramFolder } from '../types';
+import type { BandwidthStats, BookCardData, ShareLinkInfo, TelegramFile, TelegramFolder } from '../types';
 
 type FileRecord = TelegramFile;
 let streamTokenPromise: Promise<string> | null = null;
@@ -80,6 +80,9 @@ export const tauriApi = {
     revokeShareLink(token: string) {
         return invoke<void>('cmd_revoke_share_link', { token });
     },
+    listShareLinks() {
+        return invoke<ShareLinkInfo[]>('cmd_list_share_links');
+    },
     getFolderInviteLink(folderId: number) {
         return invoke<string>('cmd_get_folder_invite_link', { folderId });
     },
@@ -103,5 +106,11 @@ export const tauriApi = {
     },
     exportCsv(savePath: string) {
         return invoke<void>('cmd_export_csv', { savePath });
+    },
+    duplicateFile(messageId: number, folderId: number | null, newName: string) {
+        return invoke<boolean>('cmd_duplicate_file', { messageId, folderId, newName });
+    },
+    batchRename(renames: { messageId: number; folderId: number | null; newName: string }[]) {
+        return invoke<number>('cmd_batch_rename', { renames });
     },
 };

@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Version](https://img.shields.io/badge/version-1.8.0-brightgreen)
+![Version](https://img.shields.io/badge/version-2.1.0-brightgreen)
 
 ---
 
@@ -62,7 +62,10 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 - LAN share links via local `actix-web` server on port 14200
 - Real LAN IP detection so links work across your network
 - Telegram folder invite links via `messages.ExportChatInvite`
-- Configurable expiry (minutes)
+- Configurable expiry with presets, custom minutes, or never
+- QR code generation for single file links, downloadable as PNG
+- Multi-file "Share All" flow that generates one link per selected file
+- Active links panel in Settings with copy, revoke, expiry, and download count
 
 ### Auto Backup
 
@@ -160,7 +163,7 @@ app/src-tauri/target/release/bundle/nsis/SharkDrive_x.x.x_x64-setup.exe
 | Renamed files | Caption: `[SD_NAME:new_name]` |
 | SharkDrive marker | Caption: `[TD]` |
 | Folder size cache | Persisted in `app_data_dir/persistent_index.json` |
-| Share links | Stored in `app_data_dir/share_links.json` |
+| Share links | Stored in `app_data_dir/share_links.json` with expiry and download count |
 
 ---
 
@@ -171,3 +174,4 @@ MIT — free to use, modify, and distribute.
 ---
 
 *SharkDrive is not affiliated with Telegram FZ-LLC. Use in accordance with Telegram's Terms of Service.*
+

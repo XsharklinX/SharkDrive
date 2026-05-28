@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCheck, List, LayoutGrid, RefreshCcw, Image as ImageIcon } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCheck, List, LayoutGrid, RefreshCcw, Image as ImageIcon, Pencil } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { FileCard } from './FileCard';
 import { EmptyState } from './EmptyState';
@@ -67,6 +67,13 @@ interface FileExplorerProps {
     onSelectRange?: (ids: number[]) => void;
     emptyVariant?: 'folder' | 'search' | 'favorites';
     searchTerm?: string;
+    onDuplicate?: (file: TelegramFile) => void;
+    onBatchRename?: (files: TelegramFile[]) => void;
+    onInfo?: (file: TelegramFile) => void;
+    availableTags?: string[];
+    activeTag?: string | null;
+    onTagFilterChange?: (tag: string | null) => void;
+    getFolderColor?: (folderId: number) => string | undefined;
 }
 
 function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
@@ -115,7 +122,8 @@ export function FileExplorer({
     files, loading, error, viewMode, setViewMode, selectedIds, selectionMode, activeFolderId,
     onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onToggleSelection, onDrop, onDragStart, onDragEnd,
     favoriteIds, onToggleFavorite, onRename, onInlineRename, onShareLink, onCopyToFolder, onOpenFolder, onSelectVisible,
-    onSelectRange, emptyVariant = 'folder', searchTerm,
+    onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo,
+    availableTags = [], activeTag = null, onTagFilterChange, getFolderColor,
 }: FileExplorerProps) {
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -163,9 +171,12 @@ export function FileExplorer({
     }, []);
 
     const sortedFiles = useMemo(() => {
-        const filtered = filterType === 'all'
+        const byType = filterType === 'all'
             ? files
             : files.filter((file) => file.type === 'folder' || getFilterType(file.name) === filterType);
+        const filtered = activeTag
+            ? byType.filter((file) => file.type !== 'folder' && (file.tags ?? []).includes(activeTag))
+            : byType;
 
         return [...filtered].sort((a, b) => {
             let comparison = 0;
@@ -182,7 +193,7 @@ export function FileExplorer({
             }
             return sortDirection === 'asc' ? comparison : -comparison;
         });
-    }, [files, sortField, sortDirection, filterType]);
+    }, [activeTag, files, sortField, sortDirection, filterType]);
 
     const filterCounts = useMemo(() => {
         const counts: Record<FilterType, number> = {
@@ -229,7 +240,7 @@ export function FileExplorer({
 
     const listItems = useMemo(() => sortedFiles, [sortedFiles]);
 
-    const hasCustomizedControls = sortField !== 'name' || sortDirection !== 'asc' || filterType !== 'all';
+    const hasCustomizedControls = sortField !== 'name' || sortDirection !== 'asc' || filterType !== 'all' || activeTag !== null;
 
     const gridVirtualizer = useVirtualizer({
         count: gridRows.length,
@@ -263,6 +274,7 @@ export function FileExplorer({
         setSortField('name');
         setSortDirection('asc');
         setFilterType('all');
+        onTagFilterChange?.(null);
     };
 
     const SortIcon = ({ field }: { field: SortField }) => {
@@ -343,6 +355,22 @@ export function FileExplorer({
                     </span>
                 </button>
 
+                {selectedIds.length >= 2 && onBatchRename && (
+                    <button
+                        onClick={() => {
+                            const selected = sortedFiles.filter(f => selectedIds.includes(f.id) && f.type !== 'folder');
+                            if (selected.length > 0) onBatchRename(selected);
+                        }}
+                        className="rounded-md px-2 py-1 text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
+                        title="Batch rename selected files"
+                    >
+                        <span className="flex items-center gap-1.5">
+                            <Pencil className="h-3.5 w-3.5" />
+                            Rename {selectedIds.length}
+                        </span>
+                    </button>
+                )}
+
                 <div className="flex flex-wrap items-center gap-0.5 text-sm">
                     {(['all', 'image', 'video', 'audio', 'doc', 'other'] as FilterType[]).map((type) => (
                         <button
@@ -354,6 +382,22 @@ export function FileExplorer({
                         </button>
                     ))}
                 </div>
+
+                {availableTags.length > 0 && (
+                    <div className="flex max-w-full flex-wrap items-center gap-0.5 text-sm">
+                        <span className="px-1 text-xs text-telegram-subtext/70">Tags</span>
+                        {availableTags.slice(0, 8).map((tag) => (
+                            <button
+                                key={tag}
+                                onClick={() => onTagFilterChange?.(activeTag === tag ? null : tag)}
+                                className={`rounded-md px-2 py-1 transition ${activeTag === tag ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
+                                title={`Filter by #${tag}`}
+                            >
+                                #{tag}
+                            </button>
+                        ))}
+                    </div>
+                )}
 
                 <div className="ml-auto flex flex-wrap items-center gap-0.5 text-sm">
                     <button
@@ -465,6 +509,8 @@ export function FileExplorer({
                                             isFavorite={favoriteIds.has(item.id)}
                                             onToggleFavorite={onToggleFavorite}
                                             onInlineRename={onInlineRename ? (_id, name) => onInlineRename(item, name) : undefined}
+                                            onInfo={onInfo}
+                                            folderColor={item.type === 'folder' ? getFolderColor?.(item.id) : undefined}
                                         />
                                     );
                                 })}
@@ -511,6 +557,7 @@ export function FileExplorer({
                                         onDownload={onDownload}
                                         onDelete={onDelete}
                                         onInlineRename={onInlineRename ? (_id, name) => onInlineRename(item, name) : undefined}
+                                        folderColor={item.type === 'folder' ? getFolderColor?.(item.id) : undefined}
                                     />
                                 </div>
                             );
@@ -551,6 +598,14 @@ export function FileExplorer({
                     }}
                     onCopyToFolder={contextMenu.file.type !== 'folder' && onCopyToFolder ? () => {
                         onCopyToFolder(contextMenu.file);
+                        setContextMenu(null);
+                    } : undefined}
+                    onDuplicate={contextMenu.file.type !== 'folder' && onDuplicate ? () => {
+                        onDuplicate(contextMenu.file);
+                        setContextMenu(null);
+                    } : undefined}
+                    onInfo={contextMenu.file.type !== 'folder' && onInfo ? () => {
+                        onInfo(contextMenu.file);
                         setContextMenu(null);
                     } : undefined}
                 />

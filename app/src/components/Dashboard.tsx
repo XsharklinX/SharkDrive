@@ -5,7 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { toast } from 'sonner';
 
 import { TelegramFile } from '../types';
-import { formatBytes, resolveFileFolderId } from '../utils';
+import { formatBytes, resolveFileFolderId, isTextPreviewFile } from '../utils';
 import { tauriApi } from '../api/tauri';
 
 // Components
@@ -25,6 +25,10 @@ import { DragDropOverlay } from './dashboard/DragDropOverlay';
 import { ExternalDropBlocker } from './dashboard/ExternalDropBlocker';
 import { PdfViewer } from './dashboard/PdfViewer';
 import { VaultModal } from './dashboard/VaultModal';
+import { BatchRenameModal } from './dashboard/BatchRenameModal';
+import { DuplicateDialog } from './dashboard/DuplicateDialog';
+import { TextPreviewModal } from './dashboard/TextPreviewModal';
+import { FileInfoPanel } from './dashboard/FileInfoPanel';
 import { ErrorBoundary } from './ErrorBoundary';
 
 // Hooks
@@ -40,6 +44,7 @@ import { useRecentFiles } from '../hooks/useRecentFiles';
 import { useActivityLog } from '../hooks/useActivityLog';
 import { useEncryptedFolders } from '../hooks/useEncryptedFolders';
 import { useRecentSearches } from '../hooks/useRecentSearches';
+import { useOrganization } from '../hooks/useOrganization';
 
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const queryClient = useQueryClient();
@@ -62,15 +67,21 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [renameTarget, setRenameTarget] = useState<TelegramFile | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showVault, setShowVault] = useState(false);
+    const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
+    const [textPreviewFile, setTextPreviewFile] = useState<TelegramFile | null>(null);
+    const [infoFile, setInfoFile] = useState<TelegramFile | null>(null);
     const [shareTarget, setShareTarget] = useState<TelegramFile | null>(null);
+    const [bulkShareTargets, setBulkShareTargets] = useState<TelegramFile[] | null>(null);
     const [autoSyncInterval, setAutoSyncInterval] = useState(0);
     const [movingFolderId, setMovingFolderId] = useState<number | null>(null);
+    const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
     const { favoriteIds, showFavoritesOnly, setShowFavoritesOnly, handleToggleFavorite } = useFavorites(store);
     const { recentFiles, addToRecent } = useRecentFiles(store, activeFolderId);
     const { activity, recordActivity } = useActivityLog(store);
     const { encryptedFolderIds, encryptionEnabled, setEncryptionEnabled, handleToggleEncryption } = useEncryptedFolders(store);
     const { recentSearches, commitSearchTerm } = useRecentSearches(store);
+    const organization = useOrganization(store);
 
     const setInternalDragFileId = (id: number | null) => {
         internalDragRef.current = id;
@@ -202,6 +213,9 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     });
 
     const sourceFiles = activeFolderId === RECENT_FOLDER_ID ? recentFiles : allFiles;
+    const organizedSourceFiles = useMemo(() => (
+        sourceFiles.map((file) => organization.decorateFile(file, resolveFileFolderId(file, activeFolderId)))
+    ), [activeFolderId, organization.decorateFile, sourceFiles]);
 
     const folderNameResolver = useCallback((folderId: number | null) => {
         if (folderId == null) return 'Saved Messages';
@@ -224,11 +238,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         resetSearch,
     } = useDashboardSearch({
         activeFolderId,
-        sourceFiles,
+        sourceFiles: organizedSourceFiles,
         showFavoritesOnly,
         favoriteIds,
         folderNameResolver,
         handleGlobalSearch,
+        decorateFile: organization.decorateFile,
     });
 
     const { data: bandwidth } = useQuery({
@@ -268,7 +283,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles);
 
     const encryptByDefault = encryptionEnabled || (typeof activeFolderId === 'number' && activeFolderId > 0 && encryptedFolderIds.has(activeFolderId));
-    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity);
+    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity);
     const { downloadQueue, queueDownload, queueBulkDownload, clearFinished: clearDownloads, retryDownload, cancelDownloadItem, cancelAll: cancelDownloads } = useFileDownload(store, recordActivity);
     handleDroppedFilesRef.current = handleDroppedFiles;
     queueUploadCandidatesRef.current = queueUploadCandidates;
@@ -377,6 +392,29 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         openPreview(file, orderedFiles || displayedFiles);
     };
 
+    const handlePreviewOrText = (file: TelegramFile, orderedFiles?: TelegramFile[]) => {
+        if (isTextPreviewFile(file.name)) {
+            setTextPreviewFile(file);
+        } else {
+            handlePreview(file, orderedFiles);
+        }
+    };
+
+    const handleDuplicate = async (file: TelegramFile) => {
+        const folderId = resolveFileFolderId(file, activeFolderId);
+        const dotIdx = file.name.lastIndexOf('.');
+        const base = dotIdx > 0 ? file.name.slice(0, dotIdx) : file.name;
+        const ext = dotIdx > 0 ? file.name.slice(dotIdx) : '';
+        const newName = `${base} (2)${ext}`;
+        try {
+            await tauriApi.duplicateFile(file.id, folderId, newName);
+            queryClient.invalidateQueries({ queryKey: ['files', folderId] });
+            toast.success(`Duplicated as "${newName}"`);
+        } catch (e) {
+            toast.error(`Duplicate failed: ${String(e)}`);
+        }
+    };
+
     const handleShareLink = (file: TelegramFile) => {
         recordActivity({
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -461,6 +499,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         onSearch: handleFocusSearch,
         onRename: handleKeyboardRename,
         onEnter: handleEnter,
+        shortcuts: organization.shortcuts,
         enabled: !previewFile && !playingFile && !pdfFile && !showMoveModal && !renameTarget && !showSettings
     });
 
@@ -571,6 +610,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         }}
                         folders={folders}
                         activity={activity}
+                        shortcuts={organization.shortcuts}
+                        onShortcutsChange={organization.setShortcuts}
                     />
                 )}
                 {showVault && (
@@ -582,12 +623,37 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         onClose={() => setShowVault(false)}
                     />
                 )}
+                {batchRenameFiles && (
+                    <BatchRenameModal
+                        key="batch-rename-modal"
+                        files={batchRenameFiles}
+                        activeFolderId={activeFolderId}
+                        onClose={() => setBatchRenameFiles(null)}
+                        onDone={() => queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] })}
+                    />
+                )}
+                {textPreviewFile && (
+                    <TextPreviewModal
+                        key="text-preview-modal"
+                        file={textPreviewFile}
+                        activeFolderId={activeFolderId}
+                        onClose={() => setTextPreviewFile(null)}
+                    />
+                )}
                 {shareTarget && (
                     <ShareModal
                         key="share-modal"
                         file={shareTarget}
                         activeFolderId={shareTarget.type === 'folder' ? shareTarget.id : activeFolderId}
                         onClose={() => setShareTarget(null)}
+                    />
+                )}
+                {bulkShareTargets && (
+                    <ShareModal
+                        key="bulk-share-modal"
+                        files={bulkShareTargets}
+                        activeFolderId={activeFolderId}
+                        onClose={() => setBulkShareTargets(null)}
                     />
                 )}
                 {renameTarget && (
@@ -679,6 +745,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 activity={activity}
                 vaultBadge={vaultBadge}
                 onOpenVault={() => setShowVault(true)}
+                pinnedFolderIds={organization.pinnedFolderIds}
+                getFolderColor={organization.getFolderColor}
+                onTogglePinnedFolder={organization.togglePinnedFolder}
+                onSetFolderColor={organization.setFolderColor}
             />
 
             <main className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.015] to-transparent" onClick={(e) => {
@@ -696,6 +766,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onToggleSelectionMode={handleToggleSelectionMode}
                     onShowMoveModal={() => openDestinationModal('move')}
                     onShowCopyModal={() => openDestinationModal('copy')}
+                    onBulkShare={() => {
+                        const filesToShare = selectedFiles.filter((item) => item.type !== 'folder');
+                        if (filesToShare.length === 0) {
+                            toast.info('Select at least one file to share.');
+                            return;
+                        }
+                        setBulkShareTargets(filesToShare);
+                    }}
                     onBulkDownload={handleBulkDownload}
                     onBulkDelete={handleBulkDelete}
                     onDownloadFolder={() => {
@@ -750,7 +828,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         addToRecent(file);
                         queueDownload(file.id, file.name, resolveFileFolderId(file, activeFolderId));
                     }}
-                    onPreview={handlePreview}
+                    onPreview={handlePreviewOrText}
                     onManualUpload={handleManualUpload}
                     onSelectionClear={() => {
                         setSelectedIds([]);
@@ -773,8 +851,37 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onOpenFolder={(file) => setActiveFolderId(file.id)}
                     onSelectVisible={handleSelectAll}
                     onSelectRange={handleSelectRange}
+                    onDuplicate={handleDuplicate}
+                    onBatchRename={(files) => setBatchRenameFiles(files)}
+                    onInfo={(file) => setInfoFile(file)}
+                    availableTags={organization.allTags}
+                    activeTag={activeTagFilter}
+                    onTagFilterChange={setActiveTagFilter}
+                    getFolderColor={organization.getFolderColor}
                 />
             </main>
+
+            {infoFile && (
+                <FileInfoPanel
+                    file={infoFile}
+                    folders={folders}
+                    activeFolderId={activeFolderId}
+                    tags={organization.getFileTags(infoFile, resolveFileFolderId(infoFile, activeFolderId))}
+                    allTags={organization.allTags}
+                    note={organization.getFileNote(infoFile, resolveFileFolderId(infoFile, activeFolderId))}
+                    onSetTags={(tags) => organization.setFileTags(infoFile, resolveFileFolderId(infoFile, activeFolderId), tags)}
+                    onSetNote={(note) => organization.setFileNote(infoFile, resolveFileFolderId(infoFile, activeFolderId), note)}
+                    onClose={() => setInfoFile(null)}
+                />
+            )}
+
+            {duplicateItems.length > 0 && (
+                <DuplicateDialog
+                    item={duplicateItems[0]}
+                    onForceUpload={forceUpload}
+                    onSkip={skipDuplicate}
+                />
+            )}
 
             {previewFile && (
                 <ErrorBoundary onDismiss={() => setPreviewFile(null)}>

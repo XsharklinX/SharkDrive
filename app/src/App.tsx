@@ -45,7 +45,24 @@ function AppContent() {
     tryAutoLogin();
   }, []);
 
-  if (!sessionChecked) return null;
+  if (!sessionChecked) return (
+    <div className="h-screen w-screen flex flex-col items-center justify-center gap-5 bg-[#0b1521]">
+      <img src="/logo.svg" className="h-14 w-14 animate-pulse" alt="SharkDrive" />
+      <div className="w-32 overflow-hidden rounded-full bg-white/[0.06]" style={{ height: 3 }}>
+        <div
+          className="h-full rounded-full bg-telegram-primary"
+          style={{ animation: 'splashProgress 1.4s ease-in-out infinite', width: '40%' }}
+        />
+      </div>
+      <p className="text-xs text-telegram-subtext/60">Connecting…</p>
+      <style>{`
+        @keyframes splashProgress {
+          0%   { transform: translateX(-100%) }
+          100% { transform: translateX(350%) }
+        }
+      `}</style>
+    </div>
+  );
 
   return (
     <main className="h-screen w-screen text-telegram-text overflow-hidden selection:bg-telegram-primary/30 relative">

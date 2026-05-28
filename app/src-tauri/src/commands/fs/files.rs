@@ -157,6 +157,7 @@ fn build_file_metadata(
         created_at,
         icon_type: "file".into(),
         is_encrypted: metadata.encrypted,
+        sha256: metadata.sha256,
     }
 }
 
@@ -640,6 +641,97 @@ pub async fn cmd_rename_file(
         .map_err(map_error)?;
 
     Ok(true)
+}
+
+// ── cmd_duplicate_file ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn cmd_duplicate_file(
+    message_id: i32,
+    folder_id: Option<i64>,
+    new_name: String,
+    state: State<'_, TelegramState>,
+) -> Result<bool, String> {
+    let client_opt = { state.client.lock().await.clone() };
+    let client = client_opt.ok_or("Telegram client not connected".to_string())?;
+    let peer = resolve_peer(&client, folder_id, &state).await?;
+
+    // Forward to same folder — creates a copy as the newest message
+    client
+        .forward_messages(&peer, &[message_id], &peer)
+        .await
+        .map_err(|e| format!("Duplicate failed: {}", e))?;
+
+    // The copied message is now at the top; fetch it and rename
+    let mut iter = client.iter_messages(&peer);
+    if let Some(msg) = iter.next().await.map_err(|e| e.to_string())? {
+        let new_caption = format!("[SD_NAME:{}]", new_name);
+        client
+            .edit_message(&peer, msg.id(), grammers_client::InputMessage::new().text(new_caption))
+            .await
+            .map_err(map_error)?;
+    }
+
+    Ok(true)
+}
+
+// ── cmd_batch_rename ──────────────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+pub struct BatchRenameEntry {
+    pub message_id: i32,
+    pub folder_id: Option<i64>,
+    pub new_name: String,
+}
+
+#[tauri::command]
+pub async fn cmd_batch_rename(
+    renames: Vec<BatchRenameEntry>,
+    state: State<'_, TelegramState>,
+) -> Result<u32, String> {
+    let client_opt = { state.client.lock().await.clone() };
+    let client = client_opt.ok_or("Telegram client not connected".to_string())?;
+    let mut count = 0u32;
+
+    for entry in &renames {
+        let peer = resolve_peer(&client, entry.folder_id, &state).await?;
+
+        let messages = client
+            .get_messages_by_id(&peer, &[entry.message_id])
+            .await
+            .map_err(map_error)?;
+
+        let msg = messages.into_iter().flatten().next()
+            .ok_or(format!("Message {} not found", entry.message_id))?;
+
+        let media = msg.media().ok_or("No media in message")?;
+        let raw_size = match media {
+            Media::Document(d) => d.size() as u64,
+            Media::Photo(_) => 0,
+            _ => 0,
+        };
+        let metadata = parse_caption_metadata(msg.text());
+        let size = metadata.original_size.unwrap_or(raw_size);
+        let hash = metadata.sha256.unwrap_or_default();
+        let caption = if hash.is_empty() {
+            if metadata.encrypted {
+                format!("[SD-ENC:{}][SD_SIZE:{}]", entry.new_name, size)
+            } else {
+                format!("[SD_NAME:{}][SD_SIZE:{}]", entry.new_name, size)
+            }
+        } else {
+            build_caption(&entry.new_name, metadata.encrypted, size, &hash)
+        };
+
+        client
+            .edit_message(&peer, entry.message_id, grammers_client::InputMessage::new().text(caption))
+            .await
+            .map_err(map_error)?;
+
+        count += 1;
+    }
+
+    Ok(count)
 }
 
 #[cfg(test)]

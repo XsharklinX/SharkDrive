@@ -269,6 +269,7 @@ pub async fn cmd_upload_file(
     folder_id: Option<i64>,
     transfer_id: Option<String>,
     encrypt: Option<bool>,
+    skip_dedup: Option<bool>,
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
     bw_state: State<'_, BandwidthManager>,
@@ -330,9 +331,10 @@ pub async fn cmd_upload_file(
     let client_opt = { state.client.lock().await.clone() };
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
 
-    if find_duplicate_message(&client, folder_id, &original_name, size, &file_hash, &state)
-        .await?
-        .is_some()
+    if !skip_dedup.unwrap_or(false)
+        && find_duplicate_message(&client, folder_id, &original_name, size, &file_hash, &state)
+            .await?
+            .is_some()
     {
         remove_checkpoint(&app_handle, &tid);
         if let Some(tmp) = temp_path {

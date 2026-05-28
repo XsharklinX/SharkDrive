@@ -43,6 +43,10 @@ interface SidebarProps {
     activity?: ActivityEntry[];
     vaultBadge?: { fileCount: number; totalBytes: number };
     onOpenVault?: () => void;
+    pinnedFolderIds?: number[];
+    getFolderColor?: (folderId: number) => string | undefined;
+    onTogglePinnedFolder?: (folderId: number) => void;
+    onSetFolderColor?: (folderId: number, color: string | null) => void;
 }
 
 export function Sidebar({
@@ -71,6 +75,10 @@ export function Sidebar({
     activity = [],
     vaultBadge,
     onOpenVault,
+    pinnedFolderIds = [],
+    getFolderColor,
+    onTogglePinnedFolder,
+    onSetFolderColor,
 }: SidebarProps) {
     const [showNewFolderInput, setShowNewFolderInput] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -127,9 +135,19 @@ export function Sidebar({
         await onSetFolderParent(draggedFolderId, targetParentId);
     };
 
-    const renderFolderTree = (parentId: number | null, depth = 0): React.ReactNode => {
+    const pinnedSet = new Set(pinnedFolderIds);
+
+    const sortFolders = (items: TelegramFolder[]) => [...items].sort((a, b) => {
+        const pinDiff = Number(pinnedSet.has(b.id)) - Number(pinnedSet.has(a.id));
+        if (pinDiff !== 0) return pinDiff;
+        return a.name.localeCompare(b.name);
+    });
+
+    const renderFolderTree = (parentId: number | null, depth = 0, rootPinnedFilter?: boolean): React.ReactNode => {
         const key = parentId === null ? 'root' : String(parentId);
-        const items = [...(groupedFolders[key] ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+        const items = sortFolders(groupedFolders[key] ?? []).filter((folder) => (
+            parentId !== null || rootPinnedFilter === undefined || pinnedSet.has(folder.id) === rootPinnedFilter
+        ));
 
         return items.map((folder) => (
             <div key={folder.id}>
@@ -160,11 +178,18 @@ export function Sidebar({
                     depth={depth}
                     draggableFolderId={folder.id}
                     fileCount={folderFileCounts[folder.id]}
+                    folderColor={getFolderColor?.(folder.id)}
+                    isPinned={pinnedSet.has(folder.id)}
+                    onTogglePinned={onTogglePinnedFolder ? () => onTogglePinnedFolder(folder.id) : undefined}
+                    onSetFolderColor={onSetFolderColor ? (color) => onSetFolderColor(folder.id, color) : undefined}
                 />
                 {renderFolderTree(folder.id, depth + 1)}
             </div>
         ));
     };
+
+    const rootPinnedCount = (groupedFolders.root ?? []).filter((folder) => pinnedSet.has(folder.id)).length;
+    const rootNormalCount = (groupedFolders.root ?? []).length - rootPinnedCount;
 
     return (
         <aside className="vault-sidebar flex w-64 flex-col border-r border-telegram-border/80 text-telegram-text" onClick={(e) => e.stopPropagation()}>
@@ -232,10 +257,16 @@ export function Sidebar({
                         folderId={null}
                     />
                 )}
-                {folders.length > 0 && (
+                {rootPinnedCount > 0 && (
+                    <>
+                        <div className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext">Pinned</div>
+                        {renderFolderTree(null, 0, true)}
+                    </>
+                )}
+                {rootNormalCount > 0 && (
                     <div className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext">Folders</div>
                 )}
-                {renderFolderTree(null)}
+                {renderFolderTree(null, 0, rootPinnedCount > 0 ? false : undefined)}
 
                 {activity.length > 0 && (
                     <div className="mt-4">

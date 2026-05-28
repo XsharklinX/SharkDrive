@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText, Link } from 'lucide-react';
+import { Copy, Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText, Link, CopyPlus, Info } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { isMediaFile, isPdfFile } from '../../utils';
 
@@ -14,9 +14,11 @@ interface ContextMenuProps {
     onRename: () => void;
     onShareLink: () => void;
     onCopyToFolder?: () => void;
+    onDuplicate?: () => void;
+    onInfo?: () => void;
 }
 
-export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPreview, onRename, onShareLink, onCopyToFolder }: ContextMenuProps) {
+export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPreview, onRename, onShareLink, onCopyToFolder, onDuplicate, onInfo }: ContextMenuProps) {
     const [adjustedPos, setAdjustedPos] = useState({ x, y });
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -123,6 +125,13 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
                 </button>
             )}
 
+            {file.type !== 'folder' && onDuplicate && (
+                <button onClick={onDuplicate} className={`${buttonClass} text-telegram-text`}>
+                    <CopyPlus className="w-4 h-4 text-telegram-secondary" />
+                    Duplicate
+                </button>
+            )}
+
             <button onClick={onRename} className={`${buttonClass} text-telegram-text`}>
                 <Pencil className="w-4 h-4 text-telegram-primary" />
                 Rename
@@ -132,6 +141,13 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
                 <Link className="w-4 h-4 text-emerald-300" />
                 {file.type === 'folder' ? 'Share Folder' : 'Share File'}
             </button>
+
+            {file.type !== 'folder' && onInfo && (
+                <button onClick={onInfo} className={`${buttonClass} text-telegram-text`}>
+                    <Info className="w-4 h-4 text-telegram-subtext" />
+                    File Info
+                </button>
+            )}
 
             <div className="my-1 h-px bg-telegram-border" />
 

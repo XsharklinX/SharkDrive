@@ -249,6 +249,7 @@ async fn share_file(
 
     if let Some(Some(msg)) = messages.first() {
         if let Some(media) = msg.media() {
+            share_store.increment_download_count(&token);
             let (size, mime) = match &media {
                 Media::Document(d) => (
                     d.size(),

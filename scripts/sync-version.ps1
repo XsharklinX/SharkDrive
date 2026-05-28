@@ -10,9 +10,9 @@ function Update-JsonVersion {
     )
 
     $fullPath = Join-Path $root $Path
-    $json = Get-Content -Path $fullPath -Raw | ConvertFrom-Json
-    $json.version = $Version
-    $json | ConvertTo-Json -Depth 100 | Set-Content -Path $fullPath
+    $content = Get-Content -Path $fullPath -Raw
+    $updated = [regex]::Replace($content, '"version"\s*:\s*"[^"]+"', "`"version`": `"$Version`"", 1)
+    Set-Content -Path $fullPath -Value $updated
 }
 
 function Update-RegexVersion {
@@ -30,7 +30,7 @@ function Update-RegexVersion {
 
 Update-JsonVersion 'app\package.json'
 Update-JsonVersion 'app\src-tauri\tauri.conf.json'
-Update-RegexVersion 'app\src-tauri\Cargo.toml' 'version = "[^"]+"' "version = `"$Version`""
+Update-RegexVersion 'app\src-tauri\Cargo.toml' '(?m)^version = "[^"]+"' "version = `"$Version`""
 Update-RegexVersion 'README.md' 'version-[0-9]+\.[0-9]+\.[0-9]+-brightgreen' "version-$Version-brightgreen"
 Update-RegexVersion 'Docs\ARCHITECTURE.md' '> \*\*Version:\*\* [0-9]+\.[0-9]+\.[0-9]+' "> **Version:** $Version"
 

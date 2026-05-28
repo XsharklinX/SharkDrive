@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, Copy, FolderOpen, HardDrive, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare } from 'lucide-react';
+import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
 interface TopBarProps {
@@ -11,6 +11,7 @@ interface TopBarProps {
     onToggleSelectionMode: () => void;
     onShowMoveModal: () => void;
     onShowCopyModal: () => void;
+    onBulkShare: () => void;
     onBulkDownload: () => void;
     onBulkDelete: () => void;
     onDownloadFolder: () => void;
@@ -40,6 +41,7 @@ export function TopBar({
     onToggleSelectionMode,
     onShowMoveModal,
     onShowCopyModal,
+    onBulkShare,
     onBulkDownload,
     onBulkDelete,
     onDownloadFolder,
@@ -223,6 +225,9 @@ export function TopBar({
                             </button>
                             <button onClick={onShowCopyModal} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title="Copy selected">
                                 <span className="flex items-center gap-1.5"><Copy className="h-3 w-3" />Copy</span>
+                            </button>
+                            <button onClick={onBulkShare} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title="Share selected">
+                                <span className="flex items-center gap-1.5"><Link2 className="h-3 w-3" />Share All</span>
                             </button>
                             <button onClick={onBulkDownload} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title="Download selected">
                                 <span className="flex items-center gap-1.5"><Download className="h-3 w-3" />Download</span>

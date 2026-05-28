@@ -138,13 +138,16 @@ export function useFileUpload(
                     folderId: item.folderId,
                     transferId: item.id,
                     encrypt: item.encrypt ?? false,
+                    skipDedup: item.skipDedup ?? false,
                 });
                 if (!cancelledRef.current.has(item.id)) {
                     const fileName = item.path.split(/[/\\]/).pop();
                     if (result === 'duplicate') {
-                        setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'skipped', progress: 100, error: 'Duplicate already exists in destination folder' } : i));
-                        toast.info(`Skipped duplicate: ${fileName}`);
-                        onActivity?.(buildActivity('upload', `Skipped duplicate upload for ${fileName}`, fileName, item.folderId));
+                        // Mark as 'duplicate' so DuplicateDialog can intercept
+                        setUploadQueue(q => q.map(i => i.id === item.id ? {
+                            ...i, status: 'duplicate', progress: 0,
+                            error: 'File already exists in this folder',
+                        } : i));
                     } else {
                         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'success', progress: 100 } : i));
                         queryClient.invalidateQueries({ queryKey: ['files', item.folderId] });
@@ -294,6 +297,23 @@ export function useFileUpload(
         setUploadQueue(q => q.filter(i => i.status !== 'success' && i.status !== 'cancelled' && i.status !== 'skipped'));
     }, []);
 
+    // Force-upload a 'duplicate' item by setting skipDedup and re-queueing it as pending
+    const forceUpload = useCallback((id: string) => {
+        setUploadQueue(q => q.map(i =>
+            i.id === id ? { ...i, status: 'pending' as const, skipDedup: true, error: undefined, progress: undefined } : i
+        ));
+    }, []);
+
+    // Skip a 'duplicate' item — mark as skipped without uploading
+    const skipDuplicate = useCallback((id: string) => {
+        setUploadQueue(q => q.map(i =>
+            i.id === id ? { ...i, status: 'skipped' as const, progress: 100 } : i
+        ));
+    }, []);
+
+    // Items waiting for the user's dedup decision
+    const duplicateItems = uploadQueue.filter(i => i.status === 'duplicate');
+
     const { isDragging } = useFileDrop();
 
     return {
@@ -307,6 +327,9 @@ export function useFileUpload(
         cancelItem,
         retryItem,
         clearFinished,
+        forceUpload,
+        skipDuplicate,
+        duplicateItems,
         isDragging
     };
 }

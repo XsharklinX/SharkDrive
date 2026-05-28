@@ -32,6 +32,7 @@ pub struct FileMetadata {
     pub created_at: String,
     pub icon_type: String,
     pub is_encrypted: bool,
+    pub sha256: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

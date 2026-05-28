@@ -4,6 +4,31 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [2.1.0] - 2026-05-28
+
+### Compartir Mejorado
+
+- **QR para share links** - `ShareModal` genera QR client-side con `qrcode` para links individuales y permite descargarlo como PNG.
+- **Panel de links activos** - Settings agrega pestaña Sharing con lista de links activos, archivo, expiración, contador de descargas, copiar y revocar.
+- **Compartir múltiples archivos** - Bulk action "Share All" genera un link por archivo seleccionado y permite copiar toda la lista.
+- **Expiry personalizado** - `ShareModal` incluye presets 1h / 24h / 7d / Never más input libre en minutos.
+- **Download count durable** - `share_links.json` persiste `download_count`; el servidor incrementa el contador al servir un link.
+- **Versión sincronizada** - `VERSION`, `package.json`, `tauri.conf.json`, `Cargo.toml`, README y arquitectura pasan a `2.1.0`.
+
+---
+
+## [1.9.0] - 2026-05-28
+
+### Operaciones de Archivos
+
+- **Batch rename** — Select N files → modal with pattern editor supporting `{n}` (zero-padded index), `{name}` (base name), `{ext}` (extension), `{date}` (YYYY-MM-DD). Live preview table shows all renames before applying. Warns on duplicate names or missing extension. Toolbar "Rename N" button appears when ≥ 2 files are selected. Calls `cmd_batch_rename` which rewrites captions preserving SHA-256 and size metadata.
+- **Deduplicación UI** — When upload hash-matches an existing file, status transitions to `'duplicate'` instead of silently skipping. A `DuplicateDialog` intercepts the first pending duplicate and presents "Upload Anyway" (retriggers with `skip_dedup: true`) or "Skip". Rust `cmd_upload_file` gains `skip_dedup: Option<bool>` to bypass the check on force.
+- **Duplicate file** — "Duplicate" in context menu (`CopyPlus` icon). Forwards the message to the same Telegram channel (zero re-upload), fetches the new top message, renames its caption to `"filename (2).ext"`. Folder is refreshed via React Query invalidation.
+- **Preview texto** — `.txt`, `.md`, `.csv`, `.json` files open in `TextPreviewModal` instead of download. Content is streamed from the LAN actix server (`/stream/{folder}/{id}?token=…`) via `fetch()`. Renderers: plain `<pre>` for text, `JSON.stringify` with indent for JSON, RFC-4180 table for CSV, basic header/bold/code rendering for Markdown.
+- **Panel de info** — `FileInfoPanel` (fixed right panel, 288 px wide) shows name, extension badge, encrypted indicator, size, date, folder, MIME type, SHA-256 (with one-click copy). Triggered by "i" hover button on `FileCard` or "File Info" in context menu. SHA-256 is now propagated from `CaptionMetadata` through `FileMetadata` → `TelegramFile`.
+
+---
+
 ## [1.8.0] - 2026-05-28
 
 ### Vault Dashboard

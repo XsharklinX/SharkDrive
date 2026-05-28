@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
-import { Check, Folder, FolderOpen, Trash2, Star, Download, Eye, Play, Shield } from 'lucide-react';
+import { Check, Folder, FolderOpen, Trash2, Star, Download, Eye, Play, Shield, Info } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { isImageFile, isVideoFile, resolveFileFolderId } from '../../utils';
@@ -24,6 +24,8 @@ interface FileCardProps {
     isFavorite?: boolean;
     onToggleFavorite?: (id: number) => void;
     onInlineRename?: (id: number, newName: string) => void;
+    onInfo?: (file: TelegramFile) => void;
+    folderColor?: string;
 }
 
 function getExtensionLabel(filename: string) {
@@ -55,6 +57,8 @@ export function FileCard({
     isFavorite,
     onToggleFavorite,
     onInlineRename,
+    onInfo,
+    folderColor,
 }: FileCardProps) {
     const isFolder = file.type === 'folder';
     const [isDragOver, setIsDragOver] = useState(false);
@@ -75,26 +79,32 @@ export function FileCard({
         : null;
 
     useEffect(() => {
-        if (isFolder) return;
+        if (isFolder || !supportsThumbnail) return;
 
         let cancelled = false;
         setThumbnail(null);
         setVideoReady(false);
         setVideoError(false);
 
-        if (!supportsThumbnail) return;
-
-        setThumbnailLoading(true);
-        tauriApi.getThumbnail(file.id, resolvedFolderId).then((result) => {
-            if (!cancelled && result) setThumbnail(result);
-        }).catch(() => {
-            // Best-effort thumbnail loading only.
-        }).finally(() => {
-            if (!cancelled) setThumbnailLoading(false);
-        });
+        // Stagger so all cards don't hammer the Telegram API at once
+        const stagger = (file.id % 6) * 150;
+        const timer = setTimeout(async () => {
+            if (cancelled) return;
+            setThumbnailLoading(true);
+            try {
+                const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 8000));
+                const result = await Promise.race([tauriApi.getThumbnail(file.id, resolvedFolderId), timeout]);
+                if (!cancelled && result) setThumbnail(result);
+            } catch {
+                // best-effort
+            } finally {
+                if (!cancelled) setThumbnailLoading(false);
+            }
+        }, stagger);
 
         return () => {
             cancelled = true;
+            clearTimeout(timer);
         };
     }, [file.id, file.name, isFolder, resolvedFolderId, supportsThumbnail]);
 
@@ -102,9 +112,10 @@ export function FileCard({
         if (!isVideo || thumbnail) return;
 
         let cancelled = false;
-        tauriApi.getStreamToken()
+        const tokenTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
+        Promise.race([tauriApi.getStreamToken(), tokenTimeout])
             .then((token) => {
-                if (!cancelled) setStreamToken(token);
+                if (!cancelled && token) setStreamToken(token);
             })
             .catch(() => {});
 
@@ -212,7 +223,9 @@ export function FileCard({
                     {!thumbnail && !videoReady && (
                         <div className="flex flex-1 items-center justify-center">
                             {isFolder ? (
-                                <Folder className="h-9 w-9 text-telegram-primary/80" />
+                                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-telegram-border/80 bg-white/[0.03]" style={folderColor ? { color: folderColor, borderColor: `${folderColor}55`, backgroundColor: `${folderColor}18` } : undefined}>
+                                    <Folder className="h-8 w-8" />
+                                </div>
                             ) : thumbnailLoading && supportsThumbnail ? (
                                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-telegram-primary/30 border-t-telegram-primary" />
                             ) : (
@@ -314,6 +327,18 @@ export function FileCard({
                     >
                         <Trash2 className="h-3.5 w-3.5" />
                     </button>
+                    {!isFolder && onInfo && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onInfo(file);
+                            }}
+                            className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
+                            title="File Info"
+                        >
+                            <Info className="h-3.5 w-3.5" />
+                        </button>
+                    )}
                 </div>
             </motion.div>
         </div>

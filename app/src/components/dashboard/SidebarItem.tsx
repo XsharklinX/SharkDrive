@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, FolderOpen, FolderUp, Link, Lock, LockOpen, Pencil, Plus, Trash2, FolderInput } from 'lucide-react';
+import { ChevronRight, FolderOpen, FolderUp, Link, Lock, LockOpen, Paintbrush, Pencil, Pin, PinOff, Plus, Trash2, FolderInput } from 'lucide-react';
+import { FOLDER_COLOR_PALETTE } from '../../hooks/useOrganization';
 
 interface SidebarItemProps {
     icon: React.ElementType;
@@ -20,6 +21,10 @@ interface SidebarItemProps {
     onMoveFolderTo?: () => void;
     draggableFolderId?: number | null;
     fileCount?: number;
+    folderColor?: string;
+    isPinned?: boolean;
+    onTogglePinned?: () => void;
+    onSetFolderColor?: (color: string | null) => void;
 }
 
 interface FolderContextMenuProps {
@@ -33,11 +38,15 @@ interface FolderContextMenuProps {
     onCreateChild?: () => void;
     onMoveToRoot?: () => void;
     onMoveFolderTo?: () => void;
+    isPinned?: boolean;
+    folderColor?: string;
+    onTogglePinned?: () => void;
+    onSetFolderColor?: (color: string | null) => void;
     onDelete: () => void;
     onClose: () => void;
 }
 
-function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, onToggleEncryption, onCreateChild, onMoveToRoot, onMoveFolderTo, onDelete, onClose }: FolderContextMenuProps) {
+function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, onToggleEncryption, onCreateChild, onMoveToRoot, onMoveFolderTo, isPinned, folderColor, onTogglePinned, onSetFolderColor, onDelete, onClose }: FolderContextMenuProps) {
     const menuRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
 
@@ -107,6 +116,12 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
                 <Pencil className="w-4 h-4 text-telegram-primary" />
                 Rename
             </button>
+            {onTogglePinned && (
+                <button onClick={onTogglePinned} className={`${btn} text-telegram-text`}>
+                    {isPinned ? <PinOff className="w-4 h-4 text-telegram-secondary" /> : <Pin className="w-4 h-4 text-telegram-secondary" />}
+                    {isPinned ? 'Unpin Folder' : 'Pin Folder'}
+                </button>
+            )}
             {onCreateChild && (
                 <button onClick={onCreateChild} className={`${btn} text-telegram-text`}>
                     <Plus className="w-4 h-4 text-telegram-secondary" />
@@ -135,6 +150,33 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
                     : <><Lock className="w-4 h-4 text-yellow-300" /> Turn on auto-encrypt</>
                 }
             </button>
+            {onSetFolderColor && (
+                <div className="rounded-lg border border-telegram-border/70 bg-white/[0.02] px-3 py-2">
+                    <div className="mb-2 flex items-center gap-2 text-xs text-telegram-subtext">
+                        <Paintbrush className="h-3.5 w-3.5" />
+                        Folder color
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {FOLDER_COLOR_PALETTE.map((color) => (
+                            <button
+                                key={color}
+                                type="button"
+                                onClick={() => onSetFolderColor(color)}
+                                className={`h-5 w-5 rounded-full border transition ${folderColor === color ? 'border-white scale-110' : 'border-white/20 hover:scale-105'}`}
+                                style={{ backgroundColor: color }}
+                                title={color}
+                            />
+                        ))}
+                        <button
+                            type="button"
+                            onClick={() => onSetFolderColor(null)}
+                            className="h-5 rounded-full border border-telegram-border px-2 text-[10px] text-telegram-subtext transition hover:text-telegram-text"
+                        >
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            )}
             <div className="h-px bg-telegram-border my-1" />
             <button onClick={onDelete} className={`${btn} text-red-400 hover:bg-red-500/10`}>
                 <Trash2 className="w-4 h-4" />
@@ -144,7 +186,7 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
     );
 }
 
-export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop, onFolderDrop, onDelete, onRename, onShareLink, onToggleEncryption, isEncrypted, folderId, depth = 0, onCreateChild, onMoveToRoot, onMoveFolderTo, draggableFolderId, fileCount }: SidebarItemProps) {
+export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop, onFolderDrop, onDelete, onRename, onShareLink, onToggleEncryption, isEncrypted, folderId, depth = 0, onCreateChild, onMoveToRoot, onMoveFolderTo, draggableFolderId, fileCount, folderColor, isPinned, onTogglePinned, onSetFolderColor }: SidebarItemProps) {
     const [isOver, setIsOver] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const hasContextMenu = !!(onDelete || onRename || onShareLink);
@@ -206,9 +248,12 @@ export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop
                 }`}
                 style={{ marginLeft: `${depth * 14}px`, width: `calc(100% - ${depth * 14}px)` }}
             >
-                <div className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+                <div
+                    className={`relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
                     active ? 'border-telegram-primary/20 bg-telegram-primary/12 text-telegram-primary' : isOver ? 'border-telegram-primary/30 bg-telegram-primary/12 text-telegram-primary' : 'border-telegram-border/70 bg-white/[0.02]'
-                }`}>
+                }`}
+                    style={folderColor && !isOver ? { color: folderColor, borderColor: `${folderColor}55`, backgroundColor: `${folderColor}16` } : undefined}
+                >
                     {isOver
                         ? <FolderInput className="w-4 h-4 text-telegram-primary" />
                         : <Icon className="w-4 h-4" />
@@ -225,6 +270,7 @@ export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop
                         {fileCount > 999 ? '999+' : fileCount}
                     </span>
                 )}
+                {!isOver && isPinned && <Pin className="h-3 w-3 shrink-0 text-telegram-primary/80" />}
                 {depth > 0 && <ChevronRight className="h-3.5 w-3.5 text-telegram-subtext/45" />}
                 {onDelete && (
                     <button
@@ -250,6 +296,10 @@ export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop
                     onMoveFolderTo={onMoveFolderTo ? () => { onMoveFolderTo(); setContextMenu(null); } : undefined}
                     onShareLink={() => { onShareLink?.(); setContextMenu(null); }}
                     onToggleEncryption={() => { onToggleEncryption?.(); setContextMenu(null); }}
+                    isPinned={isPinned}
+                    folderColor={folderColor}
+                    onTogglePinned={onTogglePinned ? () => { onTogglePinned(); setContextMenu(null); } : undefined}
+                    onSetFolderColor={onSetFolderColor}
                     onDelete={() => { onDelete?.(); setContextMenu(null); }}
                     onClose={() => setContextMenu(null)}
                 />
