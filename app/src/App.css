@@ -1,0 +1,281 @@
+@import "tailwindcss";
+
+/* stylelint-disable at-rule-no-unknown */
+@theme {
+  --color-telegram-bg: #0b1420;
+  --color-telegram-surface: #111c2a;
+  --color-telegram-primary: #2f9bff;
+  --color-telegram-secondary: #53c6ff;
+  --color-telegram-text: #edf4fb;
+  --color-telegram-subtext: #8aa0b4;
+  --color-telegram-border: rgba(120, 152, 180, 0.16);
+  --color-telegram-hover: rgba(120, 152, 180, 0.08);
+}
+
+:root.light {
+  --color-telegram-bg: #eef3f8;
+  --color-telegram-surface: #fbfdff;
+  --color-telegram-primary: #0a77d5;
+  --color-telegram-secondary: #169ddf;
+  --color-telegram-text: #152535;
+  --color-telegram-subtext: #60788e;
+  --color-telegram-border: rgba(21, 35, 48, 0.12);
+  --color-telegram-hover: rgba(10, 119, 213, 0.06);
+}
+
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  font-family: "Aptos", "Segoe UI Variable Display", "Inter", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--color-telegram-bg);
+  color: var(--color-telegram-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0));
+}
+
+:root.light body {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.08));
+}
+
+.auth-gradient {
+  background: linear-gradient(180deg, #102236 0%, #0b1420 100%);
+}
+
+:root.light .auth-gradient {
+  background: linear-gradient(135deg, #0a77d5 0%, #53c6ff 100%);
+}
+
+.glass {
+  background: rgba(17, 28, 42, 0.95);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(126, 164, 191, 0.12);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+}
+
+:root.light .glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 250, 252, 0.94));
+  border: 1px solid rgba(21, 35, 48, 0.08);
+  box-shadow: 0 24px 80px rgba(20, 34, 48, 0.08);
+}
+
+.auth-glass {
+  background: rgba(16, 28, 41, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+:root.light .auth-glass {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #1a1a1a;
+}
+
+:root.light .auth-glass .text-white {
+  color: #1a1a1a;
+}
+
+:root.light .auth-glass .text-white\/60 {
+  color: rgba(26, 26, 26, 0.7);
+}
+
+:root.light .auth-glass .text-gray-400 {
+  color: #555;
+}
+
+:root.light .auth-glass .text-blue-200 {
+  color: #1e40af;
+}
+
+:root.light .auth-glass .placeholder-gray-600::placeholder {
+  color: #9ca3af;
+}
+
+:root.light .auth-glass input {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #1a1a1a;
+}
+
+.auth-form-icon {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  z-index: 20;
+}
+
+:root.light .auth-form-icon {
+  color: #000000 !important;
+  opacity: 0.8 !important;
+}
+
+.glass-input {
+  background: rgba(10, 19, 30, 0.74);
+  border: 1px solid rgba(126, 164, 191, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+:root.light .glass-input {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(82, 227, 194, 0.55);
+}
+
+:root.light ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+:root.light ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 136, 114, 0.45);
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50% {
+    transform: translateX(50%);
+  }
+
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.5s infinite linear;
+}
+
+:root.light .bg-telegram-bg {
+  background-color: var(--color-telegram-bg);
+}
+
+:root.light .bg-telegram-surface {
+  background-color: var(--color-telegram-surface);
+}
+
+:root.light .border-white\/5,
+:root.light .border-white\/10 {
+  border-color: var(--color-telegram-border);
+}
+
+:root.light .bg-white\/5,
+:root.light .hover\:bg-white\/5:hover {
+  background-color: var(--color-telegram-hover);
+}
+
+:root.light .bg-white\/10,
+:root.light .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+:root.light .bg-black\/20,
+:root.light .bg-black\/30,
+:root.light .bg-black\/50 {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+:root.light .file-action-btn {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  color: white !important;
+}
+
+:root.light .file-action-btn:hover {
+  background-color: var(--color-telegram-primary) !important;
+}
+
+:root.light .text-telegram-text {
+  color: var(--color-telegram-text);
+}
+
+:root.light .text-telegram-subtext {
+  color: var(--color-telegram-subtext);
+}
+
+:root.light .shadow-2xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+}
+
+:root.light input,
+:root.light textarea,
+:root.light select {
+  background-color: #ffffff;
+  border-color: rgba(0, 0, 0, 0.15);
+  color: #1a1a1a;
+}
+
+:root.light input::placeholder,
+:root.light textarea::placeholder {
+  color: #9ca3af;
+}
+
+:root.light input:focus,
+:root.light textarea:focus,
+:root.light select:focus {
+  border-color: var(--color-telegram-primary);
+}
+
+.vault-panel {
+  background: rgba(17, 28, 42, 0.96);
+  border: 1px solid var(--color-telegram-border);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+}
+
+:root.light .vault-panel {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 24px rgba(24, 38, 54, 0.06);
+}
+
+.vault-sidebar {
+  background: #0a1624;
+}
+
+:root.light .vault-sidebar {
+  background: #f7fbff;
+}
+
+.vault-topbar {
+  background: rgba(11, 20, 32, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+:root.light .vault-topbar {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.vault-chip {
+  border: 1px solid var(--color-telegram-border);
+  background: rgba(120, 152, 180, 0.05);
+}
+
+.vault-chip-active {
+  border-color: rgba(47, 155, 255, 0.28);
+  background: rgba(47, 155, 255, 0.12);
+}

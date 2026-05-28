@@ -1,0 +1,150 @@
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::RwLock;
+
+use serde::{Deserialize, Serialize};
+
+use crate::models::{FileMetadata, FolderMetadata};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct IndexedFolderFiles {
+    items: Vec<FileMetadata>,
+    synced_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct PersistentIndexData {
+    folders: Vec<FolderMetadata>,
+    folders_synced_at_ms: i64,
+    files_by_folder: HashMap<String, IndexedFolderFiles>,
+    #[serde(default)]
+    folder_size_cache: HashMap<String, (i64, u64)>,
+}
+
+pub struct PersistentIndexState {
+    path: PathBuf,
+    inner: RwLock<PersistentIndexData>,
+}
+
+impl PersistentIndexState {
+    pub fn new(path: PathBuf) -> Self {
+        let inner = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<PersistentIndexData>(&raw).ok())
+            .unwrap_or_default();
+
+        Self {
+            path,
+            inner: RwLock::new(inner),
+        }
+    }
+
+    pub fn folder_key(folder_id: Option<i64>) -> String {
+        folder_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "home".to_string())
+    }
+
+    pub fn get_folders(&self) -> Vec<FolderMetadata> {
+        self.inner.read().map(|g| g.folders.clone()).unwrap_or_default()
+    }
+
+    pub fn set_folders(&self, folders: Vec<FolderMetadata>) {
+        if let Ok(mut inner) = self.inner.write() {
+            inner.folders = folders;
+            inner.folders_synced_at_ms = now_ms();
+            self.persist_locked(&inner);
+        }
+    }
+
+    pub fn upsert_folder(&self, folder: FolderMetadata) {
+        let mut folders = self.get_folders();
+        if let Some(existing) = folders.iter_mut().find(|existing| existing.id == folder.id) {
+            *existing = folder;
+        } else {
+            folders.push(folder);
+        }
+        self.set_folders(folders);
+    }
+
+    pub fn remove_folder(&self, folder_id: i64) {
+        if let Ok(mut inner) = self.inner.write() {
+            inner.folders.retain(|folder| folder.id != folder_id);
+            inner.files_by_folder.remove(&folder_id.to_string());
+            inner.folder_size_cache.remove(&folder_id.to_string());
+            self.persist_locked(&inner);
+        }
+    }
+
+    pub fn folder_name_map(&self) -> HashMap<Option<i64>, String> {
+        let mut map = HashMap::new();
+        map.insert(None, "Saved Messages".to_string());
+        if let Ok(inner) = self.inner.read() {
+            for folder in &inner.folders {
+                map.insert(Some(folder.id), folder.name.clone());
+            }
+        }
+        map
+    }
+
+    pub fn get_files(&self, folder_id: Option<i64>) -> Vec<FileMetadata> {
+        let key = Self::folder_key(folder_id);
+        self.inner
+            .read()
+            .map(|g| g.files_by_folder.get(&key).map(|e| e.items.clone()).unwrap_or_default())
+            .unwrap_or_default()
+    }
+
+    pub fn get_all_files(&self) -> Vec<FileMetadata> {
+        self.inner
+            .read()
+            .map(|g| g.files_by_folder.values().flat_map(|e| e.items.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    pub fn set_files(&self, folder_id: Option<i64>, files: Vec<FileMetadata>) {
+        let key = Self::folder_key(folder_id);
+        if let Ok(mut inner) = self.inner.write() {
+            inner.files_by_folder.insert(
+                key,
+                IndexedFolderFiles {
+                    items: files,
+                    synced_at_ms: now_ms(),
+                },
+            );
+            self.persist_locked(&inner);
+        }
+    }
+
+    pub fn get_folder_size_cache(&self, folder_id: i64) -> Option<(i64, u64)> {
+        self.inner
+            .read()
+            .ok()?
+            .folder_size_cache
+            .get(&folder_id.to_string())
+            .copied()
+    }
+
+    pub fn set_folder_size_cache(&self, folder_id: i64, count: i64, bytes: u64) {
+        if let Ok(mut inner) = self.inner.write() {
+            inner.folder_size_cache.insert(folder_id.to_string(), (count, bytes));
+            self.persist_locked(&inner);
+        }
+    }
+
+    fn persist_locked(&self, inner: &PersistentIndexData) {
+        if let Some(parent) = self.path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(raw) = serde_json::to_string(inner) {
+            let _ = std::fs::write(&self.path, raw);
+        }
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or_default()
+}
