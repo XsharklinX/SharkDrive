@@ -77,6 +77,9 @@ export const tauriApi = {
     getBookCardData(messageId: number, folderId: number | null) {
         return invoke<BookCardData>('cmd_get_book_card_data', { messageId, folderId });
     },
+    indexPdfText(messageId: number, folderId: number | null) {
+        return invoke<string>('cmd_index_pdf_text', { messageId, folderId });
+    },
     getStreamToken() {
         if (!streamTokenPromise) {
             streamTokenPromise = invoke<string>('cmd_get_stream_token').catch((error) => {

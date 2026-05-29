@@ -4,6 +4,8 @@ import { buildRemoteFileKey, formatBytes, matchesAdvancedSearch } from '../utils
 import { tauriApi } from '../api/tauri';
 
 type FolderNameResolver = (folderId: number | null) => string | undefined;
+const PDF_TEXT_INDEX_STORAGE_KEY = 'sharkdrive.pdfTextIndex.v1';
+const PDF_TEXT_INDEX_EVENT = 'sharkdrive:pdf-text-index-updated';
 
 interface UseDashboardSearchOptions {
     activeFolderId: number | null;
@@ -48,9 +50,28 @@ export function useDashboardSearch({
     const [searchResults, setSearchResults] = useState<TelegramFile[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [allIndexedFiles, setAllIndexedFiles] = useState<TelegramFile[]>([]);
+    const [pdfTextIndex, setPdfTextIndex] = useState<Record<string, string>>({});
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const deferredSearchTerm = useDeferredValue(searchQuery);
     const searchActive = deferredSearchTerm.length > 2;
+
+    useEffect(() => {
+        const loadPdfTextIndex = () => {
+            try {
+                setPdfTextIndex(JSON.parse(localStorage.getItem(PDF_TEXT_INDEX_STORAGE_KEY) || '{}'));
+            } catch {
+                setPdfTextIndex({});
+            }
+        };
+
+        loadPdfTextIndex();
+        window.addEventListener(PDF_TEXT_INDEX_EVENT, loadPdfTextIndex);
+        window.addEventListener('storage', loadPdfTextIndex);
+        return () => {
+            window.removeEventListener(PDF_TEXT_INDEX_EVENT, loadPdfTextIndex);
+            window.removeEventListener('storage', loadPdfTextIndex);
+        };
+    }, []);
 
     useEffect(() => {
         if (!searchActive) return;
@@ -76,7 +97,7 @@ export function useDashboardSearch({
         const addFile = (file: TelegramFile) => {
             const key = buildRemoteFileKey(file, file.folder_id ?? activeFolderId);
             if (!merged.has(key)) {
-                merged.set(key, file);
+                merged.set(key, { ...file, pdf_text: pdfTextIndex[key] ?? file.pdf_text });
             }
         };
 
@@ -84,7 +105,7 @@ export function useDashboardSearch({
         allIndexedFiles.forEach(addFile);
 
         return Array.from(merged.values());
-    }, [activeFolderId, allIndexedFiles, sourceFiles]);
+    }, [activeFolderId, allIndexedFiles, pdfTextIndex, sourceFiles]);
 
     useEffect(() => {
         if (deferredSearchTerm.length <= 2) {

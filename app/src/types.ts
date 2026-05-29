@@ -13,6 +13,7 @@ export interface TelegramFile {
     file_ext?: string;
     tags?: string[];
     quick_note?: string;
+    pdf_text?: string;
 }
 
 export interface TelegramFolder {

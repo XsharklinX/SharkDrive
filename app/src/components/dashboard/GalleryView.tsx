@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Check, Star, Image as ImageIcon } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Check, Star, Image as ImageIcon, Pause, Play } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { isImageFile, resolveFileFolderId } from '../../utils';
@@ -44,7 +44,7 @@ function GalleryItem({ file, activeFolderId, isFavorite, isSelected, isFocused, 
         <div
             ref={itemRef}
             className={`group relative aspect-square cursor-pointer overflow-hidden rounded-lg border bg-telegram-surface transition-all hover:border-telegram-primary/35 ${isSelected ? 'border-telegram-primary/60 ring-1 ring-telegram-primary/30' : 'border-telegram-border'} ${isFocused ? 'ring-2 ring-telegram-primary/70' : ''}`}
-            onClick={() => onToggleSelection ? onToggleSelection(file.id) : onPreview(file)}
+            onClick={() => onPreview(file)}
         >
             {thumbnail ? (
                 <img src={thumbnail} alt={file.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
@@ -87,9 +87,12 @@ function GalleryItem({ file, activeFolderId, isFavorite, isSelected, isFocused, 
 }
 
 export function GalleryView({ files, activeFolderId, favoriteIds, onToggleFavorite, onPreview, onToggleSelection, selectedIds = [], selectionMode = false, compact = false }: GalleryViewProps) {
-    const imageFiles = files.filter((file) => file.type !== 'folder' && isImageFile(file.name));
+    const imageFiles = useMemo(() => files.filter((file) => file.type !== 'folder' && isImageFile(file.name)), [files]);
     const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
     const [columns, setColumns] = useState(4);
+    const [slideshowActive, setSlideshowActive] = useState(false);
+    const [slideshowDelayMs, setSlideshowDelayMs] = useState(5000);
+    const [slideshowIndex, setSlideshowIndex] = useState(0);
     const gridRef = useRef<HTMLDivElement>(null);
     const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -114,6 +117,30 @@ export function GalleryView({ files, activeFolderId, favoriteIds, onToggleFavori
             itemRefs.current[focusedIndex]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
     }, [focusedIndex]);
+
+    useEffect(() => {
+        if (!slideshowActive || imageFiles.length === 0) return;
+
+        const timer = window.setInterval(() => {
+            setSlideshowIndex((current) => {
+                const next = (current + 1) % imageFiles.length;
+                setFocusedIndex(next);
+                onPreview(imageFiles[next]);
+                return next;
+            });
+        }, slideshowDelayMs);
+
+        return () => window.clearInterval(timer);
+    }, [imageFiles, onPreview, slideshowActive, slideshowDelayMs]);
+
+    useEffect(() => {
+        if (imageFiles.length === 0) {
+            setSlideshowActive(false);
+            setSlideshowIndex(0);
+            return;
+        }
+        setSlideshowIndex((current) => Math.min(current, imageFiles.length - 1));
+    }, [imageFiles.length]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (imageFiles.length === 0) return;
@@ -169,7 +196,33 @@ export function GalleryView({ files, activeFolderId, favoriteIds, onToggleFavori
         >
             <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-sm font-medium text-telegram-text">Gallery</h3>
-                <div className="text-xs text-telegram-subtext">
+                <div className="flex items-center gap-2 text-xs text-telegram-subtext">
+                    <span>{selectedIds.length > 0 ? `${selectedIds.length} selected · ` : ''}{imageFiles.length} image{imageFiles.length !== 1 ? 's' : ''}</span>
+                    <select
+                        value={slideshowDelayMs}
+                        onChange={(e) => setSlideshowDelayMs(Number(e.target.value))}
+                        className="rounded-md border border-telegram-border bg-telegram-surface px-2 py-1 text-xs text-telegram-subtext outline-none"
+                        title="Slideshow speed"
+                    >
+                        <option value={2000}>2s</option>
+                        <option value={5000}>5s</option>
+                        <option value={10000}>10s</option>
+                    </select>
+                    <button
+                        onClick={() => {
+                            const nextIndex = focusedIndex ?? slideshowIndex;
+                            setSlideshowIndex(nextIndex);
+                            if (!slideshowActive) onPreview(imageFiles[nextIndex] ?? imageFiles[0]);
+                            setSlideshowActive((value) => !value);
+                        }}
+                        className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 transition ${slideshowActive ? 'border-telegram-primary/40 bg-telegram-primary/15 text-telegram-primary' : 'border-telegram-border text-telegram-subtext hover:text-telegram-text'}`}
+                        title={slideshowActive ? 'Pause slideshow' : 'Start slideshow'}
+                    >
+                        {slideshowActive ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                        {slideshowActive ? 'Pause' : 'Slideshow'}
+                    </button>
+                </div>
+                <div className="hidden text-xs text-telegram-subtext">
                     {selectedIds.length > 0 ? `${selectedIds.length} selected · ` : ''}{imageFiles.length} image{imageFiles.length !== 1 ? 's' : ''}
                     {focusedIndex !== null && <span className="ml-2 text-telegram-subtext/60">· arrows to navigate, Enter to preview, Space to select</span>}
                 </div>

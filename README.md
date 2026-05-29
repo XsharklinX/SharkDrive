@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Version](https://img.shields.io/badge/version-2.2.0-brightgreen)
+![Version](https://img.shields.io/badge/version-2.3.0-brightgreen)
 
 ---
 
@@ -86,10 +86,11 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 ### Media and Preview
 
 - Stream video and audio files without downloading (via LAN server with Range requests)
-- Built-in PDF viewer
-- Image preview with navigation between files (prev/next, keyboard arrows)
-- Gallery view with keyboard navigation (arrows, Enter, Space)
-- Thumbnail support for images and video files (lazy-loaded)
+- Built-in PDF viewer with local text indexing for PDFs already opened
+- Image preview with navigation, keyboard arrows, zoom, and drag-to-pan
+- Gallery view with keyboard navigation and configurable slideshow mode
+- Thumbnail support for images and video files (lazy-loaded; video frame extraction uses `ffmpeg` when Telegram has no embedded thumbnail)
+- Audio playback with folder playlist and shuffle controls
 
 ### System Integration
 
@@ -115,6 +116,7 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 | Telegram | grammers (MTProto, git rev d07f96f) |
 | Local server | actix-web 4 |
 | Encryption | aes-gcm (AES-256-GCM), sha2 |
+| PDF text index | pdf-extract |
 | State | tauri-plugin-store (JSON KV) |
 | Virtualization | @tanstack/react-virtual |
 | Build | Vite, cargo |
@@ -177,5 +179,4 @@ MIT — free to use, modify, and distribute.
 ---
 
 *SharkDrive is not affiliated with Telegram FZ-LLC. Use in accordance with Telegram's Terms of Service.*
-
 

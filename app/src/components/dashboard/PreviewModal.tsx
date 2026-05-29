@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, File, ChevronLeft, ChevronRight, Shield, Eye } from 'lucide-react';
+import { useState, useEffect, useRef, type PointerEvent, type WheelEvent } from 'react';
+import { X, File, ChevronLeft, ChevronRight, Shield, Eye, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
@@ -71,12 +71,18 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
     const [error, setError] = useState<string | null>(null);
     const [reloadNonce, setReloadNonce] = useState(0);
     const [retryCount, setRetryCount] = useState(0);
+    const [zoom, setZoom] = useState(1);
+    const [pan, setPan] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
     const latestRequestRef = useRef(0);
 
     useEffect(() => {
         setRetryCount(0);
         setReloadNonce(0);
         setThumbnailSrc(null);
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
     }, [file.id, activeFolderId]);
 
     useEffect(() => {
@@ -194,6 +200,44 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [onClose, onNext, onPrev]);
 
+    const changeZoom = (nextZoom: number) => {
+        const clamped = Math.min(Math.max(nextZoom, 1), 5);
+        setZoom(clamped);
+        if (clamped === 1) setPan({ x: 0, y: 0 });
+    };
+
+    const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
+        if (!isImageFile(file.name) || (!e.ctrlKey && !e.metaKey)) return;
+        e.preventDefault();
+        const direction = e.deltaY > 0 ? -0.15 : 0.15;
+        changeZoom(zoom + direction);
+    };
+
+    const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
+        if (zoom <= 1) return;
+        setIsDragging(true);
+        dragStartRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+        e.currentTarget.setPointerCapture(e.pointerId);
+    };
+
+    const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
+        if (!isDragging || zoom <= 1) return;
+        const start = dragStartRef.current;
+        setPan({
+            x: start.panX + e.clientX - start.x,
+            y: start.panY + e.clientY - start.y,
+        });
+    };
+
+    const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
+        setIsDragging(false);
+        try {
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+            // Pointer may already be released by the webview.
+        }
+    };
+
     return (
         <div
             className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
@@ -223,6 +267,20 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
                         {typeof currentIndex === 'number' && typeof totalItems === 'number' && totalItems > 0 && (
                             <div className="rounded-lg border border-telegram-border bg-telegram-surface/95 px-3 py-2 text-xs text-telegram-subtext">
                                 {currentIndex + 1}/{totalItems}
+                            </div>
+                        )}
+                        {isImageFile(file.name) && (
+                            <div className="flex items-center gap-1 rounded-lg border border-telegram-border bg-telegram-surface/95 p-1">
+                                <button onClick={() => changeZoom(zoom - 0.25)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom out">
+                                    <ZoomOut className="h-4 w-4" />
+                                </button>
+                                <span className="min-w-10 text-center text-xs text-telegram-subtext">{Math.round(zoom * 100)}%</span>
+                                <button onClick={() => changeZoom(zoom + 0.25)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom in">
+                                    <ZoomIn className="h-4 w-4" />
+                                </button>
+                                <button onClick={() => changeZoom(1)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Reset zoom">
+                                    <RotateCcw className="h-4 w-4" />
+                                </button>
                             </div>
                         )}
                         <button
@@ -280,11 +338,21 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
                 {!loading && !error && src && (
                     <div className="flex w-full flex-col items-center gap-4">
                         {isImageFile(file.name) ? (
-                            <div className="flex max-h-[78vh] w-full max-w-5xl items-center justify-center overflow-hidden rounded-lg border border-telegram-border bg-telegram-surface/95 p-3">
+                            <div
+                                className={`flex max-h-[78vh] w-full max-w-5xl items-center justify-center overflow-hidden rounded-lg border border-telegram-border bg-telegram-surface/95 p-3 ${zoom > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                onWheel={handleWheel}
+                                onPointerDown={handlePointerDown}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={handlePointerUp}
+                                onPointerCancel={handlePointerUp}
+                                onDoubleClick={() => changeZoom(zoom > 1 ? 1 : 2)}
+                            >
                                 <img
                                     src={src}
-                                    className="max-h-[72vh] max-w-full rounded-md object-contain bg-black/35 shadow-[0_20px_50px_rgba(0,0,0,0.42)]"
+                                    className="max-h-[72vh] max-w-full select-none rounded-md object-contain bg-black/35 shadow-[0_20px_50px_rgba(0,0,0,0.42)] transition-transform duration-100"
+                                    style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
                                     alt="Preview"
+                                    draggable={false}
                                     onError={() => {
                                         const key = getPreviewCacheKey(file.id, resolveFileFolderId(file, activeFolderId));
                                         forgetPreview(key);

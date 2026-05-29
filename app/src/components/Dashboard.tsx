@@ -726,6 +726,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                             currentIndex={previewContextIndex}
                             totalItems={previewContextFiles.length}
                             activeFolderId={activeFolderId}
+                            playlist={previewContextFiles}
+                            onSelectTrack={(track) => handlePreview(track, previewContextFiles)}
                             key="media-player"
                         />
                     </ErrorBoundary>

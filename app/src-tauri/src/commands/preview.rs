@@ -8,12 +8,14 @@ use grammers_client::types::photo_sizes::PhotoSize;
 use grammers_client::types::Media;
 use image::ImageFormat;
 use std::io::Read;
+use std::process::Command;
 use tauri::Manager;
 use tauri::State;
 use zip::ZipArchive;
 
 const PREVIEW_CACHE_MAX_FILES: usize = 30;
 const PREVIEW_CACHE_MAX_TOTAL_BYTES: u64 = 80 * 1024 * 1024;
+const VIDEO_THUMB_MAX_BYTES: i64 = 120 * 1024 * 1024;
 
 fn prune_preview_cache(cache_dir: &std::path::Path) {
     let read_dir = match std::fs::read_dir(cache_dir) {
@@ -224,6 +226,56 @@ fn resize_cover_thumbnail_bytes(bytes: &[u8]) -> Result<Vec<u8>, String> {
         .write_to(&mut cursor, ImageFormat::Png)
         .map_err(|e| format!("Failed to encode book cover thumbnail: {}", e))?;
     Ok(cursor.into_inner())
+}
+
+fn run_ffmpeg_video_thumbnail(
+    input_path: &std::path::Path,
+    output_path: &std::path::Path,
+) -> Result<(), String> {
+    let mut command = Command::new("ffmpeg");
+    command
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+        .arg("-y")
+        .arg("-ss")
+        .arg("00:00:01")
+        .arg("-i")
+        .arg(input_path)
+        .arg("-frames:v")
+        .arg("1")
+        .arg("-vf")
+        .arg("scale=640:-2:force_original_aspect_ratio=decrease")
+        .arg(output_path);
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    let output = command
+        .output()
+        .map_err(|e| format!("ffmpeg is not available: {}", e))?;
+
+    if output.status.success() && output_path.exists() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    Err(format!("ffmpeg thumbnail extraction failed: {}", stderr.trim()))
+}
+
+async fn download_media_to_path(
+    client: &grammers_client::Client,
+    media: &Media,
+    target_path: &std::path::Path,
+) -> Result<(), String> {
+    let target = target_path.to_string_lossy().to_string();
+    client
+        .download_media(media, &target)
+        .await
+        .map_err(|e| format!("Failed to download media: {}", e))
 }
 
 fn normalize_zip_path(base_path: &str, href: &str) -> String {
@@ -486,7 +538,26 @@ pub async fn cmd_get_thumbnail(
 
                 let download_ok = match &media {
                     Media::Document(d) if fallback_mime.starts_with("video/") => {
-                        try_download_document_thumb(&client, d, &temp_path).await?
+                        if try_download_document_thumb(&client, d, &temp_path).await? {
+                            true
+                        } else if (d.size() as i64) <= VIDEO_THUMB_MAX_BYTES {
+                            let video_path = cache_dir.join(format!("{}_{}.video", folder_key, message_id));
+                            let downloaded = download_media_to_path(&client, &media, &video_path).await.is_ok();
+                            if downloaded {
+                                let extracted = run_ffmpeg_video_thumbnail(&video_path, &save_path).is_ok();
+                                let _ = std::fs::remove_file(&video_path);
+                                if extracted {
+                                    if let Ok(bytes) = std::fs::read(&save_path) {
+                                        let _ = std::fs::remove_file(&temp_path);
+                                        let b64 = general_purpose::STANDARD.encode(&bytes);
+                                        return Ok(format!("data:image/png;base64,{}", b64));
+                                    }
+                                }
+                            }
+                            false
+                        } else {
+                            false
+                        }
                     }
                     Media::Document(d) if fallback_mime.starts_with("image/") => {
                         if try_download_document_thumb(&client, d, &temp_path).await? {
@@ -521,6 +592,76 @@ pub async fn cmd_get_thumbnail(
     }
 
     Ok("".to_string())
+}
+
+#[tauri::command]
+pub async fn cmd_index_pdf_text(
+    message_id: i32,
+    folder_id: Option<i64>,
+    app_handle: tauri::AppHandle,
+    state: State<'_, TelegramState>,
+) -> Result<String, String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| e.to_string())?;
+    let text_dir = app_data_dir.join("pdf_text_index");
+    let source_dir = app_data_dir.join("pdf_sources");
+    let _ = std::fs::create_dir_all(&text_dir);
+    let _ = std::fs::create_dir_all(&source_dir);
+
+    let folder_key = folder_cache_key(folder_id);
+    let text_path = text_dir.join(format!("{}_{}.txt", folder_key, message_id));
+    if text_path.exists() {
+        return std::fs::read_to_string(&text_path)
+            .map_err(|e| format!("Failed to read cached PDF text: {}", e));
+    }
+
+    let client_opt = { state.client.lock().await.clone() };
+    let client = client_opt.ok_or("Telegram client not connected".to_string())?;
+    let peer = resolve_peer(&client, folder_id, &state).await?;
+    let messages = client
+        .get_messages_by_id(&peer, &[message_id])
+        .await
+        .map_err(|e| e.to_string())?;
+    let message = messages
+        .into_iter()
+        .flatten()
+        .next()
+        .ok_or("PDF message not found".to_string())?;
+    let media = message.media().ok_or("Message has no media".to_string())?;
+
+    let is_pdf = match &media {
+        Media::Document(document) => {
+            document
+                .mime_type()
+                .map(|mime| mime.eq_ignore_ascii_case("application/pdf"))
+                .unwrap_or(false)
+                || document.name().to_lowercase().ends_with(".pdf")
+        }
+        _ => false,
+    };
+
+    if !is_pdf {
+        return Err("Selected file is not a PDF".to_string());
+    }
+
+    let source_path = source_dir.join(format!("{}_{}.pdf", folder_key, message_id));
+    if !source_path.exists() {
+        download_media_to_path(&client, &media, &source_path).await?;
+    }
+
+    let extract_path = source_path.clone();
+    let text = tokio::task::spawn_blocking(move || {
+        pdf_extract::extract_text(&extract_path)
+            .map_err(|e| format!("Failed to extract PDF text: {}", e))
+    })
+    .await
+    .map_err(|e| format!("PDF text worker failed: {}", e))??;
+
+    let normalized = text.trim().to_string();
+    let _ = std::fs::write(&text_path, &normalized);
+    Ok(normalized)
 }
 
 #[tauri::command]

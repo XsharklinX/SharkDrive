@@ -154,6 +154,7 @@ pub fn run() {
             commands::cmd_get_bandwidth,
             commands::cmd_get_preview,
             commands::cmd_get_book_card_data,
+            commands::cmd_index_pdf_text,
             commands::cmd_logout,
             commands::cmd_scan_folders,
             commands::cmd_search_global,

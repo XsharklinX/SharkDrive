@@ -3,10 +3,12 @@ import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, FileText, Shie
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
-import { resolveFileFolderId } from '../../utils';
+import { buildRemoteFileKey, resolveFileFolderId } from '../../utils';
 
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+const PDF_TEXT_INDEX_STORAGE_KEY = 'sharkdrive.pdfTextIndex.v1';
+const PDF_TEXT_INDEX_EVENT = 'sharkdrive:pdf-text-index-updated';
 
 interface PdfViewerProps {
     file: TelegramFile;
@@ -25,6 +27,7 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
     const [scale, setScale] = useState<number>(1.2);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
+    const [textIndexStatus, setTextIndexStatus] = useState<'idle' | 'indexing' | 'ready' | 'error'>('idle');
     const containerRef = useRef<HTMLDivElement>(null);
     const pdfRef = useRef<pdfjsLib.PDFDocumentProxy | null>(null);
 
@@ -79,6 +82,45 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
             loadingTask.destroy();
         };
     }, [streamToken, activeFolderId, file.id]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const folderId = resolveFileFolderId(file, activeFolderId);
+        const key = buildRemoteFileKey(file, folderId);
+
+        try {
+            const current = JSON.parse(localStorage.getItem(PDF_TEXT_INDEX_STORAGE_KEY) || '{}');
+            if (current[key]) {
+                setTextIndexStatus('ready');
+                return;
+            }
+        } catch {
+            // A corrupt local search index should not block PDF viewing.
+        }
+
+        setTextIndexStatus('indexing');
+        tauriApi.indexPdfText(file.id, folderId)
+            .then((text) => {
+                if (cancelled) return;
+                if (!text) {
+                    setTextIndexStatus('error');
+                    return;
+                }
+
+                const current = JSON.parse(localStorage.getItem(PDF_TEXT_INDEX_STORAGE_KEY) || '{}');
+                current[key] = text.slice(0, 250_000);
+                localStorage.setItem(PDF_TEXT_INDEX_STORAGE_KEY, JSON.stringify(current));
+                window.dispatchEvent(new Event(PDF_TEXT_INDEX_EVENT));
+                setTextIndexStatus('ready');
+            })
+            .catch(() => {
+                if (!cancelled) setTextIndexStatus('error');
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeFolderId, file]);
 
     useEffect(() => {
         return () => {
@@ -158,6 +200,11 @@ export function PdfViewer({ file, onClose, onNext, onPrev, currentIndex, totalIt
                     </div>
                     <div className="min-w-0">
                         <h3 className="max-w-sm truncate text-sm font-semibold text-telegram-text">{file.name}</h3>
+                        <p className="mt-0.5 text-xs text-telegram-subtext">
+                            {textIndexStatus === 'indexing' && 'Indexing text for search...'}
+                            {textIndexStatus === 'ready' && 'PDF text indexed for search'}
+                            {textIndexStatus === 'error' && 'PDF text index unavailable'}
+                        </p>
                     </div>
                 </div>
 

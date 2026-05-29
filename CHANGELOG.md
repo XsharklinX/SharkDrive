@@ -4,6 +4,18 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [2.3.0] - 2026-05-28
+
+### Media Avanzado
+
+- **Thumbnails de video** - `cmd_get_thumbnail` ahora intenta usar miniatura embebida de Telegram y, si no existe, extrae un frame con `ffmpeg` y lo cachea como PNG en `app_data_dir/thumbnails`.
+- **Zoom en imágenes** - `PreviewModal` agrega zoom con botones, doble click, Ctrl+scroll y paneo cuando la imagen está ampliada.
+- **Slideshow en galería** - `GalleryView` agrega autoplay discreto con velocidades 2s / 5s / 10s y pausa sin convertir la pantalla principal en un panel pesado.
+- **Playlist de audio** - `MediaPlayer` muestra lista de pistas del contexto actual, permite saltar a una pista y agrega shuffle para carpetas de audio.
+- **Búsqueda en PDF vistos** - Nuevo `cmd_index_pdf_text` descarga/indexa texto de PDFs abiertos con `pdf-extract`, lo persiste localmente y lo incorpora a la búsqueda local.
+
+---
+
 ## [2.2.0] - 2026-05-28
 
 ### Seguridad Avanzada

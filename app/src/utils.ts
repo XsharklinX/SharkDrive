@@ -150,7 +150,8 @@ export const matchesAdvancedSearch = (
     const folderName = folderNameResolver?.(typeof file.folder_id === 'number' ? file.folder_id : null)?.toLowerCase() ?? '';
     const tags = (file.tags ?? []).map((tag) => tag.toLowerCase());
     const note = file.quick_note?.toLowerCase() ?? '';
-    const textHaystack = `${name} ${tags.join(' ')} ${note}`;
+    const pdfText = file.pdf_text?.toLowerCase() ?? '';
+    const textHaystack = `${name} ${tags.join(' ')} ${note} ${pdfText}`;
 
     if (filters.text.length > 0 && !filters.text.every((token) => textHaystack.includes(token))) {
         return false;

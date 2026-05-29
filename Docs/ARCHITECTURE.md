@@ -1,7 +1,7 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 2.2.0  
-> **Last updated:** 2026-05-28  
+> **Version:** 2.3.0
+> **Last updated:** 2026-05-28
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 
 ---
@@ -189,7 +189,9 @@ The old monolithic `fs.rs` has been split into:
 
 #### Preview / media
 
-- `preview.rs`: thumbnails, previews, and media-oriented fetches
+- `preview.rs`: thumbnails, previews, PDF text indexing, and media-oriented fetches
+- video thumbnails first use Telegram embedded thumbs; if missing, SharkDrive can use `ffmpeg` from PATH to extract and cache a PNG frame
+- opened PDFs can be indexed locally with `pdf-extract`; the frontend stores searchable text snippets in localStorage for local search
 - `streaming.rs`: streaming token flow
 - `server.rs`: local HTTP endpoints for preview/stream/share access
 
@@ -264,5 +266,4 @@ These are the active product and engineering priorities:
 - finish extracting dashboard state into hooks
 - revisit updater only when SharkDrive has its own real release feed
 - add more tests around caption parsing and encryption behavior as features evolve
-
 

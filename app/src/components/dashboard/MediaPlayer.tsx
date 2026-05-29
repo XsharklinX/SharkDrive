@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Radio, Shield, Video } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, ChevronLeft, ChevronRight, Radio, Shield, Video, Shuffle } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { isVideoFile, isAudioFile, resolveFileFolderId } from '../../utils';
@@ -13,11 +13,14 @@ interface MediaPlayerProps {
     currentIndex?: number;
     totalItems?: number;
     activeFolderId: number | null;
+    playlist?: TelegramFile[];
+    onSelectTrack?: (file: TelegramFile) => void;
 }
 
-export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, totalItems, activeFolderId }: MediaPlayerProps) {
+export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, totalItems, activeFolderId, playlist = [], onSelectTrack }: MediaPlayerProps) {
     const [streamToken, setStreamToken] = useState<string | null>(null);
     const [posterSrc, setPosterSrc] = useState<string | null>(null);
+    const [shuffle, setShuffle] = useState(false);
 
     useEffect(() => {
         tauriApi.getStreamToken().then(setStreamToken).catch(() => {});
@@ -46,6 +49,19 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
 
     const isVideo = isVideoFile(file.name);
     const isAudio = isAudioFile(file.name);
+    const audioPlaylist = useMemo(() => playlist.filter((item) => isAudioFile(item.name)), [playlist]);
+
+    const handleEnded = () => {
+        if (isAudio && shuffle && audioPlaylist.length > 1 && onSelectTrack) {
+            const alternatives = audioPlaylist.filter((item) => item.id !== file.id);
+            const next = alternatives[Math.floor(Math.random() * alternatives.length)];
+            if (next) {
+                onSelectTrack(next);
+                return;
+            }
+        }
+        onNext?.();
+    };
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -159,7 +175,7 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
                             <div className="mb-8 flex h-32 w-32 items-center justify-center rounded-full border border-telegram-border bg-telegram-surface shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 text-telegram-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
                             </div>
-                            <audio src={streamUrl} controls autoPlay className="w-full max-w-md px-4" />
+                            <audio src={streamUrl} controls autoPlay preload="auto" onEnded={handleEnded} className="w-full max-w-md px-4" />
                         </div>
                     ) : (
                         <div className="text-telegram-text">Unsupported media type</div>
@@ -171,10 +187,37 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
                         <h3 className="text-sm font-semibold text-telegram-text">{file.name}</h3>
                         <p className="text-xs text-telegram-subtext">Streaming from Telegram</p>
                     </div>
-                    <p className="text-xs text-telegram-subtext">
-                        {typeof currentIndex === 'number' && typeof totalItems === 'number' && totalItems > 0 ? `${currentIndex + 1}/${totalItems}` : 'Live'}
-                    </p>
+                    <div className="flex items-center gap-2">
+                        {isAudio && audioPlaylist.length > 1 && (
+                            <button
+                                onClick={() => setShuffle((value) => !value)}
+                                className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition ${shuffle ? 'border-telegram-primary/40 bg-telegram-primary/15 text-telegram-primary' : 'border-telegram-border text-telegram-subtext hover:text-telegram-text'}`}
+                                title="Shuffle playlist"
+                            >
+                                <Shuffle className="h-3.5 w-3.5" />
+                                Shuffle
+                            </button>
+                        )}
+                        <p className="text-xs text-telegram-subtext">
+                            {typeof currentIndex === 'number' && typeof totalItems === 'number' && totalItems > 0 ? `${currentIndex + 1}/${totalItems}` : 'Live'}
+                        </p>
+                    </div>
                 </div>
+
+                {isAudio && audioPlaylist.length > 1 && (
+                    <div className="max-h-44 overflow-auto rounded-lg border border-telegram-border bg-telegram-surface/90 p-2 custom-scrollbar">
+                        {audioPlaylist.map((track) => (
+                            <button
+                                key={track.id}
+                                onClick={() => onSelectTrack?.(track)}
+                                className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs transition ${track.id === file.id ? 'bg-telegram-primary/15 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
+                            >
+                                <span className="truncate">{track.name}</span>
+                                <span className="ml-3 shrink-0">{track.sizeStr}</span>
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );
