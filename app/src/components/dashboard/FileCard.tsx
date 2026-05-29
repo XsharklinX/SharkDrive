@@ -71,23 +71,37 @@ export function FileCard({
     const [videoReady, setVideoReady] = useState(false);
     const [videoError, setVideoError] = useState(false);
     const createdLabel = getCreatedLabel(file.created_at);
-    const supportsThumbnail = !isFolder && (isImageFile(file.name) || isVideoFile(file.name));
+    // Videos use the LAN stream URL for preview — getThumbnail downloads the whole video, so skip it.
+    const supportsThumbnail = !isFolder && isImageFile(file.name);
     const isVideo = isVideoFile(file.name);
     const resolvedFolderId = resolveFileFolderId(file, activeFolderId ?? null);
     const videoPreviewUrl = isVideo && streamToken
         ? `http://localhost:14200/stream/${resolvedFolderId ?? 'home'}/${file.id}?token=${streamToken}`
         : null;
 
+    // IntersectionObserver: only load thumbnail when the card is actually visible
+    const cardRef = useRef<HTMLDivElement>(null);
+    const [isVisible, setIsVisible] = useState(false);
+
     useEffect(() => {
-        if (isFolder || !supportsThumbnail) return;
+        const el = cardRef.current;
+        if (!el || !supportsThumbnail) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); observer.disconnect(); } },
+            { threshold: 0.1, rootMargin: '100px' }
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [supportsThumbnail]);
+
+    useEffect(() => {
+        if (!isVisible || isFolder || !supportsThumbnail) return;
 
         let cancelled = false;
         setThumbnail(null);
-        setVideoReady(false);
-        setVideoError(false);
 
-        // Stagger so all cards don't hammer the Telegram API at once
-        const stagger = (file.id % 6) * 150;
+        // Small stagger so cards visible at once don't all fire simultaneously
+        const stagger = (file.id % 4) * 80;
         const timer = setTimeout(async () => {
             if (cancelled) return;
             setThumbnailLoading(true);
@@ -126,6 +140,7 @@ export function FileCard({
 
     return (
         <div
+            ref={cardRef}
             className="relative"
             onContextMenu={onContextMenu}
             onClick={onClick}

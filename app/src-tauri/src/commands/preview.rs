@@ -478,31 +478,17 @@ pub async fn cmd_get_thumbnail(
     }
 
     let folder_key = folder_cache_key(folder_id);
-    let cache_prefix = format!("{}_{}.", folder_key, message_id);
 
-    // Check for any cached thumbnail for this message
-    // Look for existing cached file
-    if let Ok(entries) = std::fs::read_dir(&cache_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&cache_prefix) {
-                // Found cached thumbnail, return as base64
-                if let Ok(bytes) = std::fs::read(entry.path()) {
-                    let ext = name.rsplit('.').next().unwrap_or("jpg");
-                    let mime = match ext {
-                        "png" => "image/png",
-                        "gif" => "image/gif",
-                        "webp" => "image/webp",
-                        _ => "image/jpeg",
-                    };
-                    let b64 = general_purpose::STANDARD.encode(&bytes);
-                    return Ok(format!("data:{};base64,{}", mime, b64));
-                }
-            }
+    // O(1) direct path check — resized thumbnails are always stored as .png
+    let cached_path = cache_dir.join(format!("{}_{}.png", folder_key, message_id));
+    if cached_path.exists() {
+        if let Ok(bytes) = std::fs::read(&cached_path) {
+            let b64 = general_purpose::STANDARD.encode(&bytes);
+            return Ok(format!("data:image/png;base64,{}", b64));
         }
     }
 
-    // No cache, need to fetch from Telegram
+    // No cache — fetch from Telegram
     let client_opt = { state.client.lock().await.clone() };
     if client_opt.is_none() {
         return Ok("".to_string());
@@ -514,78 +500,74 @@ pub async fn cmd_get_thumbnail(
         .get_messages_by_id(&peer, &[message_id])
         .await
         .map_err(|e| e.to_string())?;
+
     if let Some(m) = messages.into_iter().flatten().next() {
         if let Some(media) = m.media() {
-            // Only get thumbnails for photos and media documents with embedded thumbs.
-            let fallback_mime = match &media {
-                Media::Photo(_) => "image/jpeg",
-                Media::Document(d) => {
-                    let mime = d.mime_type().unwrap_or("");
-                    if mime.starts_with("image/") || mime.starts_with("video/") {
-                        mime
-                    } else {
-                        // Not visual media, return empty - FileCard will show icon.
-                        return Ok("".to_string());
-                    }
-                }
-                _ => "",
+            let is_image = match &media {
+                Media::Photo(_) => true,
+                Media::Document(d) => d.mime_type().map(|m| m.starts_with("image/")).unwrap_or(false),
+                _ => false,
+            };
+            let is_video = match &media {
+                Media::Document(d) => d.mime_type().map(|m| m.starts_with("video/")).unwrap_or(false),
+                _ => false,
             };
 
-            if !fallback_mime.is_empty() {
-                let save_path = cache_dir.join(format!("{}_{}.png", folder_key, message_id));
-                let temp_path = cache_dir.join(format!("{}_{}.orig", folder_key, message_id));
-                let temp_path_str = temp_path.to_string_lossy().to_string();
+            if !is_image && !is_video {
+                return Ok("".to_string());
+            }
 
-                let download_ok = match &media {
-                    Media::Document(d) if fallback_mime.starts_with("video/") => {
-                        if try_download_document_thumb(&client, d, &temp_path).await? {
-                            true
-                        } else if (d.size() as i64) <= VIDEO_THUMB_MAX_BYTES {
-                            let video_path = cache_dir.join(format!("{}_{}.video", folder_key, message_id));
-                            let downloaded = download_media_to_path(&client, &media, &video_path).await.is_ok();
-                            if downloaded {
-                                let extracted = run_ffmpeg_video_thumbnail(&video_path, &save_path).is_ok();
-                                let _ = std::fs::remove_file(&video_path);
-                                if extracted {
-                                    if let Ok(bytes) = std::fs::read(&save_path) {
-                                        let _ = std::fs::remove_file(&temp_path);
-                                        let b64 = general_purpose::STANDARD.encode(&bytes);
-                                        return Ok(format!("data:image/png;base64,{}", b64));
-                                    }
-                                }
-                            }
-                            false
-                        } else {
-                            false
-                        }
-                    }
-                    Media::Document(d) if fallback_mime.starts_with("image/") => {
-                        if try_download_document_thumb(&client, d, &temp_path).await? {
-                            true
-                        } else {
-                            client.download_media(&media, &temp_path_str).await.is_ok()
-                        }
-                    }
-                    _ => client.download_media(&media, &temp_path_str).await.is_ok(),
-                };
+            let save_path = cache_dir.join(format!("{}_{}.png", folder_key, message_id));
+            let temp_path = cache_dir.join(format!("{}_{}.orig", folder_key, message_id));
 
-                if download_ok {
-                    let _ = resize_image_thumbnail(&temp_path, &save_path);
-                    let final_path = if save_path.exists() {
-                        &save_path
-                    } else {
-                        &temp_path
+            let download_ok = match &media {
+                Media::Document(d) if is_video => {
+                    // Only try embedded thumbnail — never download the full video file
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        try_download_document_thumb(&client, d, &temp_path),
+                    ).await {
+                        Ok(Ok(found)) => found,
+                        _ => false,
+                    }
+                }
+                Media::Document(d) if is_image => {
+                    // Try embedded thumb first (fast), fall back to full download (small images)
+                    let has_thumb = match tokio::time::timeout(
+                        std::time::Duration::from_secs(5),
+                        try_download_document_thumb(&client, d, &temp_path),
+                    ).await {
+                        Ok(Ok(v)) => v,
+                        _ => false,
                     };
-                    if let Ok(bytes) = std::fs::read(final_path) {
-                        let _ = std::fs::remove_file(&temp_path);
-                        let mime = if final_path == &save_path {
-                            "image/png"
-                        } else {
-                            fallback_mime
-                        };
-                        let b64 = general_purpose::STANDARD.encode(&bytes);
-                        return Ok(format!("data:{};base64,{}", mime, b64));
+                    if has_thumb {
+                        true
+                    } else if d.size() <= 5 * 1024 * 1024 {
+                        // Full download only for images ≤ 5 MB
+                        let path_str = temp_path.to_string_lossy().to_string();
+                        client.download_media(&media, &path_str).await.is_ok()
+                    } else {
+                        false
                     }
+                }
+                // Photo
+                _ => {
+                    let path_str = temp_path.to_string_lossy().to_string();
+                    client.download_media(&media, &path_str).await.is_ok()
+                }
+            };
+
+            if download_ok {
+                let _ = resize_image_thumbnail(&temp_path, &save_path);
+                let (read_path, mime) = if save_path.exists() {
+                    (&save_path, "image/png")
+                } else {
+                    (&temp_path, "image/jpeg")
+                };
+                if let Ok(bytes) = std::fs::read(read_path) {
+                    let _ = std::fs::remove_file(&temp_path);
+                    let b64 = general_purpose::STANDARD.encode(&bytes);
+                    return Ok(format!("data:{};base64,{}", mime, b64));
                 }
             }
         }

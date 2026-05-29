@@ -225,18 +225,34 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         return () => window.removeEventListener('paste', handlePaste);
     }, []);
 
-    const { data: allFiles = [], isLoading, error } = useQuery({
-        queryKey: ['files', activeFolderId],
-        queryFn: () => tauriApi.getFiles(activeFolderId).then((res): TelegramFile[] => res.map((f) => ({
-            ...f,
-            sizeStr: formatBytes(f.size),
-            type: (f.icon_type === 'folder' ? 'folder' : 'file') as 'folder' | 'file',
-        }))),
+    const mapFileList = (res: TelegramFile[]): TelegramFile[] => res.map((f) => ({
+        ...f,
+        sizeStr: formatBytes(f.size),
+        type: (f.icon_type === 'folder' ? 'folder' : 'file') as 'folder' | 'file',
+    }));
+
+    // Instant: reads from local index, no Telegram call
+    const { data: cachedFiles } = useQuery({
+        queryKey: ['cached-files', activeFolderId],
+        queryFn: () => tauriApi.getCachedFiles(activeFolderId).then(mapFileList),
         enabled: !!store && activeFolderId !== RECENT_FOLDER_ID,
-        staleTime: 30 * 1000,
+        staleTime: Infinity,
+        gcTime: 10 * 60 * 1000,
+    });
+
+    // Background refresh from Telegram; uses cachedFiles as placeholder so UI shows instantly
+    const { data: allFiles = cachedFiles ?? [], isLoading, error } = useQuery({
+        queryKey: ['files', activeFolderId],
+        queryFn: () => tauriApi.getFiles(activeFolderId).then(mapFileList),
+        enabled: !!store && activeFolderId !== RECENT_FOLDER_ID,
+        placeholderData: cachedFiles,
+        staleTime: 60 * 1000,
         gcTime: 5 * 60 * 1000,
         refetchOnWindowFocus: false,
-        retry: 2,
+        retry: (failureCount, err) => {
+            if (String(err).includes('not connected')) return false;
+            return failureCount < 2;
+        },
         retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     });
 
@@ -436,7 +452,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         const newName = `${base} (2)${ext}`;
         try {
             await tauriApi.duplicateFile(file.id, folderId, newName);
-            queryClient.invalidateQueries({ queryKey: ['files', folderId] });
+            queryClient.invalidateQueries({ queryKey: ['files', folderId] }); queryClient.invalidateQueries({ queryKey: ['cached-files', folderId] });
             toast.success(`Duplicated as "${newName}"`);
         } catch (e) {
             toast.error(`Duplicate failed: ${String(e)}`);
@@ -502,6 +518,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         } else {
             await tauriApi.renameFile(renameTarget.id, resolveFileFolderId(renameTarget, activeFolderId), newName);
             queryClient.invalidateQueries({ queryKey: ['files'] });
+            queryClient.invalidateQueries({ queryKey: ['cached-files'] });
             recordActivity({
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 type: 'rename',
@@ -548,6 +565,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 await tauriApi.moveFiles(idsToMove, activeFolderId, targetFolderId);
 
                 queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
+                queryClient.invalidateQueries({ queryKey: ['cached-files', activeFolderId] });
 
                 if (selectedIds.includes(fileId)) setSelectedIds([]);
 
@@ -587,6 +605,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         } else {
             await tauriApi.renameFile(file.id, resolveFileFolderId(file, activeFolderId), newName);
             queryClient.invalidateQueries({ queryKey: ['files'] });
+            queryClient.invalidateQueries({ queryKey: ['cached-files'] });
             toast.success(`Renamed to "${newName}"`);
         }
     }, [activeFolderId, handleRenameFolder, queryClient]);
@@ -850,7 +869,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 )}
                 <FileExplorer
                     files={displayedFiles}
-                    loading={isLoading || isSearching}
+                    loading={(isLoading && !cachedFiles?.length) || isSearching}
                     error={error}
                     emptyVariant={searchTerm.length > 2 ? 'search' : showFavoritesOnly ? 'favorites' : 'folder'}
                     searchTerm={searchTerm}

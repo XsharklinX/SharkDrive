@@ -131,6 +131,12 @@ export const tauriApi = {
     exportCsv(savePath: string) {
         return invoke<void>('cmd_export_csv', { savePath });
     },
+    getCachedFiles(folderId: number | null) {
+        return invoke<TelegramFile[]>('cmd_get_cached_files', { folderId });
+    },
+    getCachedFolders() {
+        return invoke<TelegramFolder[]>('cmd_get_cached_folders');
+    },
     duplicateFile(messageId: number, folderId: number | null, newName: string) {
         return invoke<boolean>('cmd_duplicate_file', { messageId, folderId, newName });
     },

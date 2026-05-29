@@ -562,6 +562,16 @@ pub async fn cmd_get_all_indexed_files(
     Ok(index_state.get_all_files())
 }
 
+/// Returns files from the local index without touching Telegram.
+/// Call this first to show data instantly; let cmd_get_files refresh in background.
+#[tauri::command]
+pub fn cmd_get_cached_files(
+    folder_id: Option<i64>,
+    index_state: State<'_, PersistentIndexState>,
+) -> Vec<FileMetadata> {
+    index_state.get_files(folder_id)
+}
+
 #[tauri::command]
 pub async fn cmd_export_csv(
     save_path: String,

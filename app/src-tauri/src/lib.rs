@@ -197,6 +197,8 @@ pub fn run() {
             commands::cmd_export_csv,
             commands::cmd_duplicate_file,
             commands::cmd_batch_rename,
+            commands::cmd_get_cached_files,
+            commands::cmd_get_cached_folders,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

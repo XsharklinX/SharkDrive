@@ -157,6 +157,15 @@ pub async fn cmd_delete_folder(
     Ok(true)
 }
 
+/// Returns folders from the local index without touching Telegram.
+/// Shows the sidebar instantly on startup; let cmd_scan_folders refresh in background.
+#[tauri::command]
+pub fn cmd_get_cached_folders(
+    index_state: State<'_, PersistentIndexState>,
+) -> Vec<FolderMetadata> {
+    index_state.get_folders()
+}
+
 #[tauri::command]
 pub async fn cmd_scan_folders(
     state: State<'_, TelegramState>,
