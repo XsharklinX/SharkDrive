@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Version](https://img.shields.io/badge/version-2.1.0-brightgreen)
+![Version](https://img.shields.io/badge/version-2.2.0-brightgreen)
 
 ---
 
@@ -52,8 +52,11 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 ### Security and Encryption
 
 - AES-256-GCM encryption before upload, auto-decrypted on download
+- PBKDF2-HMAC-SHA256 key derivation for new encrypted uploads
 - Encryption is optional, configurable per-folder or globally
 - Key derived from a user-set password — never stored on disk
+- Auto-lock clears the in-memory encryption key after inactivity
+- Optional 6-digit PIN protection for the saved Telegram session file
 - Encrypted files clearly marked in the UI (badge, icon)
 - Share links protected by a 64-char random token
 
@@ -174,4 +177,5 @@ MIT — free to use, modify, and distribute.
 ---
 
 *SharkDrive is not affiliated with Telegram FZ-LLC. Use in accordance with Telegram's Terms of Service.*
+
 

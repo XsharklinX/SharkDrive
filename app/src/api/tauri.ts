@@ -8,6 +8,18 @@ export const tauriApi = {
     connect(apiId: number) {
         return invoke<boolean>('cmd_connect', { apiId });
     },
+    isSessionProtected() {
+        return invoke<boolean>('cmd_is_session_protected');
+    },
+    unlockSessionPin(pin: string) {
+        return invoke<void>('cmd_unlock_session_pin', { pin });
+    },
+    setSessionPin(pin: string) {
+        return invoke<void>('cmd_set_session_pin', { pin });
+    },
+    clearSessionPin(pin: string) {
+        return invoke<void>('cmd_clear_session_pin', { pin });
+    },
     logout() {
         return invoke<boolean>('cmd_logout');
     },
@@ -91,6 +103,15 @@ export const tauriApi = {
     },
     getEncryptionStatus() {
         return invoke<boolean>('cmd_get_encryption_status');
+    },
+    clearEncryptionKey() {
+        return invoke<void>('cmd_clear_encryption_key');
+    },
+    touchEncryptionActivity() {
+        return invoke<boolean>('cmd_touch_encryption_activity');
+    },
+    setEncryptionAutoLock(minutes: number | null) {
+        return invoke<void>('cmd_set_encryption_auto_lock', { minutes });
     },
     saveClipboardImage(bytes: number[], filename: string) {
         return invoke<string>('cmd_save_clipboard_image', { bytes, filename });

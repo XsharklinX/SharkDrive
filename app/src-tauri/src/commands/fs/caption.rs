@@ -10,6 +10,7 @@ pub(crate) struct CaptionMetadata {
     pub original_size: Option<u64>,
     pub sha256: Option<String>,
     pub encrypted: bool,
+    pub encryption_version: u8,
 }
 
 pub(crate) const FOLDER_MARKER: &str = "[sharkdrive-folder]";
@@ -27,6 +28,12 @@ pub(crate) fn parse_caption_metadata(text: &str) -> CaptionMetadata {
         {
             metadata.display_name = Some(value.to_string());
             metadata.encrypted = true;
+            metadata.encryption_version = 1;
+            continue;
+        }
+        if token == "[SD-KDF:PBKDF2]" || token == "[SD-ENC-V2]" {
+            metadata.encrypted = true;
+            metadata.encryption_version = 2;
             continue;
         }
         if let Some(value) = token
@@ -61,7 +68,7 @@ pub(crate) fn build_caption(
     sha256: &str,
 ) -> String {
     let name_marker = if encrypted {
-        format!("[SD-ENC:{}]", name)
+        format!("[SD-ENC:{}][SD-KDF:PBKDF2]", name)
     } else {
         format!("[SD_NAME:{}]", name)
     };
@@ -189,6 +196,14 @@ mod tests {
         assert_eq!(metadata.original_size, Some(12345));
         assert_eq!(metadata.sha256.as_deref(), Some("abcdef123"));
         assert!(metadata.encrypted);
+        assert_eq!(metadata.encryption_version, 2);
+    }
+
+    #[test]
+    fn parses_legacy_encrypted_caption_as_v1() {
+        let metadata = parse_caption_metadata("[SD-ENC:old.zip][SD_SIZE:10][SD_HASH:abc]");
+        assert!(metadata.encrypted);
+        assert_eq!(metadata.encryption_version, 1);
     }
 
     #[test]

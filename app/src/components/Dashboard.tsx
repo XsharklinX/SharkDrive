@@ -140,6 +140,34 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         if (store) store.set('autoSyncInterval', autoSyncInterval).then(() => store.save());
     }, [store, autoSyncInterval]);
 
+    useEffect(() => {
+        const savedAutoLock = Number(localStorage.getItem('sharkdrive.encryptionAutoLockMinutes') || '15');
+        void tauriApi.setEncryptionAutoLock(savedAutoLock > 0 ? savedAutoLock : null);
+    }, []);
+
+    useEffect(() => {
+        if (!encryptionEnabled) return;
+        let lastTouch = 0;
+        const touch = () => {
+            const now = Date.now();
+            if (now - lastTouch < 10_000) return;
+            lastTouch = now;
+            void tauriApi.touchEncryptionActivity().then((unlocked) => {
+                if (!unlocked) setEncryptionEnabled(false);
+            }).catch(() => {});
+        };
+        const events = ['pointerdown', 'keydown', 'wheel', 'drop'];
+        events.forEach((eventName) => window.addEventListener(eventName, touch, { passive: true }));
+        const interval = window.setInterval(() => {
+            void tauriApi.getEncryptionStatus().then(setEncryptionEnabled).catch(() => {});
+        }, 30_000);
+        touch();
+        return () => {
+            events.forEach((eventName) => window.removeEventListener(eventName, touch));
+            window.clearInterval(interval);
+        };
+    }, [encryptionEnabled, setEncryptionEnabled]);
+
     const { nextSyncIn } = useAutoSync(autoSyncInterval, handleSyncFolders);
 
     useEffect(() => {
@@ -749,6 +777,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 getFolderColor={organization.getFolderColor}
                 onTogglePinnedFolder={organization.togglePinnedFolder}
                 onSetFolderColor={organization.setFolderColor}
+                encryptionUnlocked={encryptionEnabled}
+                onLockVault={async () => {
+                    await tauriApi.clearEncryptionKey();
+                    setEncryptionEnabled(false);
+                    toast.info('Encryption vault locked');
+                }}
             />
 
             <main className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.015] to-transparent" onClick={(e) => {
@@ -794,6 +828,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onToggleFavoritesFilter={() => setShowFavoritesOnly(v => !v)}
                     favoriteCount={favoriteIds.size}
                     onFileUpload={handleManualUpload}
+                    onEncryptedFileUpload={() => handleManualUpload(true)}
                     onFolderUpload={handleFolderUpload}
                     onOpenSettings={() => setShowSettings(true)}
                     nextSyncIn={autoSyncInterval > 0 ? nextSyncIn : null}

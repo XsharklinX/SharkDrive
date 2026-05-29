@@ -40,6 +40,9 @@ export function SettingsModal({
     const [autostart, setAutostart] = useState(false);
     const [password, setPassword] = useState('');
     const [showPass, setShowPass] = useState(false);
+    const [autoLockMinutes, setAutoLockMinutes] = useState(15);
+    const [sessionPin, setSessionPin] = useState('');
+    const [sessionProtected, setSessionProtected] = useState(false);
     const [backupFolders, setBackupFolders] = useState<BackupFolder[]>([]);
     const [loading, setLoading] = useState(false);
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
@@ -51,6 +54,9 @@ export function SettingsModal({
         invoke<boolean>('cmd_get_close_to_tray').then(setCloseToTray).catch(() => {});
         invoke<boolean>('cmd_get_autostart').then(setAutostart).catch(() => {});
         invoke<BackupFolder[]>('cmd_get_backup_folders').then(setBackupFolders).catch(() => {});
+        tauriApi.isSessionProtected().then(setSessionProtected).catch(() => {});
+        const savedAutoLock = localStorage.getItem('sharkdrive.encryptionAutoLockMinutes');
+        if (savedAutoLock) setAutoLockMinutes(Number(savedAutoLock) || 15);
     }, []);
 
     useEffect(() => {
@@ -110,6 +116,35 @@ export function SettingsModal({
         await invoke('cmd_clear_encryption_key');
         onEncryptionToggle(false);
         toast.info('Encryption disabled');
+    };
+
+    const handleAutoLockChange = async (minutes: number) => {
+        setAutoLockMinutes(minutes);
+        localStorage.setItem('sharkdrive.encryptionAutoLockMinutes', String(minutes));
+        await invoke('cmd_set_encryption_auto_lock', { minutes: minutes > 0 ? minutes : null });
+        toast.success(minutes > 0 ? `Vault auto-lock set to ${minutes} min` : 'Vault auto-lock disabled');
+    };
+
+    const handleProtectSession = async () => {
+        try {
+            await tauriApi.setSessionPin(sessionPin);
+            setSessionProtected(true);
+            setSessionPin('');
+            toast.success('Telegram session protected with PIN');
+        } catch (error) {
+            toast.error(`Session PIN failed: ${error}`);
+        }
+    };
+
+    const handleClearSessionPin = async () => {
+        try {
+            await tauriApi.clearSessionPin(sessionPin);
+            setSessionProtected(false);
+            setSessionPin('');
+            toast.info('Session PIN removed');
+        } catch (error) {
+            toast.error(`Could not remove PIN: ${error}`);
+        }
     };
 
     const handleAddBackupFolder = async () => {
@@ -373,6 +408,52 @@ export function SettingsModal({
                                         >
                                             Disable Encryption
                                         </button>
+                                        <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                            <label className="mb-2 block text-xs font-medium text-telegram-text">Auto-lock after inactivity</label>
+                                            <select
+                                                value={autoLockMinutes}
+                                                onChange={(event) => void handleAutoLockChange(Number(event.target.value))}
+                                                className="w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                            >
+                                                <option value={0}>Disabled</option>
+                                                <option value={5}>5 minutes</option>
+                                                <option value={15}>15 minutes</option>
+                                                <option value={30}>30 minutes</option>
+                                                <option value={60}>60 minutes</option>
+                                            </select>
+                                        </div>
+                                        <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                            <label className="mb-2 block text-xs font-medium text-telegram-text">Protected Telegram session PIN</label>
+                                            <p className="mb-3 text-xs text-telegram-subtext">
+                                                Encrypts the saved Telegram session file with a 6-digit PIN. If enabled, SharkDrive asks for it before auto-login.
+                                            </p>
+                                            <input
+                                                inputMode="numeric"
+                                                maxLength={6}
+                                                value={sessionPin}
+                                                onChange={(event) => setSessionPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                                                className="w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm tracking-[0.25em] text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                                placeholder="000000"
+                                            />
+                                            <div className="mt-3 flex gap-2">
+                                                <button
+                                                    onClick={handleProtectSession}
+                                                    disabled={sessionPin.length !== 6}
+                                                    className="flex-1 rounded-lg bg-telegram-primary/12 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/18 disabled:opacity-50"
+                                                >
+                                                    {sessionProtected ? 'Update PIN' : 'Protect Session'}
+                                                </button>
+                                                {sessionProtected && (
+                                                    <button
+                                                        onClick={handleClearSessionPin}
+                                                        disabled={sessionPin.length !== 6}
+                                                        className="flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/18 disabled:opacity-50"
+                                                    >
+                                                        Remove PIN
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">

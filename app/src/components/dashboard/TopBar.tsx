@@ -23,6 +23,7 @@ interface TopBarProps {
     onToggleFavoritesFilter: () => void;
     favoriteCount: number;
     onFileUpload: () => void;
+    onEncryptedFileUpload: () => void;
     onFolderUpload: () => void;
     onOpenSettings: () => void;
     nextSyncIn?: number | null;
@@ -53,6 +54,7 @@ export function TopBar({
     onToggleFavoritesFilter,
     favoriteCount,
     onFileUpload,
+    onEncryptedFileUpload,
     onFolderUpload,
     onOpenSettings,
     nextSyncIn,
@@ -249,6 +251,12 @@ export function TopBar({
                             )}
                         </span>
                     </button>
+                    <button onClick={onEncryptedFileUpload} className="rounded-lg border border-yellow-300/25 px-3 py-2 text-sm text-yellow-200 transition hover:bg-yellow-300/10" title="Add encrypted files">
+                        <span className="flex items-center gap-2">
+                            <ShieldIcon />
+                            Add Encrypted
+                        </span>
+                    </button>
                     <button onClick={onFolderUpload} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Upload Folder">
                         <span className="flex items-center gap-2">
                             <FolderOpen className="h-4 w-4" />
@@ -264,5 +272,13 @@ export function TopBar({
                 </div>
             </div>
         </header>
+    );
+}
+
+function ShieldIcon() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 3l7 3v5c0 5-3.2 8.4-7 10-3.8-1.6-7-5-7-10V6l7-3z" />
+        </svg>
     );
 }

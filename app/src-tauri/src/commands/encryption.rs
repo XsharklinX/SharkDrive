@@ -2,20 +2,99 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
+use pbkdf2::pbkdf2_hmac;
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
+const PBKDF2_ITERATIONS: u32 = 100_000;
+const PBKDF2_SALT: &[u8] = b"SharkDrive encryption v2";
+
 pub struct EncryptionState {
-    pub key: Mutex<Option<Vec<u8>>>,
+    key_v2: Mutex<Option<Vec<u8>>>,
+    legacy_key: Mutex<Option<Vec<u8>>>,
+    last_activity_epoch_ms: Mutex<Option<u128>>,
+    auto_lock_minutes: Mutex<Option<u64>>,
 }
 
 impl EncryptionState {
     pub fn new() -> Self {
         Self {
-            key: Mutex::new(None),
+            key_v2: Mutex::new(None),
+            legacy_key: Mutex::new(None),
+            last_activity_epoch_ms: Mutex::new(None),
+            auto_lock_minutes: Mutex::new(None),
         }
     }
+
+    fn now_ms() -> u128 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0)
+    }
+
+    pub fn touch(&self) {
+        if let Ok(mut last_activity) = self.last_activity_epoch_ms.lock() {
+            *last_activity = Some(Self::now_ms());
+        }
+    }
+
+    pub fn clear(&self) -> Result<(), String> {
+        *self.key_v2.lock().map_err(|e| e.to_string())? = None;
+        *self.legacy_key.lock().map_err(|e| e.to_string())? = None;
+        *self.last_activity_epoch_ms.lock().map_err(|e| e.to_string())? = None;
+        Ok(())
+    }
+
+    pub fn purge_if_idle(&self) -> Result<bool, String> {
+        let minutes = *self.auto_lock_minutes.lock().map_err(|e| e.to_string())?;
+        let Some(minutes) = minutes.filter(|value| *value > 0) else {
+            return Ok(false);
+        };
+        let last_activity = *self.last_activity_epoch_ms.lock().map_err(|e| e.to_string())?;
+        let Some(last_activity) = last_activity else {
+            return Ok(false);
+        };
+        let idle_ms = Self::now_ms().saturating_sub(last_activity);
+        if idle_ms >= minutes as u128 * 60_000 {
+            self.clear()?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub fn is_unlocked(&self) -> Result<bool, String> {
+        self.purge_if_idle()?;
+        Ok(self.key_v2.lock().map_err(|e| e.to_string())?.is_some())
+    }
+
+    pub fn active_key(&self, version: u8) -> Result<Option<Vec<u8>>, String> {
+        self.purge_if_idle()?;
+        self.touch();
+        if version >= 2 {
+            return Ok(self.key_v2.lock().map_err(|e| e.to_string())?.clone());
+        }
+        Ok(self
+            .legacy_key
+            .lock()
+            .map_err(|e| e.to_string())?
+            .clone()
+            .or_else(|| self.key_v2.lock().ok().and_then(|key| key.clone())))
+    }
+}
+
+fn derive_master_key_v2(password: &str) -> Vec<u8> {
+    let mut key = [0_u8; 32];
+    pbkdf2_hmac::<Sha256>(password.as_bytes(), PBKDF2_SALT, PBKDF2_ITERATIONS, &mut key);
+    key.to_vec()
+}
+
+fn derive_legacy_key(password: &str) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(password.as_bytes());
+    hasher.finalize().to_vec()
 }
 
 #[tauri::command]
@@ -23,22 +102,39 @@ pub async fn cmd_set_encryption_key(
     password: String,
     state: State<'_, EncryptionState>,
 ) -> Result<(), String> {
-    let mut hasher = Sha256::new();
-    hasher.update(password.as_bytes());
-    let key = hasher.finalize().to_vec();
-    *state.key.lock().map_err(|e| e.to_string())? = Some(key);
+    *state.key_v2.lock().map_err(|e| e.to_string())? = Some(derive_master_key_v2(&password));
+    *state.legacy_key.lock().map_err(|e| e.to_string())? = Some(derive_legacy_key(&password));
+    state.touch();
     Ok(())
 }
 
 #[tauri::command]
 pub async fn cmd_clear_encryption_key(state: State<'_, EncryptionState>) -> Result<(), String> {
-    *state.key.lock().map_err(|e| e.to_string())? = None;
-    Ok(())
+    state.clear()
 }
 
 #[tauri::command]
 pub async fn cmd_get_encryption_status(state: State<'_, EncryptionState>) -> Result<bool, String> {
-    Ok(state.key.lock().map_err(|e| e.to_string())?.is_some())
+    state.is_unlocked()
+}
+
+#[tauri::command]
+pub async fn cmd_touch_encryption_activity(state: State<'_, EncryptionState>) -> Result<bool, String> {
+    if state.is_unlocked()? {
+        state.touch();
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+#[tauri::command]
+pub async fn cmd_set_encryption_auto_lock(
+    minutes: Option<u64>,
+    state: State<'_, EncryptionState>,
+) -> Result<(), String> {
+    *state.auto_lock_minutes.lock().map_err(|e| e.to_string())? = minutes;
+    state.touch();
+    Ok(())
 }
 
 /// Derives a folder-specific key so each folder uses a unique encryption key
@@ -82,7 +178,7 @@ pub fn decrypt_file(key_bytes: &[u8], input_path: &str, output_path: &str) -> Re
 
 #[cfg(test)]
 mod tests {
-    use super::{decrypt_file, derive_folder_key, encrypt_file};
+    use super::{decrypt_file, derive_folder_key, derive_master_key_v2, encrypt_file};
     use sha2::{Digest, Sha256};
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -97,7 +193,7 @@ mod tests {
 
     #[test]
     fn folder_keys_change_per_folder() {
-        let master = Sha256::digest(b"master-password").to_vec();
+        let master = derive_master_key_v2("master-password");
         assert_ne!(derive_folder_key(&master, 1), derive_folder_key(&master, 2));
     }
 
@@ -106,7 +202,7 @@ mod tests {
         let input = temp_file("input.txt");
         let encrypted = temp_file("encrypted.bin");
         let output = temp_file("output.txt");
-        let key = Sha256::digest(b"vault-password").to_vec();
+        let key = derive_master_key_v2("vault-password");
         let payload = b"SharkDrive encryption test payload";
 
         std::fs::write(&input, payload).unwrap();
@@ -130,8 +226,8 @@ mod tests {
         let input = temp_file("wrong_key_input.txt");
         let encrypted = temp_file("wrong_key_encrypted.bin");
         let output = temp_file("wrong_key_output.txt");
-        let key = Sha256::digest(b"right-password").to_vec();
-        let wrong = Sha256::digest(b"wrong-password").to_vec();
+        let key = derive_master_key_v2("right-password");
+        let wrong = derive_master_key_v2("wrong-password");
 
         std::fs::write(&input, b"secret").unwrap();
         encrypt_file(&key, &input.to_string_lossy(), &encrypted.to_string_lossy()).unwrap();

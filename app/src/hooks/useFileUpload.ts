@@ -223,12 +223,12 @@ export function useFileUpload(
         return { queuedCount: queued.length, skippedCount: skippedNames.length };
     }, [activeFolderId, encryptByDefault, onActivity, uploadQueue]);
 
-    const handleManualUpload = async () => {
+    const handleManualUpload = async (encryptOverride?: boolean) => {
         try {
             const selected = await open({ multiple: true, directory: false });
             if (selected) {
                 const paths = Array.isArray(selected) ? selected : [selected];
-                const result = queueUploadCandidates(paths.map((path: string) => ({ path })));
+                const result = queueUploadCandidates(paths.map((path: string) => ({ path, encrypt: encryptOverride })));
                 if (result.queuedCount > 0) {
                     toast.info(`Queued ${result.queuedCount} file${result.queuedCount > 1 ? 's' : ''} for upload`);
                 }

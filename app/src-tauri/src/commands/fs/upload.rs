@@ -298,7 +298,7 @@ pub async fn cmd_upload_file(
 
     let should_encrypt = encrypt.unwrap_or(false);
     let enc_key = if should_encrypt {
-        let key = enc_state.key.lock().map_err(|e| e.to_string())?.clone();
+        let key = enc_state.active_key(2)?;
         if key.is_none() {
             return Err("Encryption key not loaded. Enter your password in Settings before uploading encrypted files.".to_string());
         }

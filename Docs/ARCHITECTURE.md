@@ -1,6 +1,6 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 2.1.0  
+> **Version:** 2.2.0  
 > **Last updated:** 2026-05-28  
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 
@@ -216,6 +216,14 @@ The old monolithic `fs.rs` has been split into:
 - files map to Telegram messages with attachments
 - extra metadata is carried in captions
 - markers such as rename, encryption, trash, and app ownership are derived from caption parsing
+- encrypted captions use `[SD-KDF:PBKDF2]` for v2 files; legacy `[SD-ENC]` files remain supported
+
+### Encryption
+
+- new encrypted uploads derive keys with PBKDF2-HMAC-SHA256, 100K iterations
+- `EncryptionState` keeps both v2 and legacy keys in memory for backward-compatible decrypt
+- auto-lock clears in-memory keys after configured inactivity
+- optional session PIN encrypts `telegram.session` at rest and requires unlock before auto-login
 
 ### Sharing
 
@@ -256,4 +264,5 @@ These are the active product and engineering priorities:
 - finish extracting dashboard state into hooks
 - revisit updater only when SharkDrive has its own real release feed
 - add more tests around caption parsing and encryption behavior as features evolve
+
 

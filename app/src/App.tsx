@@ -13,12 +13,16 @@ import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { DropZoneProvider } from "./contexts/DropZoneContext";
 import { Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
+import { tauriApi } from "./api/tauri";
 
 const queryClient = new QueryClient();
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [sessionPinRequired, setSessionPinRequired] = useState(false);
+  const [sessionPin, setSessionPin] = useState("");
+  const [savedApiId, setSavedApiId] = useState<number | null>(null);
   const { theme } = useTheme();
   const { available, version, downloading, progress, downloadAndInstall, dismissUpdate } = useUpdateCheck();
 
@@ -33,6 +37,11 @@ function AppContent() {
         }
         if (apiIdStr) {
           const apiId = parseInt(apiIdStr);
+          setSavedApiId(apiId);
+          if (await tauriApi.isSessionProtected()) {
+            setSessionPinRequired(true);
+            return;
+          }
           await invoke('cmd_connect', { apiId });
           setIsAuthenticated(true);
         }
@@ -62,6 +71,45 @@ function AppContent() {
         }
       `}</style>
     </div>
+  );
+
+  if (sessionPinRequired) return (
+    <main className="h-screen w-screen bg-[#0b1521] text-telegram-text flex items-center justify-center">
+      <div className="w-full max-w-sm rounded-2xl border border-telegram-border bg-telegram-surface p-6 shadow-2xl">
+        <img src="/logo.svg" className="mx-auto mb-5 h-12 w-12" alt="SharkDrive" />
+        <h1 className="text-center text-xl font-semibold">Unlock Telegram Session</h1>
+        <p className="mt-2 text-center text-sm text-telegram-subtext">Enter your 6-digit SharkDrive PIN to decrypt the saved Telegram session.</p>
+        <input
+          autoFocus
+          inputMode="numeric"
+          maxLength={6}
+          value={sessionPin}
+          onChange={(event) => setSessionPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
+          onKeyDown={async (event) => {
+            if (event.key !== 'Enter' || sessionPin.length !== 6 || savedApiId == null) return;
+            await tauriApi.unlockSessionPin(sessionPin);
+            await invoke('cmd_connect', { apiId: savedApiId });
+            setSessionPinRequired(false);
+            setIsAuthenticated(true);
+          }}
+          className="mt-5 w-full rounded-xl border border-telegram-border bg-black/20 px-4 py-3 text-center text-lg tracking-[0.35em] text-telegram-text outline-none focus:border-telegram-primary"
+          placeholder="000000"
+        />
+        <button
+          disabled={sessionPin.length !== 6 || savedApiId == null}
+          onClick={async () => {
+            if (savedApiId == null) return;
+            await tauriApi.unlockSessionPin(sessionPin);
+            await invoke('cmd_connect', { apiId: savedApiId });
+            setSessionPinRequired(false);
+            setIsAuthenticated(true);
+          }}
+          className="mt-4 w-full rounded-xl bg-telegram-primary px-4 py-3 font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
+        >
+          Unlock
+        </button>
+      </div>
+    </main>
   );
 
   return (

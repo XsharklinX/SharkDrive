@@ -4,6 +4,18 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [2.2.0] - 2026-05-28
+
+### Seguridad Avanzada
+
+- **PBKDF2 v2** - La clave maestra nueva usa PBKDF2-HMAC-SHA256 con 100K iteraciones. Los captions cifrados nuevos incluyen `[SD-KDF:PBKDF2]`; archivos legacy `[SD-ENC]` siguen descifrando con fallback SHA-256.
+- **Auto-lock por inactividad** - `EncryptionState` guarda última actividad y limpia la clave en memoria tras el tiempo configurado. Frontend renueva actividad por interacción y verifica estado periódicamente.
+- **Lock Vault** - Sidebar footer agrega botón para limpiar la clave de cifrado sin cerrar sesión de Telegram.
+- **Upload cifrado por archivo** - TopBar agrega `Add Encrypted`, que fuerza cifrado para esa selección aunque la carpeta no tenga auto-encrypt.
+- **Sesión protegida con PIN** - Nuevo flujo opcional para cifrar `telegram.session` con PIN de 6 dígitos y desbloquear antes del auto-login.
+
+---
+
 ## [2.1.0] - 2026-05-28
 
 ### Compartir Mejorado

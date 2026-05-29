@@ -1,6 +1,12 @@
 use grammers_client::Client;
 use grammers_mtsender::SenderPool;
 use grammers_session::storages::SqliteSession;
+use aes_gcm::{
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+    Aes256Gcm, Key, Nonce,
+};
+use pbkdf2::pbkdf2_hmac;
+use sha2::Sha256;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tauri::Manager;
@@ -12,6 +18,52 @@ use crate::commands::utils::map_error;
 use crate::models::AuthResult;
 use crate::TelegramState;
 use grammers_client::SignInError;
+
+const SESSION_PIN_ITERATIONS: u32 = 100_000;
+const SESSION_PIN_SALT: &[u8] = b"SharkDrive Telegram session PIN v1";
+
+fn derive_session_pin_key(pin: &str) -> Result<Vec<u8>, String> {
+    if pin.len() != 6 || !pin.chars().all(|ch| ch.is_ascii_digit()) {
+        return Err("PIN must be exactly 6 digits".to_string());
+    }
+    let mut key = [0_u8; 32];
+    pbkdf2_hmac::<Sha256>(pin.as_bytes(), SESSION_PIN_SALT, SESSION_PIN_ITERATIONS, &mut key);
+    Ok(key.to_vec())
+}
+
+fn encrypt_session_bytes(pin: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let key_bytes = derive_session_pin_key(pin)?;
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+        .encrypt(&nonce, bytes)
+        .map_err(|e| format!("Session encryption failed: {}", e))?;
+    let mut output = b"SDSESSION1".to_vec();
+    output.extend_from_slice(&nonce);
+    output.extend_from_slice(&ciphertext);
+    Ok(output)
+}
+
+fn decrypt_session_bytes(pin: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
+    if bytes.len() < b"SDSESSION1".len() + 12 || !bytes.starts_with(b"SDSESSION1") {
+        return Err("Invalid protected session format".to_string());
+    }
+    let key_bytes = derive_session_pin_key(pin)?;
+    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key_bytes));
+    let offset = b"SDSESSION1".len();
+    let nonce = Nonce::from_slice(&bytes[offset..offset + 12]);
+    cipher
+        .decrypt(nonce, &bytes[offset + 12..])
+        .map_err(|_| "Wrong PIN or corrupted protected session".to_string())
+}
+
+fn session_paths(app_handle: &tauri::AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let app_data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    Ok((app_data_dir.join("telegram.session"), app_data_dir.join("telegram.session.sdenc")))
+}
 
 /// Ensures the Telegram client is initialized.
 ///
@@ -63,6 +115,10 @@ pub async fn ensure_client_initialized(
     }
 
     let session_path = app_data_dir.join("telegram.session");
+    let protected_session_path = app_data_dir.join("telegram.session.sdenc");
+    if protected_session_path.exists() && !session_path.exists() {
+        return Err("SESSION_LOCKED".to_string());
+    }
     let session_path_str = session_path.to_string_lossy().to_string();
     log::info!("Opening session at: {}", session_path_str);
 
@@ -105,6 +161,47 @@ pub async fn ensure_client_initialized(
 
     *client_guard = Some(client.clone());
     Ok(client)
+}
+
+#[tauri::command]
+pub async fn cmd_is_session_protected(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    let (_, protected_path) = session_paths(&app_handle)?;
+    Ok(protected_path.exists())
+}
+
+#[tauri::command]
+pub async fn cmd_unlock_session_pin(app_handle: tauri::AppHandle, pin: String) -> Result<(), String> {
+    let (session_path, protected_path) = session_paths(&app_handle)?;
+    if !protected_path.exists() {
+        return Ok(());
+    }
+    let encrypted = std::fs::read(&protected_path).map_err(|e| e.to_string())?;
+    let plain = decrypt_session_bytes(&pin, &encrypted)?;
+    std::fs::write(&session_path, plain).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cmd_set_session_pin(app_handle: tauri::AppHandle, pin: String) -> Result<(), String> {
+    let (session_path, protected_path) = session_paths(&app_handle)?;
+    if !session_path.exists() {
+        return Err("No Telegram session exists yet".to_string());
+    }
+    let plain = std::fs::read(&session_path).map_err(|e| e.to_string())?;
+    let encrypted = encrypt_session_bytes(&pin, &plain)?;
+    std::fs::write(&protected_path, encrypted).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&session_path);
+    let _ = std::fs::remove_file(format!("{}-wal", session_path.to_string_lossy()));
+    let _ = std::fs::remove_file(format!("{}-shm", session_path.to_string_lossy()));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cmd_clear_session_pin(app_handle: tauri::AppHandle, pin: String) -> Result<(), String> {
+    cmd_unlock_session_pin(app_handle.clone(), pin).await?;
+    let (_, protected_path) = session_paths(&app_handle)?;
+    let _ = std::fs::remove_file(protected_path);
+    Ok(())
 }
 
 #[tauri::command]

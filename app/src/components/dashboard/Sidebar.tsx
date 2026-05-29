@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Activity, BarChart2, ChevronDown, Clock, Folder, HardDrive, LogOut, Plus, RefreshCw, Star } from 'lucide-react';
+import { Activity, BarChart2, ChevronDown, Clock, Folder, HardDrive, Lock, LogOut, Plus, RefreshCw, Star } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
 import { ActivityEntry, BandwidthStats, TelegramFolder } from '../../types';
@@ -47,6 +47,8 @@ interface SidebarProps {
     getFolderColor?: (folderId: number) => string | undefined;
     onTogglePinnedFolder?: (folderId: number) => void;
     onSetFolderColor?: (folderId: number, color: string | null) => void;
+    encryptionUnlocked?: boolean;
+    onLockVault?: () => void;
 }
 
 export function Sidebar({
@@ -79,6 +81,8 @@ export function Sidebar({
     getFolderColor,
     onTogglePinnedFolder,
     onSetFolderColor,
+    encryptionUnlocked = false,
+    onLockVault,
 }: SidebarProps) {
     const [showNewFolderInput, setShowNewFolderInput] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -352,6 +356,18 @@ export function Sidebar({
                         </span>
                     </button>
                 </div>
+
+                {onLockVault && (
+                    <button
+                        onClick={onLockVault}
+                        disabled={!encryptionUnlocked}
+                        className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text disabled:cursor-not-allowed disabled:opacity-45"
+                        title="Clear the in-memory encryption key without logging out of Telegram"
+                    >
+                        <Lock className="h-3.5 w-3.5" />
+                        {encryptionUnlocked ? 'Lock Vault' : 'Vault Locked'}
+                    </button>
+                )}
 
                 {bandwidth && <BandwidthWidget bandwidth={bandwidth} />}
             </div>

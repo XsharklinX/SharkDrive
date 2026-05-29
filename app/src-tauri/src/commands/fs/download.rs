@@ -108,7 +108,7 @@ pub async fn cmd_download_file(
 
     let metadata = parse_caption_metadata(msg.text());
     if metadata.encrypted {
-        let enc_key = enc_state.key.lock().map_err(|e| e.to_string())?.clone();
+        let enc_key = enc_state.active_key(metadata.encryption_version)?;
         if let Some(master) = enc_key {
             let active_key = match folder_id {
                 Some(id) => derive_folder_key(&master, id),
