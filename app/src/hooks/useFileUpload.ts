@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { ActivityEntry, QueueItem } from '../types';
 import { useFileDrop } from './useFileDrop';
 import type { Store } from '@tauri-apps/plugin-store';
-import { buildQueuedUploadKey } from '../utils';
+import { applyUploadNamingPattern, buildQueuedUploadKey, UPLOAD_NAMING_PATTERN_KEY } from '../utils';
 
 interface ProgressPayload {
     id: string;
@@ -18,6 +18,8 @@ type QueueUploadCandidate = {
     path: string;
     folderId?: number | null;
     encrypt?: boolean;
+    remoteName?: string;
+    source?: 'manual' | 'backup';
 };
 
 const buildActivity = (type: ActivityEntry['type'], message: string, fileName?: string, folderId?: number | null): ActivityEntry => ({
@@ -34,6 +36,7 @@ export function useFileUpload(
     store: Store | null,
     encryptByDefault = false,
     onActivity?: (entry: ActivityEntry) => void,
+    folderNameResolver?: (folderId: number | null) => string | undefined,
 ) {
     const queryClient = useQueryClient();
     const [uploadQueue, setUploadQueue] = useState<QueueItem[]>([]);
@@ -139,14 +142,25 @@ export function useFileUpload(
                     transferId: item.id,
                     encrypt: item.encrypt ?? false,
                     skipDedup: item.skipDedup ?? false,
+                    remoteName: item.remoteName,
+                    backupUpload: item.source === 'backup',
                 });
                 if (!cancelledRef.current.has(item.id)) {
-                    const fileName = item.path.split(/[/\\]/).pop();
+                    const fileName = item.remoteName || item.path.split(/[/\\]/).pop();
                     if (result === 'duplicate') {
-                        // Mark as 'duplicate' so DuplicateDialog can intercept
+                        if (item.source === 'backup') {
+                            setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'skipped', progress: 100 } : i));
+                            onActivity?.(buildActivity('backup', `Skipped unchanged backup ${fileName}`, fileName, item.folderId));
+                        } else {
+                            setUploadQueue(q => q.map(i => i.id === item.id ? {
+                                ...i, status: 'duplicate', progress: 0,
+                                error: 'File already exists in this folder',
+                            } : i));
+                        }
+                    } else if (result === 'conflict') {
                         setUploadQueue(q => q.map(i => i.id === item.id ? {
-                            ...i, status: 'duplicate', progress: 0,
-                            error: 'File already exists in this folder',
+                            ...i, status: 'conflict', progress: 0,
+                            error: 'Local and Telegram versions both changed',
                         } : i));
                     } else {
                         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'success', progress: 100 } : i));
@@ -190,8 +204,9 @@ export function useFileUpload(
 
         const queued: QueueItem[] = [];
         const skippedNames: string[] = [];
+        const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-        for (const candidate of candidates) {
+        for (const [candidateIndex, candidate] of candidates.entries()) {
             const folderId = candidate.folderId ?? activeFolderId;
             const key = buildQueuedUploadKey(candidate.path, folderId);
             if (existingKeys.has(key)) {
@@ -200,12 +215,24 @@ export function useFileUpload(
             }
 
             existingKeys.add(key);
+            const namingPattern = localStorage.getItem(UPLOAD_NAMING_PATTERN_KEY)?.trim() ?? '';
+            const remoteName = candidate.remoteName || (namingPattern
+                ? applyUploadNamingPattern(
+                    candidate.path,
+                    namingPattern,
+                    folderNameResolver?.(folderId) || 'Saved Messages',
+                    candidateIndex + 1,
+                )
+                : undefined);
             queued.push({
                 id: Math.random().toString(36).slice(2, 11),
                 path: candidate.path,
+                batchId,
+                remoteName,
                 folderId,
                 status: 'pending',
                 encrypt: candidate.encrypt ?? encryptByDefault,
+                source: candidate.source ?? 'manual',
             });
         }
 
@@ -221,7 +248,7 @@ export function useFileUpload(
         }
 
         return { queuedCount: queued.length, skippedCount: skippedNames.length };
-    }, [activeFolderId, encryptByDefault, onActivity, uploadQueue]);
+    }, [activeFolderId, encryptByDefault, folderNameResolver, onActivity, uploadQueue]);
 
     const handleManualUpload = async (encryptOverride?: boolean) => {
         try {
@@ -313,6 +340,7 @@ export function useFileUpload(
 
     // Items waiting for the user's dedup decision
     const duplicateItems = uploadQueue.filter(i => i.status === 'duplicate');
+    const conflictItems = uploadQueue.filter(i => i.status === 'conflict');
 
     const { isDragging } = useFileDrop();
 
@@ -330,6 +358,7 @@ export function useFileUpload(
         forceUpload,
         skipDuplicate,
         duplicateItems,
+        conflictItems,
         isDragging
     };
 }

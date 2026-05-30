@@ -4,7 +4,8 @@ pub mod index_store;
 pub mod models;
 pub mod server;
 
-use commands::backup::BackupState;
+use commands::automation::AutomationState;
+use commands::backup::{start_watching, BackupState};
 use commands::encryption::EncryptionState;
 use commands::settings::AppSettings;
 use commands::share::ShareStore;
@@ -15,7 +16,7 @@ use rand::Rng;
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 fn generate_stream_token() -> String {
@@ -59,10 +60,15 @@ pub fn run() {
             app.manage(StreamToken(stream_token.clone()));
             app.manage(ActixServerHandle(server_handle_for_setup.clone()));
             app.manage(EncryptionState::new());
-            app.manage(BackupState::new());
             app.manage(AppSettings::new());
 
             let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let backup_state = BackupState::new(app_data_dir.join("backup_folders.json"));
+            start_watching(&backup_state, app.handle().clone());
+            app.manage(backup_state);
+            app.manage(AutomationState::new(
+                app_data_dir.join("automation_config.json"),
+            ));
             let share_store = Arc::new(ShareStore::new(app_data_dir.join("share_links.json")));
             app.manage(share_store.clone());
             app.manage(PersistentIndexState::new(
@@ -131,6 +137,17 @@ pub fn run() {
                 });
             });
 
+            let automation_app = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                if automation_app
+                    .state::<AutomationState>()
+                    .take_due_scheduled_sync()
+                {
+                    let _ = automation_app.emit("scheduled-sync-request", ());
+                }
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -186,6 +203,10 @@ pub fn run() {
             commands::cmd_remove_backup_folder,
             commands::cmd_get_backup_folders,
             commands::cmd_update_backup_folder,
+            commands::cmd_get_automation_config,
+            commands::cmd_set_scheduled_sync_time,
+            commands::cmd_set_cleanup_rules,
+            commands::cmd_get_due_cleanup_files,
             // Settings
             commands::cmd_set_close_to_tray,
             commands::cmd_get_close_to_tray,

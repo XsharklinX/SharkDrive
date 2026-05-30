@@ -22,6 +22,8 @@ function AppContent() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [sessionPinRequired, setSessionPinRequired] = useState(false);
   const [sessionPin, setSessionPin] = useState("");
+  const [sessionPinError, setSessionPinError] = useState("");
+  const [sessionPinUnlocking, setSessionPinUnlocking] = useState(false);
   const [savedApiId, setSavedApiId] = useState<number | null>(null);
   const { theme } = useTheme();
   const { available, version, downloading, progress, downloadAndInstall, dismissUpdate } = useUpdateCheck();
@@ -54,6 +56,24 @@ function AppContent() {
     tryAutoLogin();
   }, []);
 
+  const unlockProtectedSession = async () => {
+    if (savedApiId == null || sessionPin.length !== 6 || sessionPinUnlocking) return;
+    setSessionPinUnlocking(true);
+    setSessionPinError("");
+    try {
+      await tauriApi.unlockSessionPin(sessionPin);
+      await invoke('cmd_connect', { apiId: savedApiId });
+      setSessionPinRequired(false);
+      setSessionPin("");
+      setIsAuthenticated(true);
+    } catch (error) {
+      setSessionPin("");
+      setSessionPinError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSessionPinUnlocking(false);
+    }
+  };
+
   if (!sessionChecked) return (
     <div className="h-screen w-screen flex flex-col items-center justify-center gap-5 bg-[#0b1521]">
       <img src="/logo.svg" className="h-14 w-14 animate-pulse" alt="SharkDrive" />
@@ -63,7 +83,7 @@ function AppContent() {
           style={{ animation: 'splashProgress 1.4s ease-in-out infinite', width: '40%' }}
         />
       </div>
-      <p className="text-xs text-telegram-subtext/60">Connecting…</p>
+      <p className="text-xs text-telegram-subtext/60">Connecting...</p>
       <style>{`
         @keyframes splashProgress {
           0%   { transform: translateX(-100%) }
@@ -84,29 +104,23 @@ function AppContent() {
           inputMode="numeric"
           maxLength={6}
           value={sessionPin}
-          onChange={(event) => setSessionPin(event.target.value.replace(/\D/g, '').slice(0, 6))}
-          onKeyDown={async (event) => {
-            if (event.key !== 'Enter' || sessionPin.length !== 6 || savedApiId == null) return;
-            await tauriApi.unlockSessionPin(sessionPin);
-            await invoke('cmd_connect', { apiId: savedApiId });
-            setSessionPinRequired(false);
-            setIsAuthenticated(true);
+          onChange={(event) => {
+            setSessionPin(event.target.value.replace(/\D/g, '').slice(0, 6));
+            setSessionPinError("");
           }}
+          onKeyDown={(event) => event.key === 'Enter' && void unlockProtectedSession()}
           className="mt-5 w-full rounded-xl border border-telegram-border bg-black/20 px-4 py-3 text-center text-lg tracking-[0.35em] text-telegram-text outline-none focus:border-telegram-primary"
           placeholder="000000"
         />
+        {sessionPinError && (
+          <p className="mt-3 text-center text-xs text-red-300">Could not unlock the saved session. Check the PIN and retry.</p>
+        )}
         <button
-          disabled={sessionPin.length !== 6 || savedApiId == null}
-          onClick={async () => {
-            if (savedApiId == null) return;
-            await tauriApi.unlockSessionPin(sessionPin);
-            await invoke('cmd_connect', { apiId: savedApiId });
-            setSessionPinRequired(false);
-            setIsAuthenticated(true);
-          }}
+          disabled={sessionPin.length !== 6 || savedApiId == null || sessionPinUnlocking}
+          onClick={() => void unlockProtectedSession()}
           className="mt-4 w-full rounded-xl bg-telegram-primary px-4 py-3 font-semibold text-black transition hover:opacity-90 disabled:opacity-50"
         >
-          Unlock
+          {sessionPinUnlocking ? 'Unlocking...' : 'Unlock'}
         </button>
       </div>
     </main>

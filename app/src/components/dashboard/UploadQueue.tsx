@@ -22,6 +22,7 @@ const STATUS_DOT: Record<string, string> = {
     uploading: 'bg-telegram-primary animate-pulse',
     cancelled: 'bg-gray-500',
     skipped: 'bg-amber-400',
+    conflict: 'bg-amber-400',
     error: 'bg-red-500',
     success: 'bg-green-500',
 };
@@ -78,7 +79,7 @@ export function UploadQueue({ items, onClearFinished, onCancelAll, onRetry, onCa
                             <div className={`mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-500'}`} />
                             <div className="min-w-0 flex-1">
                                 <div className="truncate text-xs font-medium text-telegram-text" title={item.path}>
-                                    {item.path.split(/[/\\]/).pop()}
+                                    {item.remoteName || item.path.split(/[/\\]/).pop()}
                                 </div>
                                 <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-telegram-subtext">
                                     {item.status === 'uploading'

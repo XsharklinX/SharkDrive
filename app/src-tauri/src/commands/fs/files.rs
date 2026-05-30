@@ -295,11 +295,12 @@ pub async fn cmd_delete_file(
 
     let peer = resolve_peer(&client, folder_id, &state).await?;
     if secure_delete.unwrap_or(false) {
+        let caption = secure_delete_caption(chrono::Utc::now().timestamp_millis());
         client
             .edit_message(
                 &peer,
                 message_id,
-                grammers_client::InputMessage::new().text("[SD-DELETED]"),
+                grammers_client::InputMessage::new().text(caption),
             )
             .await
             .map_err(|e| format!("Secure delete caption update failed: {e}"))?;
@@ -309,6 +310,10 @@ pub async fn cmd_delete_file(
         .await
         .map_err(|e| e.to_string())?;
     Ok(true)
+}
+
+fn secure_delete_caption(timestamp_millis: i64) -> String {
+    format!("[SD-DELETED-{timestamp_millis}]")
 }
 
 #[tauri::command]
@@ -837,5 +842,10 @@ mod tests {
         let f = parse_search_filters("   ");
         assert!(f.text.is_empty());
         assert!(f.file_type.is_none());
+    }
+
+    #[test]
+    fn secure_delete_caption_includes_timestamp() {
+        assert_eq!(secure_delete_caption(1_716_000_000_123), "[SD-DELETED-1716000000123]");
     }
 }

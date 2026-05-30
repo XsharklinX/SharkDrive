@@ -193,24 +193,46 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
             if (e.key === 'Escape') {
                 e.preventDefault();
                 onClose();
+                return;
+            }
+
+            // Zoom shortcuts for images
+            if (isImageFile(file.name)) {
+                if (e.key === '+' || (e.key === '=' && e.shiftKey)) {
+                    e.preventDefault();
+                    changeZoom(zoom + 0.25);
+                    return;
+                }
+                if (e.key === '-') {
+                    e.preventDefault();
+                    changeZoom(zoom - 0.25);
+                    return;
+                }
+                if (e.key === '0') {
+                    e.preventDefault();
+                    changeZoom(1);
+                    return;
+                }
             }
         };
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onClose, onNext, onPrev]);
+    }, [onClose, onNext, onPrev, zoom, file.name]);
 
     const changeZoom = (nextZoom: number) => {
-        const clamped = Math.min(Math.max(nextZoom, 1), 5);
+        const clamped = Math.min(Math.max(nextZoom, 0.5), 8);
         setZoom(clamped);
-        if (clamped === 1) setPan({ x: 0, y: 0 });
+        if (clamped <= 1) setPan({ x: 0, y: 0 });
     };
 
     const handleWheel = (e: WheelEvent<HTMLDivElement>) => {
-        if (!isImageFile(file.name) || (!e.ctrlKey && !e.metaKey)) return;
+        if (!isImageFile(file.name)) return;
         e.preventDefault();
-        const direction = e.deltaY > 0 ? -0.15 : 0.15;
-        changeZoom(zoom + direction);
+        // pinch-to-zoom (trackpad): deltaY is fractional with ctrlKey
+        // regular scroll: deltaY is large integer
+        const delta = e.ctrlKey ? e.deltaY * 0.008 : e.deltaY * 0.002;
+        changeZoom(zoom - delta);
     };
 
     const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -271,14 +293,14 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
                         )}
                         {isImageFile(file.name) && (
                             <div className="flex items-center gap-1 rounded-lg border border-telegram-border bg-telegram-surface/95 p-1">
-                                <button onClick={() => changeZoom(zoom - 0.25)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom out">
+                                <button onClick={() => changeZoom(zoom - 0.25)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom out (-)">
                                     <ZoomOut className="h-4 w-4" />
                                 </button>
                                 <span className="min-w-10 text-center text-xs text-telegram-subtext">{Math.round(zoom * 100)}%</span>
-                                <button onClick={() => changeZoom(zoom + 0.25)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom in">
+                                <button onClick={() => changeZoom(zoom + 0.25)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Zoom in (+)">
                                     <ZoomIn className="h-4 w-4" />
                                 </button>
-                                <button onClick={() => changeZoom(1)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Reset zoom">
+                                <button onClick={() => changeZoom(1)} className="rounded-md p-2 text-telegram-subtext transition hover:bg-white/10 hover:text-telegram-text" title="Reset zoom (0)">
                                     <RotateCcw className="h-4 w-4" />
                                 </button>
                             </div>

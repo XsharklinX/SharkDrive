@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
-import { save } from '@tauri-apps/plugin-dialog';
+import { save, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 
 import { TelegramFile } from '../types';
@@ -29,10 +29,12 @@ import { VaultModal } from './dashboard/VaultModal';
 import { ShareLinksDashboard } from './dashboard/ShareLinksDashboard';
 import { BatchRenameModal } from './dashboard/BatchRenameModal';
 import { DuplicateDialog } from './dashboard/DuplicateDialog';
+import { BackupConflictDialog } from './dashboard/BackupConflictDialog';
 import { TextPreviewModal } from './dashboard/TextPreviewModal';
 import { FileInfoPanel } from './dashboard/FileInfoPanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { VaultLockScreen } from './dashboard/VaultLockScreen';
+import { FolderStatsModal } from './dashboard/FolderStatsModal';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -48,9 +50,12 @@ import { useActivityLog } from '../hooks/useActivityLog';
 import { useEncryptedFolders } from '../hooks/useEncryptedFolders';
 import { useRecentSearches } from '../hooks/useRecentSearches';
 import { useOrganization } from '../hooks/useOrganization';
+import { matchesSmartCollection, useSmartCollections, type SmartCollectionId } from '../hooks/useSmartCollections';
+import { useConfirm } from '../context/ConfirmContext';
 
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const queryClient = useQueryClient();
+    const { confirm } = useConfirm();
 
     const {
         store, folders, activeFolderId, setActiveFolderId, isSyncing, isConnected,
@@ -65,7 +70,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [isDraggingInternally, setIsDraggingInternally] = useState(false);
     const internalDragRef = useRef<number | null>(null);
     const handleDroppedFilesRef = useRef<(paths: string[]) => void>(() => {});
-    const queueUploadCandidatesRef = useRef<(candidates: { path: string; folderId?: number | null; encrypt?: boolean }[]) => { queuedCount: number; skippedCount: number }>(() => ({ queuedCount: 0, skippedCount: 0 }));
+    const queueUploadCandidatesRef = useRef<(candidates: { path: string; folderId?: number | null; encrypt?: boolean; source?: 'manual' | 'backup' }[]) => { queuedCount: number; skippedCount: number }>(() => ({ queuedCount: 0, skippedCount: 0 }));
 
     const [renameTarget, setRenameTarget] = useState<TelegramFile | null>(null);
     const [showSettings, setShowSettings] = useState(false);
@@ -80,6 +85,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [movingFolderId, setMovingFolderId] = useState<number | null>(null);
     const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
     const [vaultUiLocked, setVaultUiLocked] = useState(false);
+    const [activeSmartCollectionId, setActiveSmartCollectionId] = useState<SmartCollectionId | null>(null);
+    const [searchCurrentFolderOnly, setSearchCurrentFolderOnly] = useState(false);
+    const [statsFolderId, setStatsFolderId] = useState<number | null>(null);
+    const cleanupReviewedRef = useRef(false);
+    const previousSyncingRef = useRef(false);
+    const syncFoldersRef = useRef(handleSyncFolders);
+    syncFoldersRef.current = handleSyncFolders;
 
     const { favoriteIds, showFavoritesOnly, setShowFavoritesOnly, handleToggleFavorite } = useFavorites(store);
     const { recentFiles, addToRecent } = useRecentFiles(store, activeFolderId);
@@ -204,6 +216,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     useEffect(() => {
         let unlisten: (() => void) | undefined;
+        listen('scheduled-sync-request', () => {
+            void syncFoldersRef.current();
+        }).then((dispose) => { unlisten = dispose; });
+        return () => unlisten?.();
+    }, []);
+
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
         listen<{ paths: string[] }>('tauri://drag-drop', (event) => {
             if (event.payload.paths?.length > 0) {
                 handleDroppedFilesRef.current(event.payload.paths);
@@ -217,7 +237,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         listen<{ path: string; remote_folder_id: number | null }>('backup-file-detected', (event) => {
             const { path, remote_folder_id } = event.payload;
             const shouldEncrypt = encryptionEnabled || (typeof remote_folder_id === 'number' && encryptedFolderIds.has(remote_folder_id));
-            const result = queueUploadCandidatesRef.current([{ path, folderId: remote_folder_id, encrypt: shouldEncrypt }]);
+            const result = queueUploadCandidatesRef.current([{ path, folderId: remote_folder_id, encrypt: shouldEncrypt, source: 'backup' }]);
             if (result.queuedCount > 0) {
                 const fileName = path.split(/[/\\]/).pop();
                 recordActivity({
@@ -288,7 +308,69 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
     });
 
-    const sourceFiles = activeFolderId === RECENT_FOLDER_ID ? recentFiles : allFiles;
+    const { data: allIndexedRaw = [] } = useQuery({
+        queryKey: ['all-indexed-files'],
+        queryFn: () => tauriApi.getAllIndexedFiles(),
+        staleTime: 30 * 1000,
+        gcTime: 5 * 60 * 1000,
+        refetchInterval: 30 * 1000,
+        refetchOnWindowFocus: false,
+        enabled: !!store,
+    });
+
+    const reviewDueCleanupFiles = useCallback(async () => {
+        if (cleanupReviewedRef.current) return;
+        cleanupReviewedRef.current = true;
+        try {
+            const dueFiles = await tauriApi.getDueCleanupFiles();
+            if (dueFiles.length === 0) return;
+            const totalBytes = dueFiles.reduce((sum, file) => sum + file.size, 0);
+            const approved = await confirm({
+                title: 'Review cleanup candidates',
+                message: `${dueFiles.length} remote file${dueFiles.length === 1 ? '' : 's'} (${formatBytes(totalBytes)}) match your cleanup rules.\nDelete them from SharkDrive and Telegram now?`,
+                confirmText: `Delete ${dueFiles.length} file${dueFiles.length === 1 ? '' : 's'}`,
+                cancelText: 'Keep files',
+                variant: 'danger',
+            });
+            if (!approved) return;
+
+            const secureDelete = localStorage.getItem('sharkdrive.secureDelete.v1') === 'true';
+            for (const file of dueFiles) {
+                await tauriApi.deleteFile(file.id, file.folder_id ?? null, secureDelete);
+            }
+            queryClient.invalidateQueries({ queryKey: ['files'] });
+            queryClient.invalidateQueries({ queryKey: ['cached-files'] });
+            queryClient.invalidateQueries({ queryKey: ['all-indexed-files'] });
+            toast.success(`Deleted ${dueFiles.length} old file${dueFiles.length === 1 ? '' : 's'} after cleanup review.`);
+        } catch (error) {
+            toast.error(`Cleanup review failed: ${error}`);
+        }
+    }, [confirm, queryClient]);
+
+    useEffect(() => {
+        if (!store) return;
+        void reviewDueCleanupFiles();
+    }, [reviewDueCleanupFiles, store]);
+
+    useEffect(() => {
+        if (previousSyncingRef.current && !isSyncing) {
+            cleanupReviewedRef.current = false;
+            void reviewDueCleanupFiles();
+        }
+        previousSyncingRef.current = isSyncing;
+    }, [isSyncing, reviewDueCleanupFiles]);
+
+    const { collections: smartCollections, activeFiles: smartCollectionFiles } = useSmartCollections(
+        allIndexedRaw,
+        activeSmartCollectionId,
+        organization.decorateFile,
+    );
+
+    const sourceFiles = activeSmartCollectionId
+        ? smartCollectionFiles
+        : activeFolderId === RECENT_FOLDER_ID
+            ? recentFiles
+            : allFiles;
     const organizedSourceFiles = useMemo(() => (
         sourceFiles.map((file) => organization.decorateFile(file, resolveFileFolderId(file, activeFolderId)))
     ), [activeFolderId, organization.decorateFile, sourceFiles]);
@@ -309,7 +391,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const {
         searchTerm,
         setSearchTerm,
-        displayedFiles,
+        displayedFiles: searchedFiles,
         isSearching,
         resetSearch,
     } = useDashboardSearch({
@@ -317,25 +399,24 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         sourceFiles: organizedSourceFiles,
         showFavoritesOnly,
         favoriteIds,
+        searchCurrentFolderOnly,
+        allowRemoteSearch: activeSmartCollectionId === null,
         folderNameResolver,
         handleGlobalSearch,
         decorateFile: organization.decorateFile,
     });
+
+    const displayedFiles = useMemo(() => (
+        activeSmartCollectionId
+            ? searchedFiles.filter((file) => matchesSmartCollection(file, activeSmartCollectionId))
+            : searchedFiles
+    ), [activeSmartCollectionId, searchedFiles]);
 
     const { data: bandwidth } = useQuery({
         queryKey: ['bandwidth'],
         queryFn: () => tauriApi.getBandwidth(),
         refetchInterval: 5000,
         enabled: !!store
-    });
-
-    const { data: allIndexedRaw = [] } = useQuery({
-        queryKey: ['all-indexed-files'],
-        queryFn: () => tauriApi.getAllIndexedFiles(),
-        staleTime: 30 * 1000,
-        gcTime: 5 * 60 * 1000,
-        refetchOnWindowFocus: false,
-        enabled: !!store,
     });
 
     const folderFileCounts = useMemo(() => {
@@ -359,7 +440,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles);
 
     const encryptByDefault = encryptionEnabled || (typeof activeFolderId === 'number' && activeFolderId > 0 && encryptedFolderIds.has(activeFolderId));
-    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity);
+    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, conflictItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity, folderNameResolver);
     const { downloadQueue, queueDownload, queueBulkDownload, clearFinished: clearDownloads, retryDownload, moveDownloadToFront, reorderDownloadQueue, cancelDownloadItem, cancelAll: cancelDownloads } = useFileDownload(store, recordActivity);
     handleDroppedFilesRef.current = handleDroppedFiles;
     queueUploadCandidatesRef.current = queueUploadCandidates;
@@ -367,6 +448,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const queuedUploadCount = uploadQueue.filter((item) => item.status === 'pending' || item.status === 'uploading').length;
     const uploadingCount = uploadQueue.filter((item) => item.status === 'uploading').length;
     const failedUploadCount = uploadQueue.filter((item) => item.status === 'error').length;
+    const activeUploadBatchIds = new Set(uploadQueue
+        .filter((item) => item.status === 'pending' || item.status === 'uploading')
+        .map((item) => item.batchId || item.id));
+    const activeUploadBatchItems = uploadQueue.filter((item) => activeUploadBatchIds.has(item.batchId || item.id));
+    const uploadProgress = uploadingCount > 0 && activeUploadBatchItems.length > 0
+        ? Math.round(activeUploadBatchItems
+            .reduce((sum, item) => sum + (item.status === 'success' ? 100 : item.progress ?? 0), 0) / activeUploadBatchItems.length)
+        : null;
 
     const handleSelectAll = useCallback(() => {
         setSelectionMode(true);
@@ -419,7 +508,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         setShowMoveModal(false);
         resetSearch();
         resetPreviewState();
-    }, [activeFolderId, resetPreviewState, resetSearch]);
+    }, [activeFolderId, activeSmartCollectionId, resetPreviewState, resetSearch]);
 
     const handleToggleSelection = useCallback((id: number) => {
         setSelectionMode(true);
@@ -554,6 +643,42 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         }
     }, [activeFolderId, ensureEncryptionReady, recordActivity, selectedFiles]);
 
+    const handleDownloadFolderTree = useCallback(async (rootFolderId: number) => {
+        const rootFolder = folders.find(f => f.id === rootFolderId);
+        if (!rootFolder) return;
+
+        const basePath = await openDialog({ directory: true, multiple: false, title: 'Select Download Location' });
+        if (!basePath) return;
+
+        // Build folderId → relative path map by traversing hierarchy
+        const pathMap = new Map<number, string>();
+        const buildPaths = (folderId: number, relPath: string) => {
+            pathMap.set(folderId, relPath);
+            folders
+                .filter(f => f.parent_id === folderId)
+                .forEach(child => buildPaths(child.id, `${relPath}\\${child.name}`));
+        };
+        buildPaths(rootFolderId, rootFolder.name);
+
+        // Find all files in these folders (using local index — no Telegram call)
+        const filesToDownload = allIndexedRaw.filter(f =>
+            f.folder_id != null && pathMap.has(f.folder_id) && f.icon_type !== 'folder'
+        );
+
+        if (filesToDownload.length === 0) {
+            toast.info('No files found in this folder tree (index may be empty — sync first)');
+            return;
+        }
+
+        for (const file of filesToDownload) {
+            const relPath = pathMap.get(file.folder_id!)!;
+            const savePath = `${basePath}\\${relPath}\\${file.name}`;
+            queueDownload(file.id, file.name, file.folder_id ?? null, savePath);
+        }
+
+        toast.info(`Queued ${filesToDownload.length} file${filesToDownload.length !== 1 ? 's' : ''} with folder structure`);
+    }, [allIndexedRaw, folders, queueDownload]);
+
     const handleDestinationSelect = useCallback(async (targetFolderId: number | null) => {
         if (destinationAction === 'copy') {
             await handleBulkCopy(targetFolderId, () => {
@@ -620,18 +745,25 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         const dataTransferFileId = e.dataTransfer.getData("application/x-telegram-file-id");
 
-        if (activeFolderId === targetFolderId) return;
-
         const fileId = internalDragRef.current || (dataTransferFileId ? parseInt(dataTransferFileId) : null);
 
         if (fileId) {
             try {
                 const idsToMove = selectedIds.includes(fileId) ? selectedIds : [fileId];
-
-                await tauriApi.moveFiles(idsToMove, activeFolderId, targetFolderId);
+                const groupedByFolder = new Map<number | null, number[]>();
+                for (const file of displayedFiles.filter((candidate) => idsToMove.includes(candidate.id))) {
+                    const sourceFolderId = resolveFileFolderId(file, activeFolderId);
+                    if (sourceFolderId === targetFolderId) continue;
+                    groupedByFolder.set(sourceFolderId, [...(groupedByFolder.get(sourceFolderId) ?? []), file.id]);
+                }
+                if (groupedByFolder.size === 0) return;
+                for (const [sourceFolderId, messageIds] of groupedByFolder) {
+                    await tauriApi.moveFiles(messageIds, sourceFolderId, targetFolderId);
+                }
 
                 queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] });
                 queryClient.invalidateQueries({ queryKey: ['cached-files', activeFolderId] });
+                queryClient.invalidateQueries({ queryKey: ['all-indexed-files'] });
 
                 if (selectedIds.includes(fileId)) setSelectedIds([]);
 
@@ -644,11 +776,35 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         }
     };
 
-    const currentFolderName = activeFolderId === null
-        ? "Saved Messages"
-        : folders.find(f => f.id === activeFolderId)?.name || "Folder";
+    const handleNavigateToFolder = useCallback((folderId: number | null) => {
+        setActiveSmartCollectionId(null);
+        if (folderId === null || folderId === RECENT_FOLDER_ID) {
+            setSearchCurrentFolderOnly(false);
+        }
+        setActiveFolderId(folderId);
+    }, [setActiveFolderId]);
+
+    const handleSelectSmartCollection = useCallback((collectionId: SmartCollectionId) => {
+        setActiveFolderId(null);
+        setActiveSmartCollectionId(collectionId);
+        setActiveTagFilter(null);
+        setSearchCurrentFolderOnly(false);
+        void queryClient.invalidateQueries({ queryKey: ['all-indexed-files'] });
+    }, [queryClient, setActiveFolderId]);
+
+    const activeSmartCollection = smartCollections.find((collection) => collection.id === activeSmartCollectionId);
+    const currentFolderName = activeSmartCollection?.label ?? (
+        activeFolderId === null
+            ? "Saved Messages"
+            : activeFolderId === RECENT_FOLDER_ID
+                ? "Recent"
+                : folders.find(f => f.id === activeFolderId)?.name || "Folder"
+    );
 
     const folderPath = useMemo(() => {
+        if (activeSmartCollection) {
+            return [{ id: null, name: activeSmartCollection.label }];
+        }
         if (activeFolderId === RECENT_FOLDER_ID) {
             return [{ id: RECENT_FOLDER_ID as number | null, name: 'Recent' }];
         }
@@ -662,7 +818,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             current = folder.parent_id ?? null;
         }
         return [...root, ...segments];
-    }, [activeFolderId, folders]);
+    }, [activeFolderId, activeSmartCollection, folders]);
 
     const handleInlineRename = useCallback(async (file: TelegramFile, newName: string) => {
         if (!newName.trim() || newName === file.name) return;
@@ -844,7 +1000,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             <Sidebar
                 folders={folders}
                 activeFolderId={activeFolderId}
-                setActiveFolderId={setActiveFolderId}
+                setActiveFolderId={handleNavigateToFolder}
                 onDrop={handleDropOnFolder}
                 onDelete={handleFolderDelete}
                 onRenameFolder={handleRenameFolderFromSidebar}
@@ -871,6 +1027,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 getFolderColor={organization.getFolderColor}
                 onTogglePinnedFolder={organization.togglePinnedFolder}
                 onSetFolderColor={organization.setFolderColor}
+                onViewFolderStats={setStatsFolderId}
+                smartCollections={smartCollections}
+                activeSmartCollectionId={activeSmartCollectionId}
+                onSelectSmartCollection={handleSelectSmartCollection}
                 encryptionUnlocked={encryptionEnabled}
                 onLockVault={async () => {
                     await tauriApi.clearEncryptionKey();
@@ -897,7 +1057,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 <TopBar
                     currentFolderName={currentFolderName}
                     folderPath={folderPath}
-                    onNavigateTo={setActiveFolderId}
+                    onNavigateTo={handleNavigateToFolder}
                     selectedIds={selectedIds}
                     selectionMode={selectionMode}
                     onToggleSelectionMode={handleToggleSelectionMode}
@@ -924,10 +1084,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         if (blocked) return;
                         void queueBulkDownload(filesToDownload, activeFolderId);
                     }}
+                    onDownloadFolderTree={activeFolderId !== null ? () => handleDownloadFolderTree(activeFolderId) : undefined}
                     searchTerm={searchTerm}
                     onSearchChange={setSearchTerm}
                     onSearchCommit={commitSearchTerm}
                     recentSearches={recentSearches}
+                    showFolderSearchScope={activeSmartCollectionId === null && activeFolderId !== null && activeFolderId !== RECENT_FOLDER_ID}
+                    searchCurrentFolderOnly={searchCurrentFolderOnly}
+                    onSearchCurrentFolderOnlyChange={setSearchCurrentFolderOnly}
                     showFavoritesOnly={showFavoritesOnly}
                     onToggleFavoritesFilter={() => setShowFavoritesOnly(v => !v)}
                     favoriteCount={favoriteIds.size}
@@ -940,6 +1104,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     queuedUploadCount={queuedUploadCount}
                     uploadingCount={uploadingCount}
                     failedUploadCount={failedUploadCount}
+                    uploadProgress={uploadProgress}
                     isDraggingFiles={isDragging}
                 />
                 {searchTerm.length > 2 && (
@@ -1015,11 +1180,27 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 />
             )}
 
+            {statsFolderId !== null && folders.find((folder) => folder.id === statsFolderId) && (
+                <FolderStatsModal
+                    folder={folders.find((folder) => folder.id === statsFolderId)!}
+                    files={allIndexedRaw.filter((file) => file.icon_type !== 'folder' && file.folder_id === statsFolderId)}
+                    onClose={() => setStatsFolderId(null)}
+                />
+            )}
+
             {duplicateItems.length > 0 && (
                 <DuplicateDialog
                     item={duplicateItems[0]}
                     onForceUpload={forceUpload}
                     onSkip={skipDuplicate}
+                />
+            )}
+
+            {conflictItems.length > 0 && (
+                <BackupConflictDialog
+                    item={conflictItems[0]}
+                    onUploadVersion={forceUpload}
+                    onKeepTelegram={skipDuplicate}
                 />
             )}
 

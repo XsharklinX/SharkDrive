@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { BandwidthStats, BookCardData, ShareLinkInfo, TelegramFile, TelegramFolder } from '../types';
+import type { AutomationConfig, BandwidthStats, BookCardData, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../types';
 
 type FileRecord = TelegramFile;
 let streamTokenPromise: Promise<string> | null = null;
@@ -163,5 +163,17 @@ export const tauriApi = {
     },
     batchRename(renames: { messageId: number; folderId: number | null; newName: string }[]) {
         return invoke<number>('cmd_batch_rename', { renames });
+    },
+    getAutomationConfig() {
+        return invoke<AutomationConfig>('cmd_get_automation_config');
+    },
+    setScheduledSyncTime(time: string | null) {
+        return invoke<void>('cmd_set_scheduled_sync_time', { time });
+    },
+    setCleanupRules(rules: CleanupRule[]) {
+        return invoke<void>('cmd_set_cleanup_rules', { rules });
+    },
+    getDueCleanupFiles() {
+        return invoke<TelegramFile[]>('cmd_get_due_cleanup_files');
     },
 };

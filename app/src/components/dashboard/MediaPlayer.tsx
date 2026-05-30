@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Radio, Shield, Video, Shuffle } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { X, ChevronLeft, ChevronRight, Radio, Shield, Video, Shuffle, Play, Pause, Volume2, VolumeX, SkipBack, SkipForward } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { isVideoFile, isAudioFile, resolveFileFolderId } from '../../utils';
@@ -21,6 +21,15 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
     const [streamToken, setStreamToken] = useState<string | null>(null);
     const [posterSrc, setPosterSrc] = useState<string | null>(null);
     const [shuffle, setShuffle] = useState(false);
+
+    // Custom audio player state
+    const audioRef = useRef<HTMLAudioElement>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [volume, setVolume] = useState(1);
+    const [isMuted, setIsMuted] = useState(false);
+    const [seeking, setSeeking] = useState(false);
 
     useEffect(() => {
         tauriApi.getStreamToken().then(setStreamToken).catch(() => {});
@@ -50,6 +59,58 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
     const isVideo = isVideoFile(file.name);
     const isAudio = isAudioFile(file.name);
     const audioPlaylist = useMemo(() => playlist.filter((item) => isAudioFile(item.name)), [playlist]);
+
+    // Reset audio state when track changes
+    useEffect(() => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+        setDuration(0);
+    }, [file.id]);
+
+    const formatTime = (secs: number) => {
+        if (!isFinite(secs) || secs < 0) return '0:00';
+        const m = Math.floor(secs / 60);
+        const s = Math.floor(secs % 60).toString().padStart(2, '0');
+        return `${m}:${s}`;
+    };
+
+    const togglePlay = () => {
+        const a = audioRef.current;
+        if (!a) return;
+        if (a.paused) { void a.play(); } else { a.pause(); }
+    };
+
+    const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const t = Number(e.target.value);
+        setCurrentTime(t);
+        if (audioRef.current) audioRef.current.currentTime = t;
+    };
+
+    const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const v = Number(e.target.value);
+        setVolume(v);
+        if (audioRef.current) { audioRef.current.volume = v; audioRef.current.muted = false; }
+        setIsMuted(false);
+    };
+
+    const toggleMute = () => {
+        if (!audioRef.current) return;
+        audioRef.current.muted = !isMuted;
+        setIsMuted(!isMuted);
+    };
+
+    // Space bar to play/pause audio
+    useEffect(() => {
+        if (!isAudio) return;
+        const handle = (e: KeyboardEvent) => {
+            if (e.code === 'Space' && !(e.target as HTMLElement).closest('input,textarea,button')) {
+                e.preventDefault();
+                togglePlay();
+            }
+        };
+        window.addEventListener('keydown', handle);
+        return () => window.removeEventListener('keydown', handle);
+    }, [isAudio, isPlaying]);
 
     const handleEnded = () => {
         if (isAudio && shuffle && audioPlaylist.length > 1 && onSelectTrack) {
@@ -171,11 +232,94 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
                             className="h-full w-full rounded-[1.4rem] bg-black object-contain"
                         />
                     ) : isAudio ? (
-                        <div className="flex h-full w-full flex-col items-center justify-center rounded-[1.4rem] bg-[radial-gradient(circle_at_top,rgba(105,199,255,0.18),transparent_24%),linear-gradient(180deg,rgba(10,18,28,0.92),rgba(6,11,18,0.98))]">
-                            <div className="mb-8 flex h-32 w-32 items-center justify-center rounded-full border border-telegram-border bg-telegram-surface shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-                                <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 text-telegram-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-8 rounded-[1.4rem] bg-[radial-gradient(circle_at_top,rgba(105,199,255,0.14),transparent_28%),linear-gradient(180deg,rgba(10,18,28,0.95),rgba(6,11,18,1))] px-8">
+                            {/* Hidden audio element */}
+                            <audio
+                                ref={audioRef}
+                                src={streamUrl}
+                                autoPlay
+                                preload="auto"
+                                onPlay={() => setIsPlaying(true)}
+                                onPause={() => setIsPlaying(false)}
+                                onEnded={handleEnded}
+                                onTimeUpdate={() => { if (!seeking && audioRef.current) setCurrentTime(audioRef.current.currentTime); }}
+                                onLoadedMetadata={() => { if (audioRef.current) setDuration(audioRef.current.duration); setIsPlaying(true); }}
+                                onVolumeChange={() => { if (audioRef.current) { setIsMuted(audioRef.current.muted); setVolume(audioRef.current.volume); } }}
+                            />
+                            {/* Album art placeholder */}
+                            <div className="flex h-36 w-36 items-center justify-center rounded-full border border-telegram-border/50 bg-telegram-surface shadow-[0_24px_64px_rgba(0,0,0,0.5)]">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-14 h-14 text-telegram-primary/60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
                             </div>
-                            <audio src={streamUrl} controls autoPlay preload="auto" onEnded={handleEnded} className="w-full max-w-md px-4" />
+                            {/* Custom controls */}
+                            <div className="w-full max-w-sm space-y-4">
+                                {/* Progress bar */}
+                                <div className="space-y-1">
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={duration || 1}
+                                        step={0.1}
+                                        value={currentTime}
+                                        onMouseDown={() => setSeeking(true)}
+                                        onMouseUp={() => setSeeking(false)}
+                                        onChange={handleSeekChange}
+                                        className="audio-range w-full accent-telegram-primary"
+                                        style={{ height: 4 }}
+                                    />
+                                    <div className="flex justify-between text-[11px] tabular-nums text-telegram-subtext/70">
+                                        <span>{formatTime(currentTime)}</span>
+                                        <span>{formatTime(duration)}</span>
+                                    </div>
+                                </div>
+                                {/* Play / Skip controls */}
+                                <div className="flex items-center justify-center gap-5">
+                                    <button
+                                        onClick={onPrev}
+                                        disabled={!onPrev}
+                                        className="rounded-full p-2 text-telegram-subtext transition hover:text-telegram-text disabled:opacity-30"
+                                        title="Previous track"
+                                    >
+                                        <SkipBack className="h-5 w-5" />
+                                    </button>
+                                    <button
+                                        onClick={togglePlay}
+                                        className="flex h-12 w-12 items-center justify-center rounded-full bg-telegram-primary text-black shadow-lg transition hover:opacity-90 active:scale-95"
+                                        title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+                                    >
+                                        {isPlaying
+                                            ? <Pause className="h-5 w-5 fill-current" />
+                                            : <Play className="ml-0.5 h-5 w-5 fill-current" />
+                                        }
+                                    </button>
+                                    <button
+                                        onClick={onNext}
+                                        disabled={!onNext}
+                                        className="rounded-full p-2 text-telegram-subtext transition hover:text-telegram-text disabled:opacity-30"
+                                        title="Next track"
+                                    >
+                                        <SkipForward className="h-5 w-5" />
+                                    </button>
+                                </div>
+                                {/* Volume */}
+                                <div className="flex items-center gap-2">
+                                    <button onClick={toggleMute} className="flex-shrink-0 text-telegram-subtext/70 transition hover:text-telegram-text">
+                                        {isMuted || volume === 0
+                                            ? <VolumeX className="h-4 w-4" />
+                                            : <Volume2 className="h-4 w-4" />
+                                        }
+                                    </button>
+                                    <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.02}
+                                        value={isMuted ? 0 : volume}
+                                        onChange={handleVolumeChange}
+                                        className="w-full accent-telegram-primary"
+                                        style={{ height: 3 }}
+                                    />
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <div className="text-telegram-text">Unsupported media type</div>

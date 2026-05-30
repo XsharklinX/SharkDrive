@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Version](https://img.shields.io/badge/version-2.6.0-brightgreen)
+![Version](https://img.shields.io/badge/version-2.8.1-brightgreen)
 
 ---
 
@@ -77,12 +77,16 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 
 - Watch local folders for changes using the `notify` crate (v6)
 - Changed files automatically queued for upload
-- Per-folder backup configuration in Settings
+- Multiple watched folders with persistent per-folder Telegram destinations
+- Optional remote naming patterns with live preview; local filenames stay unchanged
+- Same-name backup conflicts require an explicit keep-or-upload choice
 - Debounced 5s to avoid partial-file uploads
+- Per-folder cleanup rules detect old files and always ask before deleting
 
 ### Auto Sync
 
 - Configurable auto-sync timer: 5 / 15 / 30 / 60 min, or off
+- Optional persistent daily sync at a local `HH:MM` time
 - Countdown shown in the top bar
 - Scans Telegram channels for new or changed files
 

@@ -31,14 +31,17 @@ export interface BookCardData {
 export interface QueueItem {
     id: string;
     path: string;
+    batchId?: string;
+    remoteName?: string;
     folderId: number | null;
-    status: 'pending' | 'uploading' | 'success' | 'error' | 'cancelled' | 'skipped' | 'duplicate';
+    status: 'pending' | 'uploading' | 'success' | 'error' | 'cancelled' | 'skipped' | 'duplicate' | 'conflict';
     error?: string;
     progress?: number;
     encrypt?: boolean;
     size?: number;
     startedAt?: number;
     skipDedup?: boolean;
+    source?: 'manual' | 'backup';
 }
 
 export interface BandwidthStats {
@@ -63,6 +66,16 @@ export interface BackupFolder {
     local_path: string;
     remote_folder_id: number | null;
     enabled: boolean;
+}
+
+export interface CleanupRule {
+    folder_id: number | null;
+    max_age_days: number;
+}
+
+export interface AutomationConfig {
+    scheduled_sync_time: string | null;
+    cleanup_rules: CleanupRule[];
 }
 
 export interface AppConfig {

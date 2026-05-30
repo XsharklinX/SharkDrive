@@ -1,7 +1,7 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 2.6.0
-> **Last updated:** 2026-05-29
+> **Version:** 2.8.1
+> **Last updated:** 2026-05-30
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 
 ---
@@ -17,6 +17,7 @@ Users can:
 - upload, download, preview, move, copy, rename, and share files
 - optionally encrypt files locally before upload
 - use nested folders through stored `parent_id` metadata
+- browse local smart folders and inspect folder statistics without rescanning Telegram
 
 The product goal is simple:
 
@@ -44,8 +45,9 @@ That means the UI should stay direct and understandable, while advanced features
 
 - Share passwords are stored as bcrypt hashes in `share_links.json`; legacy plaintext entries migrate on startup.
 - Vault auto-lock clears encryption keys from memory and blocks the UI without logging out of Telegram.
-- Secure delete rewrites the Telegram caption to `[SD-DELETED]` before message deletion when enabled.
+- Secure delete rewrites the Telegram caption to `[SD-DELETED-<timestamp>]` before message deletion when enabled.
 - Remote encryption conversion and key rotation replace one file at a time: upload replacement first, delete original second.
+- Settings audits locally indexed encrypted/plain file counts folder by folder and exposes guided conversion and key-rotation flows.
 - Share password forms submit through `POST`; successful bcrypt verification issues a scoped `HttpOnly`, `SameSite=Strict` cookie valid for 10 minutes.
 - New encrypted uploads use the V3 chunked format: authenticated 1 MiB AES-GCM chunks, random nonces, ordered AAD and a mandatory authenticated footer.
 - V1/V2 encrypted files remain readable through the legacy decryptor.
@@ -82,6 +84,7 @@ Shark-Drive/
     |   |       |-- SidebarItem.tsx
     |   |       |-- TopBar.tsx
     |   |       |-- FileExplorer.tsx
+    |   |       |-- FolderStatsModal.tsx
     |   |       |-- FileCard.tsx
     |   |       |-- FileListItem.tsx
     |   |       |-- GalleryView.tsx
@@ -103,6 +106,7 @@ Shark-Drive/
     |   |   |-- useFileDownload.ts
     |   |   |-- useFileOperations.ts
     |   |   |-- useDashboardSearch.ts
+    |   |   |-- useSmartCollections.ts
     |   |   |-- usePreviewNavigation.ts
     |   |   `-- useUpdateCheck.ts
     |   `-- context/
@@ -120,6 +124,7 @@ Shark-Drive/
                 |-- auth.rs
                 |-- preview.rs
                 |-- encryption.rs
+                |-- automation.rs
                 |-- backup.rs
                 |-- network.rs
                 |-- settings.rs
@@ -149,6 +154,8 @@ Shark-Drive/
 - `Sidebar`: navigation, folders tree, sync/logout entry points
 - `TopBar`: search and main actions
 - `FileExplorer`: view mode, filters, sorting, list/grid/gallery rendering
+- `useSmartCollections`: index-only virtual folders for media, documents, large files, recent files and tags
+- `FolderStatsModal`: instant per-folder summaries from the local index
 - `PreviewModal`, `MediaPlayer`, `PdfViewer`: file preview surfaces
 - `UploadQueue`, `DownloadQueue`: transfer status
 - `SettingsModal`: advanced controls that should not clutter the main explorer
@@ -177,6 +184,7 @@ Important pieces include:
 - local server state for streaming and sharing
 - bandwidth tracking
 - persisted share links
+- persisted watched folders and automation rules
 - settings and queue persistence
 
 ### Commands
@@ -209,7 +217,8 @@ The old monolithic `fs.rs` has been split into:
 #### Other domains
 
 - `encryption.rs`: local encryption and key management
-- `backup.rs`: watched folders and auto-backup behavior
+- `automation.rs`: persisted daily sync time and cleanup-candidate rules
+- `backup.rs`: durable watched folders and auto-backup behavior
 - `share.rs`: persistent share link store
 - `settings.rs`: startup/tray preferences
 - `network.rs`: connectivity and LAN helpers
@@ -253,6 +262,15 @@ The old monolithic `fs.rs` has been split into:
 - Settings stores optional download destinations by file category in localStorage
 - completed downloads can optionally open through the system default application
 - Vault Dashboard exports CSV and JSON manifest formats
+
+### Automation
+
+- watched local folders persist in `backup_folders.json` and resume after restart
+- `automation_config.json` stores an optional daily sync time and per-folder cleanup rules
+- cleanup rules only produce candidates from the local index; deletion always requires frontend confirmation
+- upload naming rules remain client-side and only change the remote Telegram display name
+- `backup_hashes.json` stores the last uploaded hash per watched path so automatic uploads distinguish local-only updates from real two-sided conflicts
+- automatic uploads skip unchanged duplicates and surface two-sided same-name conflicts before uploading a new version
 
 ---
 

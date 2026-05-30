@@ -11,8 +11,11 @@ use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, SeekFrom};
 
 use crate::bandwidth::BandwidthManager;
+use crate::commands::backup::BackupState;
 use crate::commands::encryption::{derive_folder_key, encrypt_file, EncryptionState};
-use crate::commands::fs::caption::{build_caption, compute_file_sha256, find_duplicate_message};
+use crate::commands::fs::caption::{
+    build_caption, compute_file_sha256, find_duplicate_message, find_name_conflict_message,
+};
 use crate::commands::utils::{map_error, resolve_peer};
 use crate::TelegramState;
 
@@ -270,10 +273,13 @@ pub async fn cmd_upload_file(
     transfer_id: Option<String>,
     encrypt: Option<bool>,
     skip_dedup: Option<bool>,
+    remote_name: Option<String>,
+    backup_upload: Option<bool>,
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
     bw_state: State<'_, BandwidthManager>,
     enc_state: State<'_, EncryptionState>,
+    backup_state: State<'_, BackupState>,
 ) -> Result<String, String> {
     let size = std::fs::metadata(&path)
         .map_err(|e| format!("Cannot read file: {}", e))?
@@ -292,6 +298,14 @@ pub async fn cmd_upload_file(
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
+    let display_name = remote_name
+        .as_deref()
+        .and_then(|value| std::path::Path::new(value).file_name())
+        .and_then(|value| value.to_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(original_name.as_str())
+        .to_string();
     let file_hash = compute_file_sha256(&path)?;
 
     let tid = transfer_id.unwrap_or_default();
@@ -308,7 +322,7 @@ pub async fn cmd_upload_file(
     };
 
     let caption = build_caption(
-        &original_name,
+        &display_name,
         should_encrypt && enc_key.is_some(),
         size,
         &file_hash,
@@ -343,15 +357,40 @@ pub async fn cmd_upload_file(
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
 
     if !skip_dedup.unwrap_or(false)
-        && find_duplicate_message(&client, folder_id, &original_name, size, &file_hash, &state)
+        && find_duplicate_message(&client, folder_id, &display_name, size, &file_hash, &state)
             .await?
             .is_some()
     {
+        if backup_upload.unwrap_or(false) {
+            backup_state.record_uploaded_hash(&path, &file_hash)?;
+        }
         remove_checkpoint(&app_handle, &tid);
         if let Some(tmp) = temp_path {
             let _ = std::fs::remove_file(tmp);
         }
         return Ok("duplicate".to_string());
+    }
+
+    if backup_upload.unwrap_or(false) && !skip_dedup.unwrap_or(false) {
+        if let Some((_, remote_hash)) =
+            find_name_conflict_message(&client, folder_id, &display_name, size, &file_hash, &state)
+                .await?
+        {
+            let baseline_hash = backup_state.last_uploaded_hash(&path);
+            let remote_changed = remote_hash
+                .as_deref()
+                .map(|hash| baseline_hash.as_deref() != Some(hash))
+                .unwrap_or(true);
+            let local_changed = baseline_hash.as_deref() != Some(file_hash.as_str());
+
+            if remote_changed && local_changed {
+                remove_checkpoint(&app_handle, &tid);
+                if let Some(tmp) = temp_path {
+                    let _ = std::fs::remove_file(tmp);
+                }
+                return Ok("conflict".to_string());
+            }
+        }
     }
 
     if !tid.is_empty() {
@@ -384,6 +423,9 @@ pub async fn cmd_upload_file(
         .map_err(map_error)?;
 
     bw_state.add_up(size);
+    if backup_upload.unwrap_or(false) {
+        backup_state.record_uploaded_hash(&path, &file_hash)?;
+    }
     remove_checkpoint(&app_handle, &tid);
 
     if let Some(tmp) = temp_path {

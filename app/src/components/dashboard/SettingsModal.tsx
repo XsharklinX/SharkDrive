@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -6,9 +6,10 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { ActivityEntry, BackupFolder, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
+import { ActivityEntry, BackupFolder, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
 import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
 import { tauriApi } from '../../api/tauri';
+import { applyUploadNamingPattern, UPLOAD_NAMING_PATTERN_KEY } from '../../utils';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -27,6 +28,7 @@ type Tab = 'general' | 'downloads' | 'encryption' | 'backup' | 'sharing' | 'shor
 type ActivityFilter = ActivityEntry['type'] | 'all';
 type DownloadDestinationKey = 'images' | 'videos' | 'audio' | 'docs' | 'other';
 type DownloadDestinationMap = Partial<Record<DownloadDestinationKey, string>>;
+type RotationStep = 1 | 2 | 3;
 const DOWNLOAD_DESTINATIONS_KEY = 'sharkdrive.downloadDestinations.v1';
 const OPEN_AFTER_DOWNLOAD_KEY = 'sharkdrive.openAfterDownload.v1';
 const SECURE_DELETE_KEY = 'sharkdrive.secureDelete.v1';
@@ -70,6 +72,11 @@ export function SettingsModal({
     const [sessionPin, setSessionPin] = useState('');
     const [sessionProtected, setSessionProtected] = useState(false);
     const [backupFolders, setBackupFolders] = useState<BackupFolder[]>([]);
+    const [scheduledSyncTime, setScheduledSyncTime] = useState('');
+    const [cleanupRules, setCleanupRules] = useState<CleanupRule[]>([]);
+    const [cleanupFolderId, setCleanupFolderId] = useState('');
+    const [cleanupDays, setCleanupDays] = useState(30);
+    const [uploadNamingPattern, setUploadNamingPattern] = useState('');
     const [loading, setLoading] = useState(false);
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
     const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
@@ -82,13 +89,20 @@ export function SettingsModal({
     const [rotationNewPassword, setRotationNewPassword] = useState('');
     const [rotationLoading, setRotationLoading] = useState(false);
     const [rotationProgress, setRotationProgress] = useState('');
+    const [rotationWizardOpen, setRotationWizardOpen] = useState(false);
+    const [rotationStep, setRotationStep] = useState<RotationStep>(1);
     const [auditPassword, setAuditPassword] = useState('');
     const [auditLoading, setAuditLoading] = useState(false);
+    const [auditWizardOpen, setAuditWizardOpen] = useState(false);
 
     useEffect(() => {
         invoke<boolean>('cmd_get_close_to_tray').then(setCloseToTray).catch(() => {});
         invoke<boolean>('cmd_get_autostart').then(setAutostart).catch(() => {});
         invoke<BackupFolder[]>('cmd_get_backup_folders').then(setBackupFolders).catch(() => {});
+        tauriApi.getAutomationConfig().then((config) => {
+            setScheduledSyncTime(config.scheduled_sync_time || '');
+            setCleanupRules(config.cleanup_rules);
+        }).catch(() => {});
         tauriApi.isSessionProtected().then(setSessionProtected).catch(() => {});
         const savedAutoLock = localStorage.getItem('sharkdrive.encryptionAutoLockMinutes');
         if (savedAutoLock) setAutoLockMinutes(Number(savedAutoLock) || 15);
@@ -99,6 +113,7 @@ export function SettingsModal({
         }
         setOpenAfterDownload(localStorage.getItem(OPEN_AFTER_DOWNLOAD_KEY) === 'true');
         setSecureDelete(localStorage.getItem(SECURE_DELETE_KEY) === 'true');
+        setUploadNamingPattern(localStorage.getItem(UPLOAD_NAMING_PATTERN_KEY) || '');
     }, []);
 
     useEffect(() => {
@@ -235,6 +250,52 @@ export function SettingsModal({
         }
     };
 
+    const saveScheduledSyncTime = async () => {
+        try {
+            await tauriApi.setScheduledSyncTime(scheduledSyncTime || null);
+            toast.success(scheduledSyncTime ? `Daily sync scheduled at ${scheduledSyncTime}` : 'Daily sync disabled');
+        } catch (error) {
+            toast.error(`Could not save daily sync: ${error}`);
+        }
+    };
+
+    const saveCleanupRules = async (rules: CleanupRule[]) => {
+        await tauriApi.setCleanupRules(rules);
+        setCleanupRules(rules);
+    };
+
+    const addCleanupRule = async () => {
+        if (!Number.isFinite(cleanupDays) || cleanupDays < 1) {
+            toast.error('Cleanup age must be at least one day');
+            return;
+        }
+        const folderId = cleanupFolderId === '' ? null : Number(cleanupFolderId);
+        const next = [
+            ...cleanupRules.filter((rule) => rule.folder_id !== folderId),
+            { folder_id: folderId, max_age_days: Math.round(cleanupDays) },
+        ];
+        try {
+            await saveCleanupRules(next);
+            toast.success('Cleanup rule saved. Deletions always require confirmation.');
+        } catch (error) {
+            toast.error(`Could not save cleanup rule: ${error}`);
+        }
+    };
+
+    const removeCleanupRule = async (folderId: number | null) => {
+        try {
+            await saveCleanupRules(cleanupRules.filter((rule) => rule.folder_id !== folderId));
+            toast.info('Cleanup rule removed');
+        } catch (error) {
+            toast.error(`Could not remove cleanup rule: ${error}`);
+        }
+    };
+
+    const updateNamingPattern = (value: string) => {
+        setUploadNamingPattern(value);
+        localStorage.setItem(UPLOAD_NAMING_PATTERN_KEY, value);
+    };
+
     const syncOptions = [
         { label: 'Disabled', value: 0 },
         { label: 'Every 5 min', value: 5 },
@@ -314,6 +375,11 @@ export function SettingsModal({
             toast.error('Enter the current password and a new password with at least 8 characters.');
             return;
         }
+        if (rotationOldPassword === rotationNewPassword) {
+            toast.error('Choose a new password that differs from the current password.');
+            return;
+        }
+        setRotationStep(3);
         setRotationLoading(true);
         setRotationProgress(`0/${encryptedFiles.length}: preparing`);
         try {
@@ -330,6 +396,8 @@ export function SettingsModal({
             setRotationOldPassword('');
             setRotationNewPassword('');
             setRotationProgress('');
+            setRotationStep(1);
+            setRotationWizardOpen(false);
             toast.success(`Rotated ${rotated} encrypted file${rotated === 1 ? '' : 's'}.`);
         } catch (error) {
             toast.error(`Key rotation stopped safely: ${error}`);
@@ -357,6 +425,7 @@ export function SettingsModal({
             await tauriApi.setEncryptionKey(auditPassword);
             setAuditPassword('');
             setRotationProgress('');
+            setAuditWizardOpen(false);
             toast.success(`Encrypted ${encrypted} existing file${encrypted === 1 ? '' : 's'}. Sync to refresh the audit.`);
         } catch (error) {
             toast.error(`Encryption stopped safely: ${error}`);
@@ -365,8 +434,24 @@ export function SettingsModal({
         }
     };
     const passwordStrength = estimatePasswordStrength(password);
+    const rotationPasswordStrength = estimatePasswordStrength(rotationNewPassword);
     const encryptedCount = files.filter((file) => file.is_encrypted).length;
     const plainFiles = files.filter((file) => !file.is_encrypted);
+    const folderAuditRows = useMemo(() => {
+        const rows = new Map<number | null, { id: number | null; name: string; encrypted: number; plain: number }>();
+        rows.set(null, { id: null, name: 'Saved Messages', encrypted: 0, plain: 0 });
+        folders.forEach((folder) => rows.set(folder.id, { id: folder.id, name: folder.name, encrypted: 0, plain: 0 }));
+        files.forEach((file) => {
+            const folderId = file.folder_id ?? null;
+            const row = rows.get(folderId) ?? { id: folderId, name: `Folder ${folderId}`, encrypted: 0, plain: 0 };
+            if (file.is_encrypted) row.encrypted += 1;
+            else row.plain += 1;
+            rows.set(folderId, row);
+        });
+        return Array.from(rows.values())
+            .filter((row) => row.encrypted + row.plain > 0)
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [files, folders]);
     const formatShareExpiry = (value?: number | null) => {
         if (!value) return 'Never';
         const diff = value - Date.now();
@@ -505,6 +590,37 @@ export function SettingsModal({
                                             Folder list will sync every {autoSyncInterval} minute{autoSyncInterval > 1 ? 's' : ''}.
                                         </p>
                                     )}
+                                    <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                        <label className="mb-2 block text-xs font-medium text-telegram-text">Daily scheduled sync</label>
+                                        <p className="mb-3 text-xs leading-5 text-telegram-subtext">
+                                            Run one additional sync at a specific local time. This remains active after restarting SharkDrive.
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="time"
+                                                value={scheduledSyncTime}
+                                                onChange={(event) => setScheduledSyncTime(event.target.value)}
+                                                className="min-w-0 flex-1 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                            />
+                                            <button
+                                                onClick={() => void saveScheduledSyncTime()}
+                                                className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90"
+                                            >
+                                                Save
+                                            </button>
+                                            {scheduledSyncTime && (
+                                                <button
+                                                    onClick={() => {
+                                                        setScheduledSyncTime('');
+                                                        void tauriApi.setScheduledSyncTime(null).then(() => toast.info('Daily sync disabled'));
+                                                    }}
+                                                    className="rounded-lg border border-telegram-border px-3 py-2 text-xs text-telegram-subtext transition hover:text-telegram-text"
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </SectionCard>
 
                                 <SectionCard
@@ -583,6 +699,7 @@ export function SettingsModal({
                         )}
 
                         {tab === 'encryption' && (
+                            <>
                             <SectionCard
                                 title="Local Encryption"
                                 icon={<Shield className="w-4 h-4" />}
@@ -620,42 +737,110 @@ export function SettingsModal({
                                             </select>
                                         </div>
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                            <p className="text-sm font-medium text-telegram-text">Rotate encryption key</p>
-                                            <p className="mt-1 text-xs leading-5 text-telegram-subtext">
-                                                Replaces encrypted files one at a time. The original Telegram message is deleted only after its replacement uploads successfully.
-                                            </p>
-                                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                                <input
-                                                    type="password"
-                                                    value={rotationOldPassword}
-                                                    onChange={(event) => setRotationOldPassword(event.target.value)}
-                                                    placeholder="Current password"
-                                                    className="rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
-                                                />
-                                                <input
-                                                    type="password"
-                                                    value={rotationNewPassword}
-                                                    onChange={(event) => setRotationNewPassword(event.target.value)}
-                                                    placeholder="New password"
-                                                    className="rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
-                                                />
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-medium text-telegram-text">Rotate encryption key</p>
+                                                    <p className="mt-1 text-xs leading-5 text-telegram-subtext">
+                                                        Replace encrypted files safely, one at a time. Originals remain until each replacement uploads.
+                                                    </p>
+                                                </div>
+                                                {!rotationWizardOpen && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setRotationStep(1);
+                                                            setRotationWizardOpen(true);
+                                                        }}
+                                                        disabled={encryptedCount === 0}
+                                                        className="shrink-0 rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16 disabled:opacity-50"
+                                                    >
+                                                        Open wizard
+                                                    </button>
+                                                )}
                                             </div>
-                                            {rotationProgress && <p className="mt-2 truncate text-xs text-telegram-subtext">{rotationProgress}</p>}
-                                            <button
-                                                onClick={() => void rotateEncryptionKey()}
-                                                disabled={rotationLoading || files.filter((file) => file.is_encrypted).length === 0}
-                                                className="mt-3 rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16 disabled:opacity-50"
-                                            >
-                                                {rotationLoading ? 'Rotating...' : 'Start Rotation'}
-                                            </button>
+                                            {rotationWizardOpen && (
+                                                <div className="mt-4 rounded-xl border border-telegram-border bg-white/[0.02] p-3">
+                                                    <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">Step {rotationStep} of 3</p>
+                                                    {rotationStep === 1 && (
+                                                        <div className="mt-2">
+                                                            <p className="text-xs text-telegram-subtext">Enter the current password to decrypt indexed encrypted files.</p>
+                                                            <input
+                                                                autoFocus
+                                                                type="password"
+                                                                value={rotationOldPassword}
+                                                                onChange={(event) => setRotationOldPassword(event.target.value)}
+                                                                placeholder="Current password"
+                                                                className="mt-3 w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                    {rotationStep === 2 && (
+                                                        <div className="mt-2">
+                                                            <p className="text-xs text-telegram-subtext">Choose the new local encryption password.</p>
+                                                            <input
+                                                                autoFocus
+                                                                type="password"
+                                                                value={rotationNewPassword}
+                                                                onChange={(event) => setRotationNewPassword(event.target.value)}
+                                                                placeholder="New password"
+                                                                className="mt-3 w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                                            />
+                                                            {rotationNewPassword && (
+                                                                <p className="mt-2 text-xs text-telegram-subtext">
+                                                                    {rotationPasswordStrength.label} | {rotationPasswordStrength.bits} bits | {rotationPasswordStrength.crackTime}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                    {rotationStep === 3 && (
+                                                        <div className="mt-2">
+                                                            <p className="text-xs text-telegram-subtext">
+                                                                Downloading, decrypting, re-encrypting and uploading replacements sequentially.
+                                                            </p>
+                                                            <p className="mt-3 truncate text-xs font-medium text-telegram-primary">
+                                                                {rotationProgress || `0/${encryptedCount}: preparing`}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    <div className="mt-4 flex justify-end gap-2">
+                                                        {!rotationLoading && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (rotationStep === 1) {
+                                                                        setRotationOldPassword('');
+                                                                        setRotationNewPassword('');
+                                                                        setRotationProgress('');
+                                                                        setRotationWizardOpen(false);
+                                                                    } else {
+                                                                        setRotationStep(rotationStep === 3 ? 2 : 1);
+                                                                    }
+                                                                }}
+                                                                className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-subtext transition hover:text-telegram-text"
+                                                            >
+                                                                {rotationStep === 1 ? 'Cancel' : 'Back'}
+                                                            </button>
+                                                        )}
+                                                        {rotationStep === 1 && (
+                                                            <button
+                                                                onClick={() => setRotationStep(2)}
+                                                                disabled={!rotationOldPassword}
+                                                                className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+                                                            >
+                                                                Continue
+                                                            </button>
+                                                        )}
+                                                        {rotationStep === 2 && (
+                                                            <button
+                                                                onClick={() => void rotateEncryptionKey()}
+                                                                disabled={rotationNewPassword.length < 8 || rotationNewPassword === rotationOldPassword}
+                                                                className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+                                                            >
+                                                                Start rotation
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                        <ToggleRow
-                                            icon={<Trash2 className="w-3.5 h-3.5" />}
-                                            title="Secure delete"
-                                            description="Replace the Telegram caption with [SD-DELETED] before deleting the message."
-                                            checked={secureDelete}
-                                            onChange={setSecureDeleteSetting}
-                                        />
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
                                             <div className="flex items-center justify-between gap-3">
                                                 <div>
@@ -664,29 +849,58 @@ export function SettingsModal({
                                                 </div>
                                                 <span className="rounded-md bg-telegram-primary/10 px-2 py-1 text-xs text-telegram-primary">{files.length} total</span>
                                             </div>
+                                            <div className="mt-3 max-h-36 space-y-1 overflow-y-auto">
+                                                {folderAuditRows.map((row) => (
+                                                    <div key={row.id ?? 'home'} className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs">
+                                                        <span className="truncate text-telegram-text">{row.name}</span>
+                                                        <span className="shrink-0 text-telegram-subtext">{row.encrypted} encrypted / {row.plain} plain</span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                             {plainFiles.length > 0 && (
                                                 <div className="mt-3">
-                                                    <div className="max-h-28 space-y-1 overflow-y-auto">
-                                                        {plainFiles.slice(0, 20).map((file) => (
-                                                            <p key={`${file.folder_id ?? 'home'}-${file.id}`} className="truncate text-xs text-telegram-subtext">{file.name}</p>
-                                                        ))}
-                                                    </div>
-                                                    <div className="mt-3 flex gap-2">
-                                                        <input
-                                                            type="password"
-                                                            value={auditPassword}
-                                                            onChange={(event) => setAuditPassword(event.target.value)}
-                                                            placeholder="Encryption password"
-                                                            className="min-w-0 flex-1 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-xs text-telegram-text outline-none focus:border-telegram-primary/70"
-                                                        />
+                                                    {!auditWizardOpen ? (
                                                         <button
-                                                            onClick={() => void encryptPlainFiles()}
-                                                            disabled={auditLoading}
-                                                            className="rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16 disabled:opacity-50"
+                                                            onClick={() => setAuditWizardOpen(true)}
+                                                            className="rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16"
                                                         >
-                                                            {auditLoading ? 'Encrypting...' : 'Encrypt now'}
+                                                            Encrypt all plain files
                                                         </button>
-                                                    </div>
+                                                    ) : (
+                                                        <div className="rounded-xl border border-telegram-border bg-white/[0.02] p-3">
+                                                            <p className="text-xs leading-5 text-telegram-subtext">
+                                                                Encrypt {plainFiles.length} indexed plain file{plainFiles.length === 1 ? '' : 's'} sequentially. Originals remain until replacements upload successfully.
+                                                            </p>
+                                                            <input
+                                                                type="password"
+                                                                value={auditPassword}
+                                                                onChange={(event) => setAuditPassword(event.target.value)}
+                                                                placeholder="Encryption password"
+                                                                className="mt-3 w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-xs text-telegram-text outline-none focus:border-telegram-primary/70"
+                                                            />
+                                                            {auditLoading && <p className="mt-2 truncate text-xs text-telegram-primary">{rotationProgress}</p>}
+                                                            <div className="mt-3 flex justify-end gap-2">
+                                                                {!auditLoading && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setAuditPassword('');
+                                                                            setAuditWizardOpen(false);
+                                                                        }}
+                                                                        className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-subtext transition hover:text-telegram-text"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    onClick={() => void encryptPlainFiles()}
+                                                                    disabled={auditLoading || auditPassword.length < 8}
+                                                                    className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90 disabled:opacity-50"
+                                                                >
+                                                                    {auditLoading ? 'Encrypting...' : 'Encrypt files'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -758,7 +972,7 @@ export function SettingsModal({
                                                     <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
                                                         <div className="h-full rounded-full bg-telegram-primary transition-all" style={{ width: `${passwordStrength.width}%` }} />
                                                     </div>
-                                                    <p className="mt-1.5 text-xs text-telegram-subtext">{passwordStrength.label} · {passwordStrength.bits} bits · {passwordStrength.crackTime}</p>
+                                                    <p className="mt-1.5 text-xs text-telegram-subtext">{passwordStrength.label} | {passwordStrength.bits} bits | {passwordStrength.crackTime}</p>
                                                 </div>
                                             )}
                                         </div>
@@ -772,9 +986,24 @@ export function SettingsModal({
                                     </div>
                                 )}
                             </SectionCard>
+                            <SectionCard
+                                title="Secure Delete"
+                                icon={<Trash2 className="w-4 h-4" />}
+                                description="Reduce recoverable metadata when deleting remote files."
+                            >
+                                <ToggleRow
+                                    icon={<Trash2 className="w-3.5 h-3.5" />}
+                                    title="Rewrite caption before deletion"
+                                    description="Replace the Telegram caption with [SD-DELETED-timestamp] before deleting the message. Telegram still controls server retention."
+                                    checked={secureDelete}
+                                    onChange={setSecureDeleteSetting}
+                                />
+                            </SectionCard>
+                            </>
                         )}
 
                         {tab === 'backup' && (
+                            <>
                             <SectionCard
                                 title="Watched Folders"
                                 icon={<FolderSync className="w-4 h-4" />}
@@ -840,6 +1069,76 @@ export function SettingsModal({
                                     </div>
                                 )}
                             </SectionCard>
+                            <SectionCard
+                                title="Upload Naming"
+                                icon={<FolderOpen className="w-4 h-4" />}
+                                description="Optionally rename uploads in Telegram without changing local filenames."
+                            >
+                                <input
+                                    value={uploadNamingPattern}
+                                    onChange={(event) => updateNamingPattern(event.target.value)}
+                                    placeholder="{date}_{name}.{ext}"
+                                    className="w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                />
+                                <p className="text-xs leading-5 text-telegram-subtext">
+                                    Tokens: {'{date}'}, {'{name}'}, {'{folder}'}, {'{n}'}, {'{ext}'}. Leave empty to keep original names.
+                                </p>
+                                <div className="rounded-lg border border-telegram-border bg-black/10 px-3 py-2 text-xs text-telegram-subtext">
+                                    Preview: <span className="font-mono text-telegram-text">{uploadNamingPattern ? applyUploadNamingPattern('quarterly-report.pdf', uploadNamingPattern, 'Documents', 1) : 'quarterly-report.pdf'}</span>
+                                </div>
+                            </SectionCard>
+                            <SectionCard
+                                title="Cleanup Review"
+                                icon={<Trash2 className="w-4 h-4" />}
+                                description="Detect old remote files after startup and sync. SharkDrive always asks before deleting anything."
+                            >
+                                <div className="grid gap-2 sm:grid-cols-[1fr_8rem_auto]">
+                                    <select
+                                        value={cleanupFolderId}
+                                        onChange={(event) => setCleanupFolderId(event.target.value)}
+                                        className="rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                    >
+                                        <option value="">Saved Messages</option>
+                                        {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
+                                    </select>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        value={cleanupDays}
+                                        onChange={(event) => setCleanupDays(Number(event.target.value))}
+                                        className="rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                        title="Maximum file age in days"
+                                    />
+                                    <button
+                                        onClick={() => void addCleanupRule()}
+                                        className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90"
+                                    >
+                                        Save Rule
+                                    </button>
+                                </div>
+                                {cleanupRules.length === 0 ? (
+                                    <p className="text-xs text-telegram-subtext">No cleanup rules configured.</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {cleanupRules.map((rule) => (
+                                            <div key={rule.folder_id ?? 'home'} className="flex items-center justify-between gap-3 rounded-lg border border-telegram-border bg-black/10 px-3 py-2">
+                                                <p className="truncate text-xs text-telegram-text">
+                                                    {rule.folder_id === null ? 'Saved Messages' : folders.find((folder) => folder.id === rule.folder_id)?.name || `Folder ${rule.folder_id}`}
+                                                    <span className="text-telegram-subtext"> | older than {rule.max_age_days} days</span>
+                                                </p>
+                                                <button
+                                                    onClick={() => void removeCleanupRule(rule.folder_id)}
+                                                    className="rounded-md p-1.5 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-300"
+                                                    title="Remove cleanup rule"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </SectionCard>
+                            </>
                         )}
 
                         {tab === 'sharing' && (

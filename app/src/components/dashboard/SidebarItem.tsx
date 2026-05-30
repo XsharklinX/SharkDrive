@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, FolderOpen, FolderUp, Link, Lock, LockOpen, Paintbrush, Pencil, Pin, PinOff, Plus, Trash2, FolderInput } from 'lucide-react';
+import { BarChart3, ChevronRight, FolderOpen, FolderUp, Link, Lock, LockOpen, Paintbrush, Pencil, Pin, PinOff, Plus, Trash2, FolderInput } from 'lucide-react';
 import { FOLDER_COLOR_PALETTE } from '../../hooks/useOrganization';
 
 interface SidebarItemProps {
@@ -25,6 +25,7 @@ interface SidebarItemProps {
     isPinned?: boolean;
     onTogglePinned?: () => void;
     onSetFolderColor?: (color: string | null) => void;
+    onViewStats?: () => void;
 }
 
 interface FolderContextMenuProps {
@@ -42,11 +43,12 @@ interface FolderContextMenuProps {
     folderColor?: string;
     onTogglePinned?: () => void;
     onSetFolderColor?: (color: string | null) => void;
+    onViewStats?: () => void;
     onDelete: () => void;
     onClose: () => void;
 }
 
-function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, onToggleEncryption, onCreateChild, onMoveToRoot, onMoveFolderTo, isPinned, folderColor, onTogglePinned, onSetFolderColor, onDelete, onClose }: FolderContextMenuProps) {
+function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, onToggleEncryption, onCreateChild, onMoveToRoot, onMoveFolderTo, isPinned, folderColor, onTogglePinned, onSetFolderColor, onViewStats, onDelete, onClose }: FolderContextMenuProps) {
     const menuRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
 
@@ -144,6 +146,12 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
                 <Link className="w-4 h-4 text-emerald-400" />
                 Share Folder
             </button>
+            {onViewStats && (
+                <button onClick={onViewStats} className={`${btn} text-telegram-text`}>
+                    <BarChart3 className="w-4 h-4 text-telegram-primary" />
+                    View Statistics
+                </button>
+            )}
             <button onClick={onToggleEncryption} className={`${btn} ${isEncrypted ? 'text-yellow-300' : 'text-telegram-text'}`}>
                 {isEncrypted
                     ? <><LockOpen className="w-4 h-4" /> Turn off auto-encrypt</>
@@ -186,7 +194,7 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
     );
 }
 
-export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop, onFolderDrop, onDelete, onRename, onShareLink, onToggleEncryption, isEncrypted, folderId, depth = 0, onCreateChild, onMoveToRoot, onMoveFolderTo, draggableFolderId, fileCount, folderColor, isPinned, onTogglePinned, onSetFolderColor }: SidebarItemProps) {
+export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop, onFolderDrop, onDelete, onRename, onShareLink, onToggleEncryption, isEncrypted, folderId, depth = 0, onCreateChild, onMoveToRoot, onMoveFolderTo, draggableFolderId, fileCount, folderColor, isPinned, onTogglePinned, onSetFolderColor, onViewStats }: SidebarItemProps) {
     const [isOver, setIsOver] = useState(false);
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
     const hasContextMenu = !!(onDelete || onRename || onShareLink);
@@ -300,6 +308,7 @@ export function SidebarItem({ icon: Icon, label, active = false, onClick, onDrop
                     folderColor={folderColor}
                     onTogglePinned={onTogglePinned ? () => { onTogglePinned(); setContextMenu(null); } : undefined}
                     onSetFolderColor={onSetFolderColor}
+                    onViewStats={onViewStats ? () => { onViewStats(); setContextMenu(null); } : undefined}
                     onDelete={() => { onDelete?.(); setContextMenu(null); }}
                     onClose={() => setContextMenu(null)}
                 />

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Activity, BarChart2, ChevronDown, Clock, Folder, HardDrive, Lock, LogOut, Plus, RefreshCw, Star } from 'lucide-react';
+import { Activity, BarChart2, ChevronDown, Clock, FileText, Folder, HardDrive, Image, Lock, LogOut, Plus, RefreshCw, Sparkles, Star, Tag, Video } from 'lucide-react';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
 import { ActivityEntry, BandwidthStats, TelegramFolder } from '../../types';
 import { formatBytes } from '../../utils';
+import type { SmartCollection, SmartCollectionId, SmartCollectionKind } from '../../hooks/useSmartCollections';
 
 function timeAgo(isoTimestamp: string): string {
     const diff = Date.now() - new Date(isoTimestamp).getTime();
@@ -47,6 +48,10 @@ interface SidebarProps {
     getFolderColor?: (folderId: number) => string | undefined;
     onTogglePinnedFolder?: (folderId: number) => void;
     onSetFolderColor?: (folderId: number, color: string | null) => void;
+    onViewFolderStats?: (folderId: number) => void;
+    smartCollections?: SmartCollection[];
+    activeSmartCollectionId?: SmartCollectionId | null;
+    onSelectSmartCollection?: (collectionId: SmartCollectionId) => void;
     encryptionUnlocked?: boolean;
     onLockVault?: () => void;
 }
@@ -81,6 +86,10 @@ export function Sidebar({
     getFolderColor,
     onTogglePinnedFolder,
     onSetFolderColor,
+    onViewFolderStats,
+    smartCollections = [],
+    activeSmartCollectionId = null,
+    onSelectSmartCollection,
     encryptionUnlocked = false,
     onLockVault,
 }: SidebarProps) {
@@ -88,6 +97,7 @@ export function Sidebar({
     const [newFolderName, setNewFolderName] = useState('');
     const [createParentId, setCreateParentId] = useState<number | null>(null);
     const [showActivity, setShowActivity] = useState(false);
+    const [showSmartFolders, setShowSmartFolders] = useState(true);
 
     const selectedFolder = folders.find((folder) => folder.id === activeFolderId) ?? null;
     const createTargetParentId = createParentId ?? (selectedFolder ? selectedFolder.id : null);
@@ -186,6 +196,7 @@ export function Sidebar({
                     isPinned={pinnedSet.has(folder.id)}
                     onTogglePinned={onTogglePinnedFolder ? () => onTogglePinnedFolder(folder.id) : undefined}
                     onSetFolderColor={onSetFolderColor ? (color) => onSetFolderColor(folder.id, color) : undefined}
+                    onViewStats={onViewFolderStats ? () => onViewFolderStats(folder.id) : undefined}
                 />
                 {renderFolderTree(folder.id, depth + 1)}
             </div>
@@ -260,6 +271,33 @@ export function Sidebar({
                         onDrop={() => {}}
                         folderId={null}
                     />
+                )}
+                {smartCollections.length > 0 && onSelectSmartCollection && (
+                    <div className="mt-3">
+                        <button
+                            onClick={() => setShowSmartFolders((visible) => !visible)}
+                            className="flex w-full items-center justify-between px-3 py-2 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext transition hover:text-telegram-text"
+                        >
+                            <span className="flex items-center gap-1.5"><Sparkles className="h-3 w-3" />Smart folders</span>
+                            <ChevronDown className={`h-3 w-3 transition-transform ${showSmartFolders ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showSmartFolders && (
+                            <div className="space-y-0.5">
+                                {smartCollections.map((collection) => (
+                                    <SidebarItem
+                                        key={collection.id}
+                                        icon={smartCollectionIcons[collection.kind]}
+                                        label={collection.label}
+                                        active={activeSmartCollectionId === collection.id}
+                                        onClick={() => onSelectSmartCollection(collection.id)}
+                                        onDrop={() => {}}
+                                        folderId={null}
+                                        fileCount={collection.count}
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
                 {rootPinnedCount > 0 && (
                     <>
@@ -374,3 +412,12 @@ export function Sidebar({
         </aside>
     );
 }
+
+const smartCollectionIcons: Record<SmartCollectionKind, React.ElementType> = {
+    images: Image,
+    videos: Video,
+    documents: FileText,
+    large: HardDrive,
+    recent: Clock,
+    tag: Tag,
+};

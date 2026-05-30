@@ -121,6 +121,10 @@ async fn download_message_to_path(
     }
 
     let part_path = format!("{}.part", save_path);
+    // Create parent directories if needed (e.g. folder-tree downloads)
+    if let Some(parent) = std::path::Path::new(&part_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
     let mut download_iter = client.iter_download(&media);
     let mut file = std::fs::File::create(&part_path).map_err(|e| e.to_string())?;
     let mut downloaded: u64 = 0;

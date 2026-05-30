@@ -4,6 +4,46 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [2.8.1] - 2026-05-30
+
+### Automation 2.0
+
+- **Durable watched folders** - Auto-backup folders and Telegram destinations persist in `backup_folders.json` and resume watching after restart.
+- **Remote naming rules** - Settings supports optional upload patterns with `{date}`, `{name}`, `{folder}`, `{n}` and `{ext}` plus a live preview; local filenames remain unchanged.
+- **Safe cleanup review** - Persisted per-folder age rules detect old indexed Telegram files after startup and sync, then require explicit confirmation before deletion.
+- **Daily scheduled sync** - Rust persists an optional local `HH:MM` sync time and emits one sync request per configured day.
+- **Backup conflict dialog** - `backup_hashes.json` records the last uploaded hash per watched path so unchanged remote versions upload normally, unchanged backups skip automatically, and real two-sided changes require an explicit keep-or-upload decision.
+- **Global upload progress** - The top bar shows a compact aggregate progress bar while uploads are active.
+- **Version lock sync** - `scripts/sync-version.ps1` now updates both root entries in `package-lock.json` alongside the existing manifests.
+
+---
+
+## [2.8.0] - 2026-05-30
+
+### Advanced Organization
+
+- **Smart folders** - Sidebar exposes local virtual views for images, videos, documents, files larger than 100 MB, files from the last 7 days and locally assigned tags.
+- **Local smart search** - Searches performed inside smart folders remain index-only and do not rescan Telegram.
+- **Folder-scoped search** - Real folders expose a compact `Search only in this folder` toggle under the search field.
+- **Folder statistics** - Folder context menus open an instant local-index summary with file count, total size, type breakdown and oldest/newest dates.
+- **Organization verification** - Existing tag pills, folder colors, pinned-folder ordering and editable keyboard-shortcut Settings UI remain connected.
+- **Virtual drag safety** - Moving files from smart folders resolves each real Telegram source folder before invoking the move command.
+
+---
+
+## [2.7.0] - 2026-05-30
+
+### Security Suite Completion
+
+- **Folder encryption audit** - Settings reports encrypted and plain indexed files per folder without rescanning Telegram.
+- **Plain-file conversion wizard** - Existing plain files can be encrypted sequentially while originals remain until replacement uploads succeed.
+- **Guided key rotation** - Rotation now separates current password, new password and per-file progress into an explicit three-step flow.
+- **Timestamped secure delete** - Optional remote deletion rewrites captions as `[SD-DELETED-<timestamp>]` before deleting the Telegram message.
+- **Session PIN feedback** - Startup PIN unlock handles invalid attempts inline and disables repeated submits while connecting.
+- **Password strength reuse** - The dependency-free entropy estimate is visible when enabling encryption and when choosing a rotated password.
+
+---
+
 ## [2.6.0] - 2026-05-29
 
 ### Share Authentication and Chunked Encryption
@@ -34,6 +74,31 @@ All notable changes to SharkDrive are documented here.
 
 - The current LAN password form authenticates through a query string. The hash is never exposed or stored as plaintext, but POST plus a temporary authorization token remains a hardening task to prevent browser-history leakage.
 - The current AES-GCM helper buffers a complete file in memory. Chunked authenticated encryption remains required before describing the system as enterprise-grade for large files.
+
+---
+
+## [2.3.0] - 2026-05-30
+
+### Download Suite
+
+- **ZIP bulk download** ✅ — Ya implementado: `cmd_download_files_zip` en Rust (crate `zip` v2.4.2), API `downloadFilesZip`, botón "ZIP" en TopBar toolbar de selección, dialog de save path.
+- **Open after download** ✅ — Ya implementado: setting en SettingsModal, campo `openAfter` en `DownloadItem`, `openPath()` de `tauri-plugin-shell` llamado tras éxito.
+- **Custom download folder** ✅ — Ya implementado: carpeta por tipo (images/videos/audio/docs/other) en Settings → Downloads, `configuredSavePath()` en el hook, `localStorage` como store.
+- **Reordenar queue** ✅ — Ya implementado: drag & drop en `DownloadQueue`, `reorderDownloadQueue()` y `moveDownloadToFront()` en el hook.
+- **Download folder tree** — `handleDownloadFolderTree(rootFolderId)` en Dashboard: traversa la jerarquía de carpetas del `folders` array, construye un `Map<folderId → relativePath>`, filtra `allIndexedRaw` para todos los archivos en ese árbol, encola cada uno con `savePath = basePath\relPath\filename`. Rust: añadido `create_dir_all` en `download_message_to_path` para crear subdirectorios automáticamente. Botón "With Subfolders" aparece en TopBar cuando `activeFolderId !== null` (no en Saved Messages). Usa el índice local — sin llamadas Telegram adicionales.
+
+---
+
+## [2.2.0] - 2026-05-29
+
+### Media Suite
+
+- **Custom audio controls** — Reemplaza el `<audio controls>` nativo del browser (que varía entre OS/browsers y no coincide con el diseño dark) con controles completamente custom: botón play/pause central, barra de progreso con seek drag, display de tiempo `0:00 / 3:42`, control de volumen con botón mute/unmute, botones SkipBack/SkipForward conectados a `onPrev`/`onNext`. Space bar funciona como play/pause. El `<audio>` element está oculto (`hidden`) y se controla via `useRef<HTMLAudioElement>`.
+- **Scroll-to-zoom sin modificador** — PreviewModal ahora hace zoom con scroll simple (sin Ctrl). Scroll normal usa factor `deltaY * 0.002` (suave), Ctrl+scroll usa `deltaY * 0.008` (pinch-to-zoom en trackpad). Rango expandido: 0.5x–8x (antes 1x–5x). Al llegar a 1x el pan se resetea automáticamente.
+- **Keyboard shortcuts de zoom** — En PreviewModal con imagen: `+` / `=` zoom in, `-` zoom out, `0` reset a 100%. Los títulos de los botones de zoom muestran el shortcut correspondiente.
+- **Audio player** ✅ — Ya estaba completo con queue, shuffle, `onSelectTrack`, stream LAN.
+- **Slideshow en galería** ✅ — Ya estaba completo con start/pause y delay configurable.
+- **Image zoom & pan** ✅ — Ya estaba completo con drag, zoom buttons, double-click toggle.
 
 ---
 

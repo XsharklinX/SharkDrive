@@ -185,6 +185,55 @@ pub(crate) async fn find_duplicate_message(
     Ok(None)
 }
 
+pub(crate) async fn find_name_conflict_message(
+    client: &grammers_client::Client,
+    folder_id: Option<i64>,
+    display_name: &str,
+    original_size: u64,
+    sha256: &str,
+    state: &TelegramState,
+) -> Result<Option<(i32, Option<String>)>, String> {
+    let peer = resolve_peer(client, folder_id, state).await?;
+    let mut messages = client.iter_messages(&peer);
+
+    while let Some(msg) = messages.next().await.map_err(|e| e.to_string())? {
+        let media = match msg.media() {
+            Some(media) => media,
+            None => continue,
+        };
+
+        let raw_name = match &media {
+            Media::Document(d) => d.name().to_string(),
+            Media::Photo(_) => "Photo.jpg".to_string(),
+            _ => continue,
+        };
+
+        let (existing_name, existing_meta) = display_name_from_metadata(raw_name, msg.text());
+        if !existing_name.eq_ignore_ascii_case(display_name) {
+            continue;
+        }
+
+        if let Some(existing_hash) = existing_meta.sha256 {
+            if !existing_hash.eq_ignore_ascii_case(sha256) {
+                return Ok(Some((msg.id(), Some(existing_hash))));
+            }
+            continue;
+        }
+
+        let existing_size = existing_meta.original_size.unwrap_or_else(|| match &media {
+            Media::Document(d) => d.size() as u64,
+            Media::Photo(_) => 0,
+            _ => 0,
+        });
+
+        if existing_size != original_size {
+            return Ok(Some((msg.id(), existing_meta.sha256)));
+        }
+    }
+
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

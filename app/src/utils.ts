@@ -27,6 +27,9 @@ export const isVideoFile   = (name: string) => endsWithAny(name, VIDEO_EXTENSION
 export const isAudioFile   = (name: string) => endsWithAny(name, AUDIO_EXTENSIONS);
 export const isImageFile   = (name: string) => endsWithAny(name, IMAGE_EXTENSIONS);
 export const isPdfFile     = (name: string) => name.toLowerCase().endsWith('.pdf');
+export const isDocumentFile = (name: string) => (
+    /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|md|markdown|csv|rtf|epub)$/i.test(name)
+);
 
 export const resolveFileFolderId = (file: TelegramFile, fallbackFolderId: number | null): number | null => {
     if (typeof file.folder_id === 'number') {
@@ -40,6 +43,36 @@ export const buildRemoteFileKey = (file: Pick<TelegramFile, 'id' | 'folder_id'>,
 
 export const buildQueuedUploadKey = (path: string, folderId: number | null) =>
     `${folderId ?? 'home'}:${path.toLowerCase()}`;
+
+export const UPLOAD_NAMING_PATTERN_KEY = 'sharkdrive.uploadNamingPattern.v1';
+
+export const applyUploadNamingPattern = (
+    path: string,
+    pattern: string,
+    folderName = 'Saved Messages',
+    sequence = 1,
+) => {
+    const localName = path.split(/[/\\]/).pop() || path;
+    const extensionIndex = localName.lastIndexOf('.');
+    const extension = extensionIndex > 0 ? localName.slice(extensionIndex + 1) : '';
+    const stem = extensionIndex > 0 ? localName.slice(0, extensionIndex) : localName;
+    const date = new Date().toISOString().slice(0, 10);
+    const replacements: Record<string, string> = {
+        '{date}': date,
+        '{fecha}': date,
+        '{name}': stem,
+        '{nombre}': stem,
+        '{folder}': folderName,
+        '{carpeta}': folderName,
+        '{n}': String(sequence),
+        '{ext}': extension,
+    };
+    let result = pattern.trim();
+    for (const [token, value] of Object.entries(replacements)) {
+        result = result.split(token).join(value);
+    }
+    return result.replace(/[<>:"/\\|?*]/g, '_').replace(/\.+$/, '').trim() || localName;
+};
 
 type SearchFilters = {
     text: string[];
@@ -133,7 +166,7 @@ const matchesType = (name: string, type?: string) => {
     if (type === 'image') return isImageFile(name);
     if (type === 'video') return isVideoFile(name);
     if (type === 'audio') return isAudioFile(name);
-    if (type === 'doc') return isPdfFile(name) || ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'rtf'].some((ext) => name.toLowerCase().endsWith(`.${ext}`));
+    if (type === 'doc') return isDocumentFile(name);
     if (type === 'media') return isMediaFile(name);
     if (type === 'other') return !isImageFile(name) && !isVideoFile(name) && !isAudioFile(name) && !isPdfFile(name);
     return true;

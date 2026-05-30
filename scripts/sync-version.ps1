@@ -29,6 +29,8 @@ function Update-RegexVersion {
 }
 
 Update-JsonVersion 'app\package.json'
+Update-JsonVersion 'app\package-lock.json'
+Update-RegexVersion 'app\package-lock.json' '("": \{\r?\n\s*"name": "app",\r?\n\s*"version": )"[^"]+"' "`${1}`"$Version`""
 Update-JsonVersion 'app\src-tauri\tauri.conf.json'
 Update-RegexVersion 'app\src-tauri\Cargo.toml' '(?m)^version = "[^"]+"' "version = `"$Version`""
 Update-RegexVersion 'README.md' 'version-[0-9]+\.[0-9]+\.[0-9]+-brightgreen' "version-$Version-brightgreen"

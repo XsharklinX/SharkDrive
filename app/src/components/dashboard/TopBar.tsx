@@ -16,10 +16,14 @@ interface TopBarProps {
     onBulkDownloadZip: () => void;
     onBulkDelete: () => void;
     onDownloadFolder: () => void;
+    onDownloadFolderTree?: () => void;
     searchTerm: string;
     onSearchChange: (term: string) => void;
     onSearchCommit: (term: string) => void;
     recentSearches: string[];
+    showFolderSearchScope?: boolean;
+    searchCurrentFolderOnly: boolean;
+    onSearchCurrentFolderOnlyChange: (enabled: boolean) => void;
     showFavoritesOnly: boolean;
     onToggleFavoritesFilter: () => void;
     favoriteCount: number;
@@ -32,6 +36,7 @@ interface TopBarProps {
     queuedUploadCount: number;
     uploadingCount: number;
     failedUploadCount: number;
+    uploadProgress?: number | null;
     isDraggingFiles: boolean;
 }
 
@@ -49,10 +54,14 @@ export function TopBar({
     onBulkDownloadZip,
     onBulkDelete,
     onDownloadFolder,
+    onDownloadFolderTree,
     searchTerm,
     onSearchChange,
     onSearchCommit,
     recentSearches,
+    showFolderSearchScope = false,
+    searchCurrentFolderOnly,
+    onSearchCurrentFolderOnlyChange,
     showFavoritesOnly,
     onToggleFavoritesFilter,
     favoriteCount,
@@ -65,6 +74,7 @@ export function TopBar({
     queuedUploadCount,
     uploadingCount,
     failedUploadCount,
+    uploadProgress,
     isDraggingFiles,
 }: TopBarProps) {
     const { theme, toggleTheme } = useTheme();
@@ -109,9 +119,19 @@ export function TopBar({
                         <h1 className="truncate text-[1.5rem] font-semibold tracking-tight text-telegram-text">{currentFolderName}</h1>
                     )}
                     {shouldShowTransferHint && (
-                        <p className={`mt-1 text-xs ${failedUploadCount > 0 ? 'text-amber-200' : 'text-telegram-subtext'}`}>
-                            {transferStatusLabel}
-                        </p>
+                        <div className="mt-1 max-w-56">
+                            <p className={`text-xs ${failedUploadCount > 0 ? 'text-amber-200' : 'text-telegram-subtext'}`}>
+                                {transferStatusLabel}{uploadProgress != null && uploadingCount > 0 ? ` | ${uploadProgress}%` : ''}
+                            </p>
+                            {uploadProgress != null && uploadingCount > 0 && (
+                                <div className="mt-1 h-1 overflow-hidden rounded-full bg-telegram-border">
+                                    <div
+                                        className="h-full rounded-full bg-telegram-primary transition-all duration-300"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
 
@@ -215,6 +235,17 @@ export function TopBar({
                             ))}
                         </div>
                     )}
+                    {showFolderSearchScope && (
+                        <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-2 px-1 text-xs text-telegram-subtext transition hover:text-telegram-text">
+                            <input
+                                type="checkbox"
+                                checked={searchCurrentFolderOnly}
+                                onChange={(event) => onSearchCurrentFolderOnlyChange(event.target.checked)}
+                                className="accent-telegram-primary"
+                            />
+                            Search only in this folder
+                        </label>
+                    )}
                 </div>
 
                 <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -282,12 +313,20 @@ export function TopBar({
                             Upload Folder
                         </span>
                     </button>
-                    <button onClick={onDownloadFolder} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Download Folder">
+                    <button onClick={onDownloadFolder} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Download all files in this folder (flat)">
                         <span className="flex items-center gap-2">
                             <HardDrive className="h-4 w-4" />
                             Download All
                         </span>
                     </button>
+                    {onDownloadFolderTree && (
+                        <button onClick={onDownloadFolderTree} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Download this folder and all subfolders preserving directory structure">
+                            <span className="flex items-center gap-2">
+                                <HardDrive className="h-4 w-4" />
+                                With Subfolders
+                            </span>
+                        </button>
+                    )}
                 </div>
             </div>
         </header>

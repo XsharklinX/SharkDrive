@@ -1,6 +1,6 @@
 import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { TelegramFile } from '../types';
-import { buildRemoteFileKey, formatBytes, matchesAdvancedSearch } from '../utils';
+import { buildRemoteFileKey, formatBytes, matchesAdvancedSearch, resolveFileFolderId } from '../utils';
 import { tauriApi } from '../api/tauri';
 
 type FolderNameResolver = (folderId: number | null) => string | undefined;
@@ -12,6 +12,8 @@ interface UseDashboardSearchOptions {
     sourceFiles: TelegramFile[];
     showFavoritesOnly: boolean;
     favoriteIds: Set<number>;
+    searchCurrentFolderOnly: boolean;
+    allowRemoteSearch?: boolean;
     folderNameResolver: FolderNameResolver;
     handleGlobalSearch: (query: string) => Promise<TelegramFile[]>;
     decorateFile?: (file: TelegramFile, fallbackFolderId: number | null) => TelegramFile;
@@ -41,6 +43,8 @@ export function useDashboardSearch({
     sourceFiles,
     showFavoritesOnly,
     favoriteIds,
+    searchCurrentFolderOnly,
+    allowRemoteSearch = true,
     folderNameResolver,
     handleGlobalSearch,
     decorateFile,
@@ -114,10 +118,13 @@ export function useDashboardSearch({
             return;
         }
 
-        const localMatches = indexedFiles.filter((file) => matchesAdvancedSearch(file, deferredSearchTerm, folderNameResolver));
+        const localMatches = indexedFiles.filter((file) => (
+            (!searchCurrentFolderOnly || resolveFileFolderId(file, activeFolderId) === activeFolderId)
+            && matchesAdvancedSearch(file, deferredSearchTerm, folderNameResolver)
+        ));
         setSearchResults(localMatches);
 
-        if (!shouldUseRemoteSearch(deferredSearchTerm, localMatches.length)) {
+        if (!allowRemoteSearch || !shouldUseRemoteSearch(deferredSearchTerm, localMatches.length)) {
             setIsSearching(false);
             return;
         }
@@ -141,7 +148,11 @@ export function useDashboardSearch({
 
                 for (const result of remoteResults) {
                     const key = buildRemoteFileKey(result, result.folder_id ?? activeFolderId);
-                    if (!merged.has(key) && matchesAdvancedSearch(result, deferredSearchTerm, folderNameResolver)) {
+                    if (
+                        !merged.has(key)
+                        && (!searchCurrentFolderOnly || resolveFileFolderId(result, activeFolderId) === activeFolderId)
+                        && matchesAdvancedSearch(result, deferredSearchTerm, folderNameResolver)
+                    ) {
                         merged.set(key, result);
                     }
                 }
@@ -153,7 +164,7 @@ export function useDashboardSearch({
         }, 500);
 
         return () => clearTimeout(timer);
-    }, [activeFolderId, decorateFile, deferredSearchTerm, folderNameResolver, handleGlobalSearch, indexedFiles]);
+    }, [activeFolderId, allowRemoteSearch, decorateFile, deferredSearchTerm, folderNameResolver, handleGlobalSearch, indexedFiles, searchCurrentFolderOnly]);
 
     const baseFiles = useMemo(() => (
         deferredSearchTerm.length > 2
