@@ -9,7 +9,7 @@
     }
   },
   "productName": "SharkDrive",
-  "version": "2.3.0",
+  "version": "2.6.0",
   "identifier": "com.sharkdrive.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -52,4 +52,3 @@
     ]
   }
 }
-

@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Version](https://img.shields.io/badge/version-2.3.0-brightgreen)
+![Version](https://img.shields.io/badge/version-2.6.0-brightgreen)
 
 ---
 
@@ -28,6 +28,9 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 - Batch rename with pattern (e.g. `photo_{n}.jpg`)
 - Move files between folders (drag & drop or modal)
 - Copy files to another folder
+- Download multiple selected files as a ZIP archive
+- Configure default download destinations by file category
+- Reorder pending downloads and optionally open files when completed
 - Permanent delete (no trash — delete means delete)
 - Global search across all folders with advanced filters: `type:`, `ext:`, `min:`, `max:`, `folder:`, `encrypted:`
 
@@ -97,10 +100,12 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 - Minimize to system tray
 - Run at Windows startup
 - Bandwidth widget: daily upload/download usage with progress bar (250 GB/day reference)
+- Vault dashboard export: CSV or JSON manifest with folder tree and file metadata
 
 ### Settings
 
 - General: auto-sync interval, minimize-to-tray, run at startup
+- Downloads: category destinations and open-after-download behavior
 - Encryption: set or clear AES-256 password, global enable/disable
 - Backup: configure watched local folders and their Telegram targets
 - Activity: full history of the last 60 actions with type filters
@@ -179,4 +184,3 @@ MIT — free to use, modify, and distribute.
 ---
 
 *SharkDrive is not affiliated with Telegram FZ-LLC. Use in accordance with Telegram's Terms of Service.*
-

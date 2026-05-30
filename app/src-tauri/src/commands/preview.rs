@@ -1,4 +1,6 @@
 use crate::bandwidth::BandwidthManager;
+use crate::commands::encryption::{decrypt_file, derive_folder_key, EncryptionState};
+use crate::commands::fs::caption::{display_name_from_metadata, parse_caption_metadata};
 use crate::commands::utils::resolve_peer;
 use crate::models::BookCardData;
 use crate::TelegramState;
@@ -46,6 +48,26 @@ fn prune_preview_cache(cache_dir: &std::path::Path) {
     }
 }
 
+fn decrypt_cached_media(
+    metadata: &crate::commands::fs::caption::CaptionMetadata,
+    folder_id: Option<i64>,
+    enc_state: &EncryptionState,
+    encrypted_path: &std::path::Path,
+    decrypted_path: &std::path::Path,
+) -> Result<(), String> {
+    let master = enc_state
+        .active_key(metadata.encryption_version)?
+        .ok_or("This file is encrypted. Unlock the vault before previewing it.".to_string())?;
+    let key = folder_id
+        .map(|id| derive_folder_key(&master, id))
+        .unwrap_or(master);
+    decrypt_file(
+        &key,
+        &encrypted_path.to_string_lossy(),
+        &decrypted_path.to_string_lossy(),
+    )
+}
+
 #[tauri::command]
 pub async fn cmd_get_preview(
     message_id: i32,
@@ -53,6 +75,7 @@ pub async fn cmd_get_preview(
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
     bw_state: State<'_, BandwidthManager>,
+    enc_state: State<'_, EncryptionState>,
 ) -> Result<String, String> {
     let cache_dir = app_handle
         .path()
@@ -82,7 +105,9 @@ pub async fn cmd_get_preview(
         if let Some(media) = msg.media() {
             let ext = match &media {
                 Media::Document(d) => {
-                    let mut e = std::path::Path::new(d.name())
+                    let display_name =
+                        display_name_from_metadata(d.name().to_string(), msg.text()).0;
+                    let mut e = std::path::Path::new(&display_name)
                         .extension()
                         .map(|s| s.to_string_lossy().to_string())
                         .unwrap_or_default();
@@ -106,6 +131,13 @@ pub async fn cmd_get_preview(
             let folder_key = folder_cache_key(folder_id);
             let save_path = cache_dir.join(format!("{}_{}.{}", folder_key, message_id, ext));
             let save_path_str = save_path.to_string_lossy().to_string();
+            let metadata = parse_caption_metadata(msg.text());
+            let encrypted_path = cache_dir.join(format!("{}_{}.encrypted", folder_key, message_id));
+            let download_path = if metadata.encrypted {
+                encrypted_path.to_string_lossy().to_string()
+            } else {
+                save_path_str.clone()
+            };
 
             let file_ready = if save_path.exists() {
                 log::info!("File ({}) exists in cache.", message_id);
@@ -123,9 +155,21 @@ pub async fn cmd_get_preview(
                 }
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(60),
-                    client.download_media(&media, &save_path_str),
-                ).await {
+                    client.download_media(&media, &download_path),
+                )
+                .await
+                {
                     Ok(Ok(_)) => {
+                        if metadata.encrypted {
+                            decrypt_cached_media(
+                                &metadata,
+                                folder_id,
+                                &enc_state,
+                                &encrypted_path,
+                                &save_path,
+                            )?;
+                            let _ = std::fs::remove_file(&encrypted_path);
+                        }
                         log::info!("Preview download complete.");
                         bw_state.add_down(size);
                         prune_preview_cache(&cache_dir);
@@ -137,7 +181,10 @@ pub async fn cmd_get_preview(
                     }
                     Err(_) => {
                         log::warn!("Preview download timed out for msg_id={}", message_id);
-                        return Err("Preview download timed out (60 s). Check your connection and retry.".to_string());
+                        return Err(
+                            "Preview download timed out (60 s). Check your connection and retry."
+                                .to_string(),
+                        );
                     }
                 }
             };
@@ -263,7 +310,10 @@ fn run_ffmpeg_video_thumbnail(
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr);
-    Err(format!("ffmpeg thumbnail extraction failed: {}", stderr.trim()))
+    Err(format!(
+        "ffmpeg thumbnail extraction failed: {}",
+        stderr.trim()
+    ))
 }
 
 async fn download_media_to_path(
@@ -466,6 +516,7 @@ pub async fn cmd_get_thumbnail(
     folder_id: Option<i64>,
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
+    enc_state: State<'_, EncryptionState>,
 ) -> Result<String, String> {
     // Check if thumbnail already in cache
     let cache_dir = app_handle
@@ -503,57 +554,147 @@ pub async fn cmd_get_thumbnail(
 
     if let Some(m) = messages.into_iter().flatten().next() {
         if let Some(media) = m.media() {
+            let raw_name = match &media {
+                Media::Document(document) => document.name().to_string(),
+                Media::Photo(_) => "Photo.jpg".to_string(),
+                _ => String::new(),
+            };
+            let (display_name, metadata) = display_name_from_metadata(raw_name, m.text());
+            let display_name = display_name.to_lowercase();
             let is_image = match &media {
                 Media::Photo(_) => true,
-                Media::Document(d) => d.mime_type().map(|m| m.starts_with("image/")).unwrap_or(false),
+                Media::Document(d) => d
+                    .mime_type()
+                    .map(|m| m.starts_with("image/"))
+                    .unwrap_or(false),
                 _ => false,
-            };
+            } || [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"]
+                .iter()
+                .any(|extension| display_name.ends_with(extension));
             let is_video = match &media {
-                Media::Document(d) => d.mime_type().map(|m| m.starts_with("video/")).unwrap_or(false),
+                Media::Document(d) => d
+                    .mime_type()
+                    .map(|m| m.starts_with("video/"))
+                    .unwrap_or(false),
                 _ => false,
-            };
+            } || [".mp4", ".webm", ".mov", ".mkv", ".avi"]
+                .iter()
+                .any(|extension| display_name.ends_with(extension));
 
             if !is_image && !is_video {
                 return Ok("".to_string());
+            }
+            if metadata.encrypted {
+                let within_thumbnail_limit = match &media {
+                    Media::Document(document) if is_video => {
+                        (document.size() as i64) <= VIDEO_THUMB_MAX_BYTES
+                    }
+                    Media::Document(document) if is_image => document.size() <= 20 * 1024 * 1024,
+                    _ => true,
+                };
+                if !within_thumbnail_limit {
+                    return Ok("".to_string());
+                }
             }
 
             let save_path = cache_dir.join(format!("{}_{}.png", folder_key, message_id));
             let temp_path = cache_dir.join(format!("{}_{}.orig", folder_key, message_id));
 
-            let download_ok = match &media {
-                Media::Document(d) if is_video => {
-                    // Only try embedded thumbnail — never download the full video file
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(5),
-                        try_download_document_thumb(&client, d, &temp_path),
-                    ).await {
-                        Ok(Ok(found)) => found,
-                        _ => false,
-                    }
+            let download_ok = if metadata.encrypted {
+                let encrypted_temp_path =
+                    cache_dir.join(format!("{}_{}.encrypted", folder_key, message_id));
+                let encrypted_temp = encrypted_temp_path.to_string_lossy().to_string();
+                let downloaded = client.download_media(&media, &encrypted_temp).await.is_ok();
+                if downloaded {
+                    decrypt_cached_media(
+                        &metadata,
+                        folder_id,
+                        &enc_state,
+                        &encrypted_temp_path,
+                        &temp_path,
+                    )?;
                 }
-                Media::Document(d) if is_image => {
-                    // Try embedded thumb first (fast), fall back to full download (small images)
-                    let has_thumb = match tokio::time::timeout(
-                        std::time::Duration::from_secs(5),
-                        try_download_document_thumb(&client, d, &temp_path),
-                    ).await {
-                        Ok(Ok(v)) => v,
-                        _ => false,
-                    };
-                    if has_thumb {
-                        true
-                    } else if d.size() <= 5 * 1024 * 1024 {
-                        // Full download only for images ≤ 5 MB
+                let _ = std::fs::remove_file(encrypted_temp_path);
+                if downloaded && is_video {
+                    let extracted = run_ffmpeg_video_thumbnail(&temp_path, &save_path).is_ok();
+                    let _ = std::fs::remove_file(&temp_path);
+                    if extracted {
+                        if let Ok(bytes) = std::fs::read(&save_path) {
+                            return Ok(format!(
+                                "data:image/png;base64,{}",
+                                general_purpose::STANDARD.encode(bytes)
+                            ));
+                        }
+                    }
+                    false
+                } else {
+                    downloaded
+                }
+            } else {
+                match &media {
+                    Media::Document(d) if is_video => {
+                        // Prefer Telegram's embedded thumbnail; use ffmpeg as a bounded fallback.
+                        let has_thumb = match tokio::time::timeout(
+                            std::time::Duration::from_secs(5),
+                            try_download_document_thumb(&client, d, &temp_path),
+                        )
+                        .await
+                        {
+                            Ok(Ok(found)) => found,
+                            _ => false,
+                        };
+                        if has_thumb {
+                            true
+                        } else if (d.size() as i64) <= VIDEO_THUMB_MAX_BYTES {
+                            let video_path =
+                                cache_dir.join(format!("{}_{}.video", folder_key, message_id));
+                            let downloaded = tokio::time::timeout(
+                                std::time::Duration::from_secs(90),
+                                download_media_to_path(&client, &media, &video_path),
+                            )
+                            .await;
+                            let extracted = matches!(downloaded, Ok(Ok(())))
+                                && run_ffmpeg_video_thumbnail(&video_path, &save_path).is_ok();
+                            let _ = std::fs::remove_file(&video_path);
+                            if extracted {
+                                if let Ok(bytes) = std::fs::read(&save_path) {
+                                    return Ok(format!(
+                                        "data:image/png;base64,{}",
+                                        general_purpose::STANDARD.encode(bytes)
+                                    ));
+                                }
+                            }
+                            false
+                        } else {
+                            false
+                        }
+                    }
+                    Media::Document(d) if is_image => {
+                        // Try embedded thumb first (fast), fall back to full download (small images)
+                        let has_thumb = match tokio::time::timeout(
+                            std::time::Duration::from_secs(5),
+                            try_download_document_thumb(&client, d, &temp_path),
+                        )
+                        .await
+                        {
+                            Ok(Ok(v)) => v,
+                            _ => false,
+                        };
+                        if has_thumb {
+                            true
+                        } else if d.size() <= 5 * 1024 * 1024 {
+                            // Full download only for images ≤ 5 MB
+                            let path_str = temp_path.to_string_lossy().to_string();
+                            client.download_media(&media, &path_str).await.is_ok()
+                        } else {
+                            false
+                        }
+                    }
+                    // Photo
+                    _ => {
                         let path_str = temp_path.to_string_lossy().to_string();
                         client.download_media(&media, &path_str).await.is_ok()
-                    } else {
-                        false
                     }
-                }
-                // Photo
-                _ => {
-                    let path_str = temp_path.to_string_lossy().to_string();
-                    client.download_media(&media, &path_str).await.is_ok()
                 }
             };
 
@@ -582,6 +723,7 @@ pub async fn cmd_index_pdf_text(
     folder_id: Option<i64>,
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
+    enc_state: State<'_, EncryptionState>,
 ) -> Result<String, String> {
     let app_data_dir = app_handle
         .path()
@@ -612,6 +754,13 @@ pub async fn cmd_index_pdf_text(
         .next()
         .ok_or("PDF message not found".to_string())?;
     let media = message.media().ok_or("Message has no media".to_string())?;
+    let metadata = parse_caption_metadata(message.text());
+    let display_name = match &media {
+        Media::Document(document) => {
+            display_name_from_metadata(document.name().to_string(), message.text()).0
+        }
+        _ => String::new(),
+    };
 
     let is_pdf = match &media {
         Media::Document(document) => {
@@ -619,7 +768,7 @@ pub async fn cmd_index_pdf_text(
                 .mime_type()
                 .map(|mime| mime.eq_ignore_ascii_case("application/pdf"))
                 .unwrap_or(false)
-                || document.name().to_lowercase().ends_with(".pdf")
+                || display_name.to_lowercase().ends_with(".pdf")
         }
         _ => false,
     };
@@ -630,7 +779,21 @@ pub async fn cmd_index_pdf_text(
 
     let source_path = source_dir.join(format!("{}_{}.pdf", folder_key, message_id));
     if !source_path.exists() {
-        download_media_to_path(&client, &media, &source_path).await?;
+        if metadata.encrypted {
+            let encrypted_path =
+                source_dir.join(format!("{}_{}.encrypted", folder_key, message_id));
+            download_media_to_path(&client, &media, &encrypted_path).await?;
+            decrypt_cached_media(
+                &metadata,
+                folder_id,
+                &enc_state,
+                &encrypted_path,
+                &source_path,
+            )?;
+            let _ = std::fs::remove_file(encrypted_path);
+        } else {
+            download_media_to_path(&client, &media, &source_path).await?;
+        }
     }
 
     let extract_path = source_path.clone();
@@ -652,6 +815,7 @@ pub async fn cmd_get_book_card_data(
     folder_id: Option<i64>,
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
+    enc_state: State<'_, EncryptionState>,
 ) -> Result<BookCardData, String> {
     let cache_dir = app_handle
         .path()
@@ -693,16 +857,27 @@ pub async fn cmd_get_book_card_data(
         _ => return Ok(BookCardData::default()),
     };
 
-    if !document.name().to_lowercase().ends_with(".epub") {
+    let (display_name, metadata) =
+        display_name_from_metadata(document.name().to_string(), message.text());
+    if !display_name.to_lowercase().ends_with(".epub") {
         return Ok(BookCardData::default());
     }
 
     let temp_path = cache_dir.join(format!("{}_{}.epub", folder_key, message_id));
-    let temp_path_str = temp_path.to_string_lossy().to_string();
-    client
-        .download_media(&media, &temp_path_str)
-        .await
-        .map_err(|e| format!("Failed to download EPUB for metadata: {}", e))?;
+    if metadata.encrypted {
+        let encrypted_path = cache_dir.join(format!("{}_{}.encrypted", folder_key, message_id));
+        download_media_to_path(&client, &media, &encrypted_path).await?;
+        decrypt_cached_media(
+            &metadata,
+            folder_id,
+            &enc_state,
+            &encrypted_path,
+            &temp_path,
+        )?;
+        let _ = std::fs::remove_file(encrypted_path);
+    } else {
+        download_media_to_path(&client, &media, &temp_path).await?;
+    }
 
     let (title, author, cover_bytes) = extract_epub_card_data(&temp_path)?;
     let _ = std::fs::remove_file(&temp_path);

@@ -1,5 +1,6 @@
 import { DownloadItem } from "../../types";
-import { Download, Check, X, AlertCircle, RotateCcw } from "lucide-react";
+import { Download, Check, X, AlertCircle, RotateCcw, CornerUpLeft } from "lucide-react";
+import { useState } from "react";
 
 interface DownloadQueueProps {
     items: DownloadItem[];
@@ -7,9 +8,12 @@ interface DownloadQueueProps {
     onCancelAll: () => void;
     onRetry?: (id: string) => void;
     onCancelItem?: (id: string) => void;
+    onMoveToFront?: (id: string) => void;
+    onReorder?: (fromId: string, toId: string) => void;
 }
 
-export function DownloadQueue({ items, onClearFinished, onCancelAll, onRetry, onCancelItem }: DownloadQueueProps) {
+export function DownloadQueue({ items, onClearFinished, onCancelAll, onRetry, onCancelItem, onMoveToFront, onReorder }: DownloadQueueProps) {
+    const [draggingId, setDraggingId] = useState<string | null>(null);
     if (items.length === 0) return null;
 
     const activeCount = items.filter((item) => item.status === 'pending' || item.status === 'downloading').length;
@@ -52,7 +56,21 @@ export function DownloadQueue({ items, onClearFinished, onCancelAll, onRetry, on
                     </div>
                 )}
                 {latestItems.map((item) => (
-                    <div key={item.id} className="rounded-lg border border-telegram-border bg-white/[0.03] p-3">
+                    <div
+                        key={item.id}
+                        draggable={item.status === 'pending'}
+                        onDragStart={() => setDraggingId(item.id)}
+                        onDragEnd={() => setDraggingId(null)}
+                        onDragOver={(event) => {
+                            if (item.status === 'pending' && draggingId && draggingId !== item.id) event.preventDefault();
+                        }}
+                        onDrop={(event) => {
+                            event.preventDefault();
+                            if (draggingId && draggingId !== item.id) onReorder?.(draggingId, item.id);
+                            setDraggingId(null);
+                        }}
+                        className={`rounded-lg border border-telegram-border bg-white/[0.03] p-3 ${draggingId === item.id ? 'opacity-60' : ''} ${item.status === 'pending' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    >
                         <div className="flex items-start gap-3 text-sm">
                             <div className="flex-shrink-0">
                                 {item.status === 'pending' && <div className="flex h-4 w-4 items-center justify-center rounded-full bg-yellow-500/20"><div className="h-2 w-2 rounded-full bg-yellow-500" /></div>}
@@ -82,6 +100,16 @@ export function DownloadQueue({ items, onClearFinished, onCancelAll, onRetry, on
                                     title="Cancel"
                                 >
                                     <X className="w-3 h-3" />
+                                </button>
+                            )}
+
+                            {item.status === 'pending' && onMoveToFront && (
+                                <button
+                                    onClick={() => onMoveToFront(item.id)}
+                                    className="flex-shrink-0 rounded-md p-1.5 text-telegram-subtext transition hover:bg-telegram-primary/10 hover:text-telegram-primary"
+                                    title="Move to front"
+                                >
+                                    <CornerUpLeft className="w-3 h-3" />
                                 </button>
                             )}
 

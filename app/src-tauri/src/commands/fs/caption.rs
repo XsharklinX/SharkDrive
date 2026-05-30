@@ -36,6 +36,11 @@ pub(crate) fn parse_caption_metadata(text: &str) -> CaptionMetadata {
             metadata.encryption_version = 2;
             continue;
         }
+        if token == "[SD-ENC-V3]" {
+            metadata.encrypted = true;
+            metadata.encryption_version = 3;
+            continue;
+        }
         if let Some(value) = token
             .strip_prefix("[SD_NAME:")
             .and_then(|v| v.strip_suffix(']'))
@@ -68,7 +73,7 @@ pub(crate) fn build_caption(
     sha256: &str,
 ) -> String {
     let name_marker = if encrypted {
-        format!("[SD-ENC:{}][SD-KDF:PBKDF2]", name)
+        format!("[SD-ENC:{}][SD-KDF:PBKDF2][SD-ENC-V3]", name)
     } else {
         format!("[SD_NAME:{}]", name)
     };
@@ -196,7 +201,7 @@ mod tests {
         assert_eq!(metadata.original_size, Some(12345));
         assert_eq!(metadata.sha256.as_deref(), Some("abcdef123"));
         assert!(metadata.encrypted);
-        assert_eq!(metadata.encryption_version, 2);
+        assert_eq!(metadata.encryption_version, 3);
     }
 
     #[test]

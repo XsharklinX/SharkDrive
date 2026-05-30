@@ -53,6 +53,7 @@ export interface DownloadItem {
     filename: string;
     folderId: number | null;
     savePath?: string;
+    openAfter?: boolean;
     status: 'pending' | 'downloading' | 'success' | 'error' | 'cancelled';
     error?: string;
     progress?: number;
@@ -88,5 +89,7 @@ export interface ShareLinkInfo {
     expires_at_epoch_ms?: number | null;
     created_at_epoch_ms: number;
     download_count: number;
+    max_downloads?: number | null;
+    is_password_protected: boolean;
     url: string;
 }

@@ -28,6 +28,7 @@ pub struct TelegramState {
 pub mod auth;
 pub mod backup;
 pub mod encryption;
+pub mod encryption_rotation;
 pub mod fs;
 pub mod network;
 pub mod preview;
@@ -39,6 +40,7 @@ pub mod utils;
 pub use auth::*;
 pub use backup::*;
 pub use encryption::*;
+pub use encryption_rotation::*;
 pub use fs::*;
 pub use network::*;
 pub use preview::*;

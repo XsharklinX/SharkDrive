@@ -13,12 +13,13 @@ export function useFileOperations(
 ) {
     const queryClient = useQueryClient();
     const { confirm } = useConfirm();
+    const secureDelete = localStorage.getItem('sharkdrive.secureDelete.v1') === 'true';
 
     const handleDelete = async (file: TelegramFile) => {
         const sizeLabel = file.size ? ` (${formatBytes(file.size)})` : '';
         if (!await confirm({ title: "Delete File", message: `Delete "${file.name}"${sizeLabel}?\n\nThis cannot be undone.`, confirmText: "Delete", variant: 'danger' })) return;
         try {
-            await tauriApi.deleteFile(file.id, resolveFileFolderId(file, activeFolderId));
+            await tauriApi.deleteFile(file.id, resolveFileFolderId(file, activeFolderId), secureDelete);
             queryClient.invalidateQueries({ queryKey: ['files'] });
             toast.success("File deleted");
         } catch (e) {
@@ -38,7 +39,7 @@ export function useFileOperations(
         for (const id of selectedIds) {
             const file = displayedFiles.find((candidate) => candidate.id === id);
             try {
-                await tauriApi.deleteFile(id, file ? resolveFileFolderId(file, activeFolderId) : activeFolderId);
+                await tauriApi.deleteFile(id, file ? resolveFileFolderId(file, activeFolderId) : activeFolderId, secureDelete);
                 success++;
             } catch {
                 failedNames.push(file?.name ?? `#${id}`);

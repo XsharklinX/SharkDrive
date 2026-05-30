@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
+import { save } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 
 import { TelegramFile } from '../types';
@@ -25,11 +26,13 @@ import { DragDropOverlay } from './dashboard/DragDropOverlay';
 import { ExternalDropBlocker } from './dashboard/ExternalDropBlocker';
 import { PdfViewer } from './dashboard/PdfViewer';
 import { VaultModal } from './dashboard/VaultModal';
+import { ShareLinksDashboard } from './dashboard/ShareLinksDashboard';
 import { BatchRenameModal } from './dashboard/BatchRenameModal';
 import { DuplicateDialog } from './dashboard/DuplicateDialog';
 import { TextPreviewModal } from './dashboard/TextPreviewModal';
 import { FileInfoPanel } from './dashboard/FileInfoPanel';
 import { ErrorBoundary } from './ErrorBoundary';
+import { VaultLockScreen } from './dashboard/VaultLockScreen';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -67,6 +70,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [renameTarget, setRenameTarget] = useState<TelegramFile | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showVault, setShowVault] = useState(false);
+    const [showLinksDashboard, setShowLinksDashboard] = useState(false);
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
     const [textPreviewFile, setTextPreviewFile] = useState<TelegramFile | null>(null);
     const [infoFile, setInfoFile] = useState<TelegramFile | null>(null);
@@ -75,6 +79,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [autoSyncInterval, setAutoSyncInterval] = useState(0);
     const [movingFolderId, setMovingFolderId] = useState<number | null>(null);
     const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+    const [vaultUiLocked, setVaultUiLocked] = useState(false);
 
     const { favoriteIds, showFavoritesOnly, setShowFavoritesOnly, handleToggleFavorite } = useFavorites(store);
     const { recentFiles, addToRecent } = useRecentFiles(store, activeFolderId);
@@ -153,13 +158,19 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             if (now - lastTouch < 10_000) return;
             lastTouch = now;
             void tauriApi.touchEncryptionActivity().then((unlocked) => {
-                if (!unlocked) setEncryptionEnabled(false);
+                if (!unlocked) {
+                    setEncryptionEnabled(false);
+                    setVaultUiLocked(true);
+                }
             }).catch(() => {});
         };
         const events = ['pointerdown', 'keydown', 'wheel', 'drop'];
         events.forEach((eventName) => window.addEventListener(eventName, touch, { passive: true }));
         const interval = window.setInterval(() => {
-            void tauriApi.getEncryptionStatus().then(setEncryptionEnabled).catch(() => {});
+            void tauriApi.getEncryptionStatus().then((unlocked) => {
+                setEncryptionEnabled(unlocked);
+                if (!unlocked) setVaultUiLocked(true);
+            }).catch(() => {});
         }, 30_000);
         touch();
         return () => {
@@ -167,6 +178,27 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             window.clearInterval(interval);
         };
     }, [encryptionEnabled, setEncryptionEnabled]);
+
+    useEffect(() => {
+        if (!encryptionEnabled || vaultUiLocked) return;
+        const minutes = Number(localStorage.getItem('sharkdrive.encryptionAutoLockMinutes') || '15');
+        if (minutes <= 0) return;
+        let lastActivity = Date.now();
+        const touch = () => { lastActivity = Date.now(); };
+        const events = ['pointerdown', 'keydown', 'wheel', 'drop'];
+        events.forEach((eventName) => window.addEventListener(eventName, touch, { passive: true }));
+        const interval = window.setInterval(() => {
+            if (Date.now() - lastActivity >= minutes * 60_000) {
+                void tauriApi.clearEncryptionKey();
+                setEncryptionEnabled(false);
+                setVaultUiLocked(true);
+            }
+        }, 5_000);
+        return () => {
+            events.forEach((eventName) => window.removeEventListener(eventName, touch));
+            window.clearInterval(interval);
+        };
+    }, [encryptionEnabled, setEncryptionEnabled, vaultUiLocked]);
 
     const { nextSyncIn } = useAutoSync(autoSyncInterval, handleSyncFolders);
 
@@ -328,7 +360,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     const encryptByDefault = encryptionEnabled || (typeof activeFolderId === 'number' && activeFolderId > 0 && encryptedFolderIds.has(activeFolderId));
     const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity);
-    const { downloadQueue, queueDownload, queueBulkDownload, clearFinished: clearDownloads, retryDownload, cancelDownloadItem, cancelAll: cancelDownloads } = useFileDownload(store, recordActivity);
+    const { downloadQueue, queueDownload, queueBulkDownload, clearFinished: clearDownloads, retryDownload, moveDownloadToFront, reorderDownloadQueue, cancelDownloadItem, cancelAll: cancelDownloads } = useFileDownload(store, recordActivity);
     handleDroppedFilesRef.current = handleDroppedFiles;
     queueUploadCandidatesRef.current = queueUploadCandidates;
 
@@ -487,6 +519,40 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         if (blocked) return;
         void queueBulkDownload(selectedFiles, activeFolderId);
     }, [activeFolderId, ensureEncryptionReady, queueBulkDownload, selectedFiles]);
+
+    const handleBulkDownloadZip = useCallback(async () => {
+        const filesToZip = selectedFiles.filter((file) => file.type !== 'folder');
+        if (filesToZip.length === 0) return;
+        const blocked = filesToZip.find((file) => !ensureEncryptionReady(file, 'download it'));
+        if (blocked) return;
+
+        const savePath = await save({
+            defaultPath: `sharkdrive-${new Date().toISOString().slice(0, 10)}.zip`,
+            filters: [{ name: 'ZIP archive', extensions: ['zip'] }],
+        });
+        if (!savePath) return;
+
+        try {
+            await tauriApi.downloadFilesZip(
+                filesToZip.map((file) => ({
+                    messageId: file.id,
+                    folderId: resolveFileFolderId(file, activeFolderId),
+                    filename: file.name,
+                })),
+                savePath,
+            );
+            toast.success(`ZIP created with ${filesToZip.length} files`);
+            recordActivity({
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                type: 'download',
+                message: `Exported ${filesToZip.length} files as ZIP`,
+                timestamp: new Date().toISOString(),
+                folderId: activeFolderId,
+            });
+        } catch (error) {
+            toast.error(`ZIP download failed: ${error}`);
+        }
+    }, [activeFolderId, ensureEncryptionReady, recordActivity, selectedFiles]);
 
     const handleDestinationSelect = useCallback(async (targetFolderId: number | null) => {
         if (destinationAction === 'copy') {
@@ -656,9 +722,16 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                             if (store) store.set('encryptionEnabled', enabled).then(() => store.save());
                         }}
                         folders={folders}
+                        files={allIndexedRaw.filter((file) => file.icon_type !== 'folder')}
                         activity={activity}
                         shortcuts={organization.shortcuts}
                         onShortcutsChange={organization.setShortcuts}
+                    />
+                )}
+                {showLinksDashboard && (
+                    <ShareLinksDashboard
+                        key="links-dashboard"
+                        onClose={() => setShowLinksDashboard(false)}
                     />
                 )}
                 {showVault && (
@@ -802,9 +875,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 onLockVault={async () => {
                     await tauriApi.clearEncryptionKey();
                     setEncryptionEnabled(false);
+                    setVaultUiLocked(true);
                     toast.info('Encryption vault locked');
                 }}
             />
+            {vaultUiLocked && (
+                <VaultLockScreen
+                    onUnlock={() => {
+                        setEncryptionEnabled(true);
+                        setVaultUiLocked(false);
+                    }}
+                />
+            )}
 
             <main className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.015] to-transparent" onClick={(e) => {
                 if (e.target === e.currentTarget) {
@@ -830,6 +912,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         setBulkShareTargets(filesToShare);
                     }}
                     onBulkDownload={handleBulkDownload}
+                    onBulkDownloadZip={handleBulkDownloadZip}
                     onBulkDelete={handleBulkDelete}
                     onDownloadFolder={() => {
                         if (displayedFiles.length === 0) {
@@ -852,6 +935,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onEncryptedFileUpload={() => handleManualUpload(true)}
                     onFolderUpload={handleFolderUpload}
                     onOpenSettings={() => setShowSettings(true)}
+                    onOpenLinks={() => setShowLinksDashboard(true)}
                     nextSyncIn={autoSyncInterval > 0 ? nextSyncIn : null}
                     queuedUploadCount={queuedUploadCount}
                     uploadingCount={uploadingCount}
@@ -970,6 +1054,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         onClearFinished={clearDownloads}
                         onCancelAll={cancelDownloads}
                         onRetry={retryDownload}
+                        onMoveToFront={moveDownloadToFront}
+                        onReorder={reorderDownloadQueue}
                         onCancelItem={cancelDownloadItem}
                     />
                 </div>

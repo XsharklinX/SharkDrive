@@ -4,6 +4,64 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [2.6.0] - 2026-05-29
+
+### Share Authentication and Chunked Encryption
+
+- **LAN share POST auth** - Password-protected links submit credentials through `POST`; the password no longer appears in the download URL.
+- **Temporary share authorization** - Actix issues a scoped `HttpOnly`, `SameSite=Strict` cookie valid for 10 minutes after successful bcrypt verification.
+- **Chunked AES-GCM V3** - New encrypted files use authenticated 1 MiB chunks with random nonces, ordered AAD and a mandatory authenticated footer.
+- **Legacy compatibility** - Existing V1/V2 encrypted files remain readable through the legacy decryptor.
+- **Safe encrypted resume** - Interrupted encrypted uploads reuse checkpoint ciphertext instead of regenerating incompatible chunks.
+- **Encrypted preview support** - Image, video, PDF and EPUB preview helpers decrypt cache files locally after vault unlock.
+
+---
+
+## [2.5.0] - 2026-05-29
+
+### Sharing 2.0 and Security Suite
+
+- **Share dashboard** - Lists active links, visual expiry, download counters, limits, password badges and bulk revocation.
+- **Passwords with bcrypt** - `share_links.json` persists `password_hash`; legacy plaintext entries migrate automatically on startup.
+- **Limits and QR** - LAN links support download limits, configurable expiry and downloadable QR codes.
+- **Visible auto-lock** - Locking the vault clears the in-memory key and displays an unlock screen without disconnecting Telegram.
+- **Secure delete** - Optional caption replacement with `[SD-DELETED]` before remote message deletion.
+- **Encryption audit** - Settings summarizes encrypted versus plain files and can convert existing indexed files safely.
+- **Key rotation** - Sequential wizard downloads, decrypts, re-encrypts, uploads the replacement and only then deletes the original.
+- **Password strength** - Settings estimates entropy and an indicative brute-force time for new passwords.
+
+### Security Notes
+
+- The current LAN password form authenticates through a query string. The hash is never exposed or stored as plaintext, but POST plus a temporary authorization token remains a hardening task to prevent browser-history leakage.
+- The current AES-GCM helper buffers a complete file in memory. Chunked authenticated encryption remains required before describing the system as enterprise-grade for large files.
+
+---
+
+## [2.1.0] - 2026-05-29
+
+### Sharing Suite
+
+- **Share Links Dashboard** — Nuevo modal accesible desde el botón `Link2` en TopBar. Muestra todos los links activos y expirados con: tiempo restante (barra visual), contador de descargas, badge de password protegido. Filtros: Active / All / Expired. Revocar individual, "Clear expired" en bulk, "Revoke all active" desde footer. Refresca automáticamente cada 30s.
+- **Password en links** — Campo opcional en ShareModal. El servidor actix verifica la contraseña antes de servir el archivo: si falta, devuelve una página HTML mínima con formulario de contraseña; si es incorrecta, muestra error en el mismo formulario. Almacenada en texto plano en `share_links.json` (uso LAN local).
+- **Límite de descargas** — Campo "Max downloads (0 = unlimited)" en ShareModal. Rust enforza el límite en el actix handler: si `download_count >= max_downloads` devuelve HTTP 410 Gone. `ShareLinkInfo` expone `max_downloads` e `is_password_protected` al frontend.
+- **QR Code** ✅ ya estaba implementado con `qrcode` npm, generación automática cuando el link está listo, descarga como PNG.
+- **Bulk share** ✅ ya estaba implementado: ShareModal acepta array `files[]`, muestra una URL por archivo con copy/revoke individual.
+
+---
+
+## [2.4.0] - 2026-05-29
+
+### Download & Export Suite
+
+- **ZIP bulk download** - La selección múltiple agrega descarga ZIP. Rust descarga, descifra cuando corresponde, sanitiza nombres duplicados y escribe un archivo `.zip` local.
+- **Destinos por tipo** - Settings agrega una sección Downloads para configurar carpetas por categoría: imágenes, videos, audio, documentos y otros.
+- **Prioridad de descargas** - La cola permite arrastrar descargas pendientes para reordenarlas y subir un item al frente.
+- **Open after download** - Settings permite abrir automáticamente el archivo terminado con la aplicación predeterminada del sistema.
+- **Manifest JSON** - Vault Dashboard exporta árbol de carpetas y archivos con ids, tamaño, hash, fecha, MIME y estado de cifrado.
+- **Video thumbnail fallback reparado** - El helper `ffmpeg` de v2.3 vuelve a estar conectado al flujo real cuando Telegram no ofrece thumbnail embebido.
+
+---
+
 ## [2.3.0] - 2026-05-28
 
 ### Media Avanzado

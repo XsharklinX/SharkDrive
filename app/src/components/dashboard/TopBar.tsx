@@ -13,6 +13,7 @@ interface TopBarProps {
     onShowCopyModal: () => void;
     onBulkShare: () => void;
     onBulkDownload: () => void;
+    onBulkDownloadZip: () => void;
     onBulkDelete: () => void;
     onDownloadFolder: () => void;
     searchTerm: string;
@@ -26,6 +27,7 @@ interface TopBarProps {
     onEncryptedFileUpload: () => void;
     onFolderUpload: () => void;
     onOpenSettings: () => void;
+    onOpenLinks?: () => void;
     nextSyncIn?: number | null;
     queuedUploadCount: number;
     uploadingCount: number;
@@ -44,6 +46,7 @@ export function TopBar({
     onShowCopyModal,
     onBulkShare,
     onBulkDownload,
+    onBulkDownloadZip,
     onBulkDelete,
     onDownloadFolder,
     searchTerm,
@@ -57,6 +60,7 @@ export function TopBar({
     onEncryptedFileUpload,
     onFolderUpload,
     onOpenSettings,
+    onOpenLinks,
     nextSyncIn,
     queuedUploadCount,
     uploadingCount,
@@ -135,6 +139,16 @@ export function TopBar({
                     >
                         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                     </button>
+
+                    {onOpenLinks && (
+                        <button
+                            onClick={onOpenLinks}
+                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
+                            title="My Share Links"
+                        >
+                            <Link2 className="h-4 w-4" />
+                        </button>
+                    )}
 
                     <button
                         onClick={onOpenSettings}
@@ -234,6 +248,11 @@ export function TopBar({
                             <button onClick={onBulkDownload} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title="Download selected">
                                 <span className="flex items-center gap-1.5"><Download className="h-3 w-3" />Download</span>
                             </button>
+                            {selectedIds.length > 1 && (
+                                <button onClick={onBulkDownloadZip} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title="Download selected as ZIP">
+                                    <span className="flex items-center gap-1.5"><HardDrive className="h-3 w-3" />ZIP</span>
+                                </button>
+                            )}
                             <button onClick={onBulkDelete} className="rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 transition hover:bg-red-500/18" title="Delete selected">
                                 <span className="flex items-center gap-1.5"><Trash2 className="h-3 w-3" />Delete</span>
                             </button>

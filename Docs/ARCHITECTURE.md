@@ -1,7 +1,7 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 2.3.0
-> **Last updated:** 2026-05-28
+> **Version:** 2.6.0
+> **Last updated:** 2026-05-29
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 
 ---
@@ -39,6 +39,16 @@ That means the UI should stay direct and understandable, while advanced features
 | Local persistence | `@tauri-apps/plugin-store`                |
 | Local web server  | `actix-web`                               |
 | Encryption        | AES-256-GCM                               |
+
+### Security Boundaries
+
+- Share passwords are stored as bcrypt hashes in `share_links.json`; legacy plaintext entries migrate on startup.
+- Vault auto-lock clears encryption keys from memory and blocks the UI without logging out of Telegram.
+- Secure delete rewrites the Telegram caption to `[SD-DELETED]` before message deletion when enabled.
+- Remote encryption conversion and key rotation replace one file at a time: upload replacement first, delete original second.
+- Share password forms submit through `POST`; successful bcrypt verification issues a scoped `HttpOnly`, `SameSite=Strict` cookie valid for 10 minutes.
+- New encrypted uploads use the V3 chunked format: authenticated 1 MiB AES-GCM chunks, random nonces, ordered AAD and a mandatory authenticated footer.
+- V1/V2 encrypted files remain readable through the legacy decryptor.
 
 ---
 
@@ -184,6 +194,7 @@ The old monolithic `fs.rs` has been split into:
 - `download.rs`: downloads and related helpers
 - `files.rs`: rename, move, copy, delete, list
 - `folders.rs`: create folders, nested folder metadata, parent updates
+- `download.rs`: individual downloads plus ZIP bulk export with decryption before archive packaging
 
 > Reminder: if new commands are added, they must also be registered in `app/src-tauri/src/lib.rs` inside `invoke_handler!`.
 
@@ -218,11 +229,11 @@ The old monolithic `fs.rs` has been split into:
 - files map to Telegram messages with attachments
 - extra metadata is carried in captions
 - markers such as rename, encryption, trash, and app ownership are derived from caption parsing
-- encrypted captions use `[SD-KDF:PBKDF2]` for v2 files; legacy `[SD-ENC]` files remain supported
+- encrypted captions use `[SD-KDF:PBKDF2][SD-ENC-V3]` for chunked files; legacy V1/V2 captions remain supported
 
 ### Encryption
 
-- new encrypted uploads derive keys with PBKDF2-HMAC-SHA256, 100K iterations
+- new encrypted uploads derive keys with PBKDF2-HMAC-SHA256, 100K iterations and encrypt authenticated 1 MiB chunks
 - `EncryptionState` keeps both v2 and legacy keys in memory for backward-compatible decrypt
 - auto-lock clears in-memory keys after configured inactivity
 - optional session PIN encrypts `telegram.session` at rest and requires unlock before auto-login
@@ -234,6 +245,14 @@ The old monolithic `fs.rs` has been split into:
 - share entries include creation time, expiration, and `download_count`
 - Settings exposes active share links with copy/revoke actions
 - file share links can be generated in bulk from selection and exported as QR PNG client-side
+- protected LAN links authenticate via `POST` and receive a temporary scoped cookie; passwords do not appear in download URLs
+
+### Downloads
+
+- the frontend queue persists pending work and supports priority changes for pending items
+- Settings stores optional download destinations by file category in localStorage
+- completed downloads can optionally open through the system default application
+- Vault Dashboard exports CSV and JSON manifest formats
 
 ---
 
@@ -266,4 +285,3 @@ These are the active product and engineering priorities:
 - finish extracting dashboard state into hooks
 - revisit updater only when SharkDrive has its own real release feed
 - add more tests around caption parsing and encryption behavior as features evolve
-

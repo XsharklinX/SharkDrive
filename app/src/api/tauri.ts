@@ -59,14 +59,17 @@ export const tauriApi = {
     renameFile(messageId: number, folderId: number | null, newName: string) {
         return invoke('cmd_rename_file', { messageId, folderId, newName });
     },
-    deleteFile(messageId: number, folderId: number | null) {
-        return invoke('cmd_delete_file', { messageId, folderId });
+    deleteFile(messageId: number, folderId: number | null, secureDelete = false) {
+        return invoke('cmd_delete_file', { messageId, folderId, secureDelete });
     },
     searchGlobal(query: string) {
         return invoke<TelegramFile[]>('cmd_search_global', { query });
     },
     downloadFile(messageId: number, savePath: string, folderId: number | null, transferId?: string) {
         return invoke('cmd_download_file', { messageId, savePath, folderId, transferId });
+    },
+    downloadFilesZip(files: { messageId: number; folderId: number | null; filename: string }[], savePath: string) {
+        return invoke<string>('cmd_download_files_zip', { files, savePath });
     },
     getPreview(messageId: number, folderId: number | null) {
         return invoke<string>('cmd_get_preview', { messageId, folderId });
@@ -89,11 +92,14 @@ export const tauriApi = {
         }
         return streamTokenPromise;
     },
-    createShareLink(fileId: number, folderId: number | null, filename: string, expiresInMinutes?: number) {
-        return invoke<string>('cmd_create_share_link', { fileId, folderId, filename, expiresInMinutes });
+    createShareLink(fileId: number, folderId: number | null, filename: string, expiresInMinutes?: number, maxDownloads?: number, password?: string) {
+        return invoke<string>('cmd_create_share_link', { fileId, folderId, filename, expiresInMinutes, maxDownloads, password });
     },
     revokeShareLink(token: string) {
         return invoke<void>('cmd_revoke_share_link', { token });
+    },
+    revokeShareLinks(tokens: string[]) {
+        return invoke<number>('cmd_revoke_share_links', { tokens });
     },
     listShareLinks() {
         return invoke<ShareLinkInfo[]>('cmd_list_share_links');
@@ -110,11 +116,23 @@ export const tauriApi = {
     clearEncryptionKey() {
         return invoke<void>('cmd_clear_encryption_key');
     },
+    setEncryptionKey(password: string) {
+        return invoke<void>('cmd_set_encryption_key', { password });
+    },
+    unlockEncryptionKey(password: string) {
+        return invoke<void>('cmd_unlock_encryption_key', { password });
+    },
     touchEncryptionActivity() {
         return invoke<boolean>('cmd_touch_encryption_activity');
     },
     setEncryptionAutoLock(minutes: number | null) {
         return invoke<void>('cmd_set_encryption_auto_lock', { minutes });
+    },
+    rotateEncryptionKey(files: { messageId: number; folderId: number | null; filename: string }[], oldPassword: string, newPassword: string) {
+        return invoke<number>('cmd_rotate_encryption_key', { files, oldPassword, newPassword });
+    },
+    encryptRemoteFiles(files: { messageId: number; folderId: number | null; filename: string }[], password: string) {
+        return invoke<number>('cmd_encrypt_remote_files', { files, password });
     },
     saveClipboardImage(bytes: number[], filename: string) {
         return invoke<string>('cmd_save_clipboard_image', { bytes, filename });
@@ -130,6 +148,9 @@ export const tauriApi = {
     },
     exportCsv(savePath: string) {
         return invoke<void>('cmd_export_csv', { savePath });
+    },
+    exportManifestJson(savePath: string, manifestJson: string) {
+        return invoke<void>('cmd_export_manifest_json', { savePath, manifestJson });
     },
     getCachedFiles(folderId: number | null) {
         return invoke<TelegramFile[]>('cmd_get_cached_files', { folderId });

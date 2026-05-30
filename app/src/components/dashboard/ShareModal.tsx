@@ -19,6 +19,11 @@ type GeneratedLink = {
     url: string;
     lanUrl: string;
 };
+type ShareOptions = {
+    expiresInMinutes: number;
+    maxDownloads: number;
+    password: string;
+};
 
 const EXPIRY_PRESETS = [
     { label: '1h', minutes: 60 },
@@ -52,7 +57,14 @@ export function ShareModal({ file, files, activeFolderId, onClose }: ShareModalP
     const [loadingInvite, setLoadingInvite] = useState(false);
     const [copied, setCopied] = useState<string | null>(null);
     const [expiresInMinutes, setExpiresInMinutes] = useState(60);
+    const [maxDownloads, setMaxDownloads] = useState<number>(0);
+    const [password, setPassword] = useState('');
     const [shareRevision, setShareRevision] = useState(0);
+    const [generatedOptions, setGeneratedOptions] = useState<ShareOptions>({
+        expiresInMinutes: 60,
+        maxDownloads: 0,
+        password: '',
+    });
     const [retryPending, setRetryPending] = useState(false);
     const [qrDataUrl, setQrDataUrl] = useState('');
 
@@ -73,7 +85,14 @@ export function ShareModal({ file, files, activeFolderId, onClose }: ShareModalP
         }, 15000);
 
         Promise.all(targets.map(async (target) => {
-            const url = await tauriApi.createShareLink(target.id, resolveFileFolderId(target, activeFolderId), target.name, expiresInMinutes);
+            const url = await tauriApi.createShareLink(
+                target.id,
+                resolveFileFolderId(target, activeFolderId),
+                target.name,
+                generatedOptions.expiresInMinutes,
+                generatedOptions.maxDownloads > 0 ? generatedOptions.maxDownloads : undefined,
+                generatedOptions.password.trim() || undefined,
+            );
             return {
                 file: target,
                 url,
@@ -92,7 +111,7 @@ export function ShareModal({ file, files, activeFolderId, onClose }: ShareModalP
             });
 
         return () => clearTimeout(timeoutId);
-    }, [targets, activeFolderId, expiresInMinutes, shareRevision, localIp]);
+    }, [targets, activeFolderId, generatedOptions, shareRevision, localIp]);
 
     const primaryLink = links[0];
 
@@ -234,6 +253,34 @@ export function ShareModal({ file, files, activeFolderId, onClose }: ShareModalP
                                     />
                                     <span className="text-xs text-telegram-subtext">minutes. Use 0 for never.</span>
                                 </div>
+
+                                {/* Password */}
+                                <div>
+                                    <label className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-telegram-subtext">
+                                        Password (optional)
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={password}
+                                        onChange={e => setPassword(e.target.value)}
+                                        placeholder="Leave empty for no password"
+                                        className="w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70 placeholder:text-telegram-subtext/40"
+                                    />
+                                </div>
+
+                                {/* Max downloads */}
+                                <div>
+                                    <label className="mb-1.5 block text-[10px] uppercase tracking-[0.2em] text-telegram-subtext">
+                                        Max downloads (0 = unlimited)
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        value={maxDownloads}
+                                        onChange={e => setMaxDownloads(Math.max(0, Number(e.target.value) || 0))}
+                                        className="w-32 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                    />
+                                </div>
                             </div>
                         )}
 
@@ -307,12 +354,15 @@ export function ShareModal({ file, files, activeFolderId, onClose }: ShareModalP
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <button
-                                        onClick={() => setShareRevision((value) => value + 1)}
+                                        onClick={() => {
+                                            setGeneratedOptions({ expiresInMinutes, maxDownloads, password });
+                                            setShareRevision((value) => value + 1);
+                                        }}
                                         className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
                                     >
                                         <span className="flex items-center justify-center gap-2">
                                             <RotateCcw className="w-3.5 h-3.5" />
-                                            New Link
+                                            Apply & New Link
                                         </span>
                                     </button>
                                     <button

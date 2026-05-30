@@ -1,16 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { open as openPath } from '@tauri-apps/plugin-shell';
 import { toast } from 'sonner';
 import { ActivityEntry, DownloadItem, TelegramFile } from '../types';
 import type { Store } from '@tauri-apps/plugin-store';
 import { tauriApi } from '../api/tauri';
-import { buildRemoteFileKey, resolveFileFolderId } from '../utils';
+import { buildRemoteFileKey, isAudioFile, isImageFile, isPdfFile, isVideoFile, resolveFileFolderId } from '../utils';
 
 interface ProgressPayload {
     id: string;
     percent: number;
 }
+
+const DOWNLOAD_DESTINATIONS_KEY = 'sharkdrive.downloadDestinations.v1';
+const OPEN_AFTER_DOWNLOAD_KEY = 'sharkdrive.openAfterDownload.v1';
+
+type DownloadDestinationMap = Partial<Record<'images' | 'videos' | 'audio' | 'docs' | 'other', string>>;
 
 const buildActivity = (type: ActivityEntry['type'], message: string, fileName?: string, folderId?: number | null): ActivityEntry => ({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -26,6 +32,27 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
     const [processing, setProcessing] = useState(false);
     const [initialized, setInitialized] = useState(false);
     const cancelledRef = useRef<Set<string>>(new Set());
+
+    const downloadCategory = (filename: string): keyof DownloadDestinationMap => {
+        if (isImageFile(filename)) return 'images';
+        if (isVideoFile(filename)) return 'videos';
+        if (isAudioFile(filename)) return 'audio';
+        if (isPdfFile(filename) || /\.(doc|docx|xls|xlsx|ppt|pptx|txt|md|csv|json|rtf|epub)$/i.test(filename)) return 'docs';
+        return 'other';
+    };
+
+    const configuredSavePath = (filename: string) => {
+        try {
+            const destinations = JSON.parse(localStorage.getItem(DOWNLOAD_DESTINATIONS_KEY) || '{}') as DownloadDestinationMap;
+            const directory = destinations[downloadCategory(filename)];
+            if (!directory) return undefined;
+            return `${directory.replace(/[\\/]$/, '')}\\${filename}`;
+        } catch {
+            return undefined;
+        }
+    };
+
+    const shouldOpenAfterDownload = () => localStorage.getItem(OPEN_AFTER_DOWNLOAD_KEY) === 'true';
 
     // Listen for progress events from Rust
     useEffect(() => {
@@ -73,7 +100,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
         setProcessing(true);
 
         try {
-            const savePath = item.savePath ?? await save({ defaultPath: item.filename });
+            const savePath = item.savePath ?? configuredSavePath(item.filename) ?? await save({ defaultPath: item.filename });
             if (!savePath) {
                 setDownloadQueue(q => q.filter(i => i.id !== item.id));
                 setProcessing(false);
@@ -88,6 +115,9 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
             } else {
                 setDownloadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'success', progress: 100 } : i));
                 toast.success(`Downloaded: ${item.filename}`);
+                if (item.openAfter ?? shouldOpenAfterDownload()) {
+                    openPath(savePath).catch(() => toast.error(`Could not open: ${item.filename}`));
+                }
                 if ('Notification' in window && Notification.permission === 'granted') {
                     new Notification('Download complete', { body: item.filename, silent: true });
                 }
@@ -106,7 +136,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
         }
     };
 
-    const queueDownload = (messageId: number, filename: string, folderId: number | null, savePath?: string) => {
+    const queueDownload = (messageId: number, filename: string, folderId: number | null, savePath?: string, openAfter?: boolean) => {
         const duplicateExists = downloadQueue.some((item) =>
             (item.status === 'pending' || item.status === 'downloading') &&
             item.messageId === messageId &&
@@ -122,6 +152,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
             filename,
             folderId,
             savePath,
+            openAfter,
             status: 'pending'
         };
         setDownloadQueue(prev => [...prev, newItem]);
@@ -155,6 +186,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
                 filename: file.name,
                 folderId,
                 savePath: `${dirPath}\\${file.name}`,
+                openAfter: shouldOpenAfterDownload(),
                 status: 'pending'
             };
             setDownloadQueue(prev => [...prev, newItem]);
@@ -176,6 +208,31 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
                 ? { ...i, status: 'pending' as const, error: undefined, progress: undefined }
                 : i
         ));
+    };
+
+    const moveDownloadToFront = (id: string) => {
+        setDownloadQueue((queue) => {
+            const index = queue.findIndex((item) => item.id === id);
+            if (index <= 0 || queue[index]?.status !== 'pending') return queue;
+            const next = [...queue];
+            const [item] = next.splice(index, 1);
+            const firstPendingIndex = next.findIndex((candidate) => candidate.status === 'pending');
+            next.splice(firstPendingIndex === -1 ? next.length : firstPendingIndex, 0, item);
+            return next;
+        });
+    };
+
+    const reorderDownloadQueue = (fromId: string, toId: string) => {
+        setDownloadQueue((queue) => {
+            const fromIndex = queue.findIndex((item) => item.id === fromId);
+            const toIndex = queue.findIndex((item) => item.id === toId);
+            if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return queue;
+            if (queue[fromIndex].status !== 'pending' || queue[toIndex].status !== 'pending') return queue;
+            const next = [...queue];
+            const [item] = next.splice(fromIndex, 1);
+            next.splice(toIndex, 0, item);
+            return next;
+        });
     };
 
     const cancelDownloadItem = (id: string) => {
@@ -207,6 +264,8 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
         queueBulkDownload,
         clearFinished,
         retryDownload,
+        moveDownloadToFront,
+        reorderDownloadQueue,
         cancelDownloadItem,
         cancelAll
     };

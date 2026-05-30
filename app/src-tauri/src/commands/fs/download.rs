@@ -8,6 +8,7 @@ use crate::commands::encryption::{decrypt_file, derive_folder_key, EncryptionSta
 use crate::commands::fs::caption::parse_caption_metadata;
 use crate::commands::utils::resolve_peer;
 use crate::TelegramState;
+use zip::write::SimpleFileOptions;
 
 #[derive(Clone, serde::Serialize)]
 struct ProgressPayload {
@@ -15,23 +16,77 @@ struct ProgressPayload {
     percent: u8,
 }
 
-#[tauri::command]
-pub async fn cmd_download_file(
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZipDownloadEntry {
+    pub message_id: i32,
+    pub folder_id: Option<i64>,
+    pub filename: String,
+}
+
+fn safe_zip_name(filename: &str) -> String {
+    let clean = filename
+        .replace('\\', "_")
+        .replace('/', "_")
+        .replace(':', "_")
+        .replace('*', "_")
+        .replace('?', "_")
+        .replace('"', "_")
+        .replace('<', "_")
+        .replace('>', "_")
+        .replace('|', "_");
+    if clean.trim().is_empty() {
+        "file.bin".to_string()
+    } else {
+        clean
+    }
+}
+
+fn unique_zip_name(name: &str, used: &mut std::collections::HashSet<String>) -> String {
+    if used.insert(name.to_string()) {
+        return name.to_string();
+    }
+
+    let path = std::path::Path::new(name);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("file");
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+
+    for index in 2.. {
+        let candidate = if ext.is_empty() {
+            format!("{stem} ({index})")
+        } else {
+            format!("{stem} ({index}).{ext}")
+        };
+        if used.insert(candidate.clone()) {
+            return candidate;
+        }
+    }
+
+    name.to_string()
+}
+
+async fn download_message_to_path(
     message_id: i32,
-    save_path: String,
+    save_path: &str,
     folder_id: Option<i64>,
-    transfer_id: Option<String>,
-    app_handle: tauri::AppHandle,
-    state: State<'_, TelegramState>,
-    bw_state: State<'_, BandwidthManager>,
-    enc_state: State<'_, EncryptionState>,
-) -> Result<String, String> {
-    let tid = transfer_id.unwrap_or_default();
+    app_handle: &tauri::AppHandle,
+    state: &TelegramState,
+    bw_state: &BandwidthManager,
+    enc_state: &EncryptionState,
+    transfer_id: Option<&str>,
+) -> Result<(), String> {
+    let tid = transfer_id.unwrap_or_default().to_string();
 
     let client_opt = { state.client.lock().await.clone() };
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
 
-    let peer = resolve_peer(&client, folder_id, &state).await?;
+    let peer = resolve_peer(&client, folder_id, state).await?;
     let messages = client
         .get_messages_by_id(&peer, &[message_id])
         .await
@@ -92,14 +147,15 @@ pub async fn cmd_download_file(
             }
         }
         Ok::<(), String>(())
-    }.await;
+    }
+    .await;
 
     if let Err(e) = chunk_result {
         let _ = std::fs::remove_file(&part_path);
         return Err(e);
     }
 
-    std::fs::rename(&part_path, &save_path).map_err(|e| {
+    std::fs::rename(&part_path, save_path).map_err(|e| {
         let _ = std::fs::remove_file(&part_path);
         e.to_string()
     })?;
@@ -115,14 +171,14 @@ pub async fn cmd_download_file(
                 None => master,
             };
             let tmp = format!("{}.enc_tmp", save_path);
-            std::fs::rename(&save_path, &tmp).map_err(|e| e.to_string())?;
-            if let Err(e) = decrypt_file(&active_key, &tmp, &save_path) {
-                let _ = std::fs::rename(&tmp, &save_path);
+            std::fs::rename(save_path, &tmp).map_err(|e| e.to_string())?;
+            if let Err(e) = decrypt_file(&active_key, &tmp, save_path) {
+                let _ = std::fs::rename(&tmp, save_path);
                 return Err(format!("Decryption failed: {}", e));
             }
             let _ = std::fs::remove_file(tmp);
         } else {
-            let _ = std::fs::remove_file(&save_path);
+            let _ = std::fs::remove_file(save_path);
             return Err("This file is encrypted. Load your SharkDrive encryption password before downloading it.".to_string());
         }
     }
@@ -137,5 +193,109 @@ pub async fn cmd_download_file(
         );
     }
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cmd_download_file(
+    message_id: i32,
+    save_path: String,
+    folder_id: Option<i64>,
+    transfer_id: Option<String>,
+    app_handle: tauri::AppHandle,
+    state: State<'_, TelegramState>,
+    bw_state: State<'_, BandwidthManager>,
+    enc_state: State<'_, EncryptionState>,
+) -> Result<String, String> {
+    download_message_to_path(
+        message_id,
+        &save_path,
+        folder_id,
+        &app_handle,
+        &state,
+        &bw_state,
+        &enc_state,
+        transfer_id.as_deref(),
+    )
+    .await?;
     Ok("Download successful".to_string())
+}
+
+#[tauri::command]
+pub async fn cmd_download_files_zip(
+    files: Vec<ZipDownloadEntry>,
+    save_path: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, TelegramState>,
+    bw_state: State<'_, BandwidthManager>,
+    enc_state: State<'_, EncryptionState>,
+) -> Result<String, String> {
+    if files.is_empty() {
+        return Err("No files selected".to_string());
+    }
+
+    let parent = std::path::Path::new(&save_path)
+        .parent()
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(std::env::temp_dir);
+    let temp_dir = parent.join(format!(
+        "sharkdrive_zip_{}",
+        chrono::Utc::now().timestamp_millis()
+    ));
+    std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+
+    let part_zip = format!("{}.part", save_path);
+    let zip_result = async {
+        let mut downloaded_paths = Vec::new();
+        for entry in &files {
+            let safe_name = safe_zip_name(&entry.filename);
+            let temp_file = temp_dir.join(format!("{}_{}", entry.message_id, safe_name));
+            let temp_file_str = temp_file.to_string_lossy().to_string();
+            download_message_to_path(
+                entry.message_id,
+                &temp_file_str,
+                entry.folder_id,
+                &app_handle,
+                &state,
+                &bw_state,
+                &enc_state,
+                None,
+            )
+            .await?;
+            downloaded_paths.push((safe_name, temp_file));
+        }
+
+        let zip_file = std::fs::File::create(&part_zip).map_err(|e| e.to_string())?;
+        let mut writer = zip::ZipWriter::new(zip_file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let mut used_names = std::collections::HashSet::new();
+
+        for (name, path) in downloaded_paths {
+            let zip_name = unique_zip_name(&name, &mut used_names);
+            writer
+                .start_file(zip_name, options)
+                .map_err(|e| e.to_string())?;
+            let mut source = std::fs::File::open(&path).map_err(|e| e.to_string())?;
+            std::io::copy(&mut source, &mut writer).map_err(|e| e.to_string())?;
+        }
+
+        writer.finish().map_err(|e| e.to_string())?;
+        Ok::<(), String>(())
+    }
+    .await;
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    if let Err(error) = zip_result {
+        let _ = std::fs::remove_file(&part_zip);
+        return Err(error);
+    }
+
+    std::fs::rename(&part_zip, &save_path).map_err(|e| {
+        let _ = std::fs::remove_file(&part_zip);
+        e.to_string()
+    })?;
+
+    Ok(save_path)
 }

@@ -322,7 +322,18 @@ pub async fn cmd_upload_file(
         };
         let tmp = std::env::temp_dir().join(format!("sharkdrive_{}.enc", tid));
         let tmp_str = tmp.to_string_lossy().to_string();
-        encrypt_file(&active_key, &path, &tmp_str)?;
+        let can_resume_ciphertext = load_checkpoint(&app_handle, &tid)?
+            .map(|checkpoint| {
+                checkpoint.path == path
+                    && checkpoint.upload_path == tmp_str
+                    && checkpoint.original_size == size
+                    && checkpoint.encrypt
+            })
+            .unwrap_or(false)
+            && tmp.exists();
+        if !can_resume_ciphertext {
+            encrypt_file(&active_key, &path, &tmp_str)?;
+        }
         (tmp_str.clone(), Some(tmp_str))
     } else {
         (path.clone(), None)

@@ -287,12 +287,23 @@ fn matches_search(
 pub async fn cmd_delete_file(
     message_id: i32,
     folder_id: Option<i64>,
+    secure_delete: Option<bool>,
     state: State<'_, TelegramState>,
 ) -> Result<bool, String> {
     let client_opt = { state.client.lock().await.clone() };
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
 
     let peer = resolve_peer(&client, folder_id, &state).await?;
+    if secure_delete.unwrap_or(false) {
+        client
+            .edit_message(
+                &peer,
+                message_id,
+                grammers_client::InputMessage::new().text("[SD-DELETED]"),
+            )
+            .await
+            .map_err(|e| format!("Secure delete caption update failed: {e}"))?;
+    }
     client
         .delete_messages(&peer, &[message_id])
         .await
@@ -372,7 +383,10 @@ pub async fn cmd_get_files(
         }
         let peer = match resolve_peer(&client, folder_id, &state).await {
             Ok(p) => p,
-            Err(e) if is_retryable_error(&e) => { last_err = e; continue; }
+            Err(e) if is_retryable_error(&e) => {
+                last_err = e;
+                continue;
+            }
             Err(e) => return Err(e),
         };
         let mut files = Vec::new();
@@ -468,7 +482,10 @@ pub async fn cmd_search_global(
             .await
             .map_err(map_error)
         {
-            Ok(r) => { result_opt = Some(r); break; }
+            Ok(r) => {
+                result_opt = Some(r);
+                break;
+            }
             Err(e) if is_retryable_error(&e) => last_err = e,
             Err(e) => return Err(e),
         }
@@ -603,6 +620,14 @@ pub async fn cmd_export_csv(
 }
 
 #[tauri::command]
+pub async fn cmd_export_manifest_json(
+    save_path: String,
+    manifest_json: String,
+) -> Result<(), String> {
+    std::fs::write(&save_path, manifest_json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn cmd_rename_file(
     message_id: i32,
     folder_id: Option<i64>,
@@ -677,7 +702,11 @@ pub async fn cmd_duplicate_file(
     if let Some(msg) = iter.next().await.map_err(|e| e.to_string())? {
         let new_caption = format!("[SD_NAME:{}]", new_name);
         client
-            .edit_message(&peer, msg.id(), grammers_client::InputMessage::new().text(new_caption))
+            .edit_message(
+                &peer,
+                msg.id(),
+                grammers_client::InputMessage::new().text(new_caption),
+            )
             .await
             .map_err(map_error)?;
     }
@@ -711,7 +740,10 @@ pub async fn cmd_batch_rename(
             .await
             .map_err(map_error)?;
 
-        let msg = messages.into_iter().flatten().next()
+        let msg = messages
+            .into_iter()
+            .flatten()
+            .next()
             .ok_or(format!("Message {} not found", entry.message_id))?;
 
         let media = msg.media().ok_or("No media in message")?;
@@ -734,7 +766,11 @@ pub async fn cmd_batch_rename(
         };
 
         client
-            .edit_message(&peer, entry.message_id, grammers_client::InputMessage::new().text(caption))
+            .edit_message(
+                &peer,
+                entry.message_id,
+                grammers_client::InputMessage::new().text(caption),
+            )
             .await
             .map_err(map_error)?;
 

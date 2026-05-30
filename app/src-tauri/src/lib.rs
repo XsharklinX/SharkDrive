@@ -147,6 +147,7 @@ pub fn run() {
             commands::cmd_log,
             commands::cmd_delete_file,
             commands::cmd_download_file,
+            commands::cmd_download_files_zip,
             commands::cmd_move_files,
             commands::cmd_copy_files,
             commands::cmd_create_folder,
@@ -173,10 +174,13 @@ pub fn run() {
             commands::cmd_get_local_ip,
             // Encryption
             commands::cmd_set_encryption_key,
+            commands::cmd_unlock_encryption_key,
             commands::cmd_clear_encryption_key,
             commands::cmd_get_encryption_status,
             commands::cmd_touch_encryption_activity,
             commands::cmd_set_encryption_auto_lock,
+            commands::cmd_rotate_encryption_key,
+            commands::cmd_encrypt_remote_files,
             // Backup
             commands::cmd_add_backup_folder,
             commands::cmd_remove_backup_folder,
@@ -190,11 +194,13 @@ pub fn run() {
             // Share links
             commands::cmd_create_share_link,
             commands::cmd_revoke_share_link,
+            commands::cmd_revoke_share_links,
             commands::cmd_list_share_links,
             // Clipboard
             commands::cmd_save_clipboard_image,
             commands::cmd_get_file_size,
             commands::cmd_export_csv,
+            commands::cmd_export_manifest_json,
             commands::cmd_duplicate_file,
             commands::cmd_batch_rename,
             commands::cmd_get_cached_files,

@@ -12,7 +12,7 @@ function Update-JsonVersion {
     $fullPath = Join-Path $root $Path
     $content = Get-Content -Path $fullPath -Raw
     $updated = [regex]::Replace($content, '"version"\s*:\s*"[^"]+"', "`"version`": `"$Version`"", 1)
-    Set-Content -Path $fullPath -Value $updated
+    Set-Content -Path $fullPath -Value ($updated.TrimEnd() + [Environment]::NewLine) -NoNewline
 }
 
 function Update-RegexVersion {
@@ -25,7 +25,7 @@ function Update-RegexVersion {
     $fullPath = Join-Path $root $Path
     $content = Get-Content -Path $fullPath -Raw
     $updated = [regex]::Replace($content, $Pattern, $Replacement)
-    Set-Content -Path $fullPath -Value $updated
+    Set-Content -Path $fullPath -Value ($updated.TrimEnd() + [Environment]::NewLine) -NoNewline
 }
 
 Update-JsonVersion 'app\package.json'

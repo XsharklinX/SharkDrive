@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Ban, Clock, Copy, Eye, EyeOff, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { ActivityEntry, BackupFolder, ShareLinkInfo, TelegramFolder } from '../../types';
+import { ActivityEntry, BackupFolder, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
 import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
 import { tauriApi } from '../../api/tauri';
 
@@ -16,13 +17,37 @@ interface SettingsModalProps {
     encryptionEnabled: boolean;
     onEncryptionToggle: (enabled: boolean, password?: string) => void;
     folders: TelegramFolder[];
+    files: TelegramFile[];
     activity: ActivityEntry[];
     shortcuts: KeyboardShortcutMap;
     onShortcutsChange: (shortcuts: KeyboardShortcutMap) => void;
 }
 
-type Tab = 'general' | 'encryption' | 'backup' | 'sharing' | 'shortcuts' | 'activity';
+type Tab = 'general' | 'downloads' | 'encryption' | 'backup' | 'sharing' | 'shortcuts' | 'activity';
 type ActivityFilter = ActivityEntry['type'] | 'all';
+type DownloadDestinationKey = 'images' | 'videos' | 'audio' | 'docs' | 'other';
+type DownloadDestinationMap = Partial<Record<DownloadDestinationKey, string>>;
+const DOWNLOAD_DESTINATIONS_KEY = 'sharkdrive.downloadDestinations.v1';
+const OPEN_AFTER_DOWNLOAD_KEY = 'sharkdrive.openAfterDownload.v1';
+const SECURE_DELETE_KEY = 'sharkdrive.secureDelete.v1';
+
+function estimatePasswordStrength(password: string) {
+    if (!password) return { bits: 0, label: 'Not set', crackTime: 'Add a password to estimate strength', width: 0 };
+    let pool = 0;
+    if (/[a-z]/.test(password)) pool += 26;
+    if (/[A-Z]/.test(password)) pool += 26;
+    if (/\d/.test(password)) pool += 10;
+    if (/[^a-zA-Z0-9]/.test(password)) pool += 32;
+    const bits = Math.round(password.length * Math.log2(Math.max(pool, 1)));
+    const seconds = 2 ** Math.min(bits, 1024) / 10_000_000_000;
+    const crackTime = seconds < 60 ? 'under a minute' : seconds < 3600 ? `${Math.round(seconds / 60)} minutes` : seconds < 86_400 ? `${Math.round(seconds / 3600)} hours` : seconds < 31_536_000 ? `${Math.round(seconds / 86_400)} days` : `${Math.round(seconds / 31_536_000)} years`;
+    return {
+        bits,
+        label: bits >= 80 ? 'Strong' : bits >= 55 ? 'Good' : bits >= 36 ? 'Weak' : 'Very weak',
+        crackTime: `Estimated offline brute force: ${crackTime}`,
+        width: Math.min(100, Math.max(5, bits)),
+    };
+}
 
 export function SettingsModal({
     onClose,
@@ -31,6 +56,7 @@ export function SettingsModal({
     encryptionEnabled,
     onEncryptionToggle,
     folders,
+    files,
     activity,
     shortcuts,
     onShortcutsChange,
@@ -49,6 +75,15 @@ export function SettingsModal({
     const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
     const [shareLinks, setShareLinks] = useState<ShareLinkInfo[]>([]);
     const [shareLinksLoading, setShareLinksLoading] = useState(false);
+    const [downloadDestinations, setDownloadDestinations] = useState<DownloadDestinationMap>({});
+    const [openAfterDownload, setOpenAfterDownload] = useState(false);
+    const [secureDelete, setSecureDelete] = useState(false);
+    const [rotationOldPassword, setRotationOldPassword] = useState('');
+    const [rotationNewPassword, setRotationNewPassword] = useState('');
+    const [rotationLoading, setRotationLoading] = useState(false);
+    const [rotationProgress, setRotationProgress] = useState('');
+    const [auditPassword, setAuditPassword] = useState('');
+    const [auditLoading, setAuditLoading] = useState(false);
 
     useEffect(() => {
         invoke<boolean>('cmd_get_close_to_tray').then(setCloseToTray).catch(() => {});
@@ -57,6 +92,13 @@ export function SettingsModal({
         tauriApi.isSessionProtected().then(setSessionProtected).catch(() => {});
         const savedAutoLock = localStorage.getItem('sharkdrive.encryptionAutoLockMinutes');
         if (savedAutoLock) setAutoLockMinutes(Number(savedAutoLock) || 15);
+        try {
+            setDownloadDestinations(JSON.parse(localStorage.getItem(DOWNLOAD_DESTINATIONS_KEY) || '{}'));
+        } catch {
+            localStorage.removeItem(DOWNLOAD_DESTINATIONS_KEY);
+        }
+        setOpenAfterDownload(localStorage.getItem(OPEN_AFTER_DOWNLOAD_KEY) === 'true');
+        setSecureDelete(localStorage.getItem(SECURE_DELETE_KEY) === 'true');
     }, []);
 
     useEffect(() => {
@@ -67,6 +109,14 @@ export function SettingsModal({
             .catch((error) => toast.error(`Failed to load share links: ${error}`))
             .finally(() => setShareLinksLoading(false));
     }, [tab]);
+
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        listen<{ completed: number; total: number; filename: string }>('encryption-rotation-progress', (event) => {
+            setRotationProgress(`${event.payload.completed}/${event.payload.total}: ${event.payload.filename}`);
+        }).then((dispose) => { unlisten = dispose; });
+        return () => unlisten?.();
+    }, []);
 
     const handleCloseToTray = async (value: boolean) => {
         try {
@@ -195,6 +245,7 @@ export function SettingsModal({
 
     const tabs: { id: Tab; label: string; icon: typeof Monitor; description: string }[] = [
         { id: 'general', label: 'General', icon: Monitor, description: 'App behavior, startup and sync cadence' },
+        { id: 'downloads', label: 'Downloads', icon: Download, description: 'Default destinations and post-download behavior' },
         { id: 'encryption', label: 'Encryption', icon: Shield, description: 'Key loading, recovery and local security' },
         { id: 'backup', label: 'Auto Backup', icon: FolderSync, description: 'Watched folders and remote destinations' },
         { id: 'sharing', label: 'Sharing', icon: Link2, description: 'Active links, expiry and download counts' },
@@ -202,6 +253,13 @@ export function SettingsModal({
         { id: 'activity', label: 'Activity', icon: History, description: 'Local history of app actions' },
     ];
     const visibleActivity = activityFilter === 'all' ? activity : activity.filter((entry) => entry.type === activityFilter);
+    const downloadDestinationRows: { key: DownloadDestinationKey; label: string; description: string }[] = [
+        { key: 'images', label: 'Images', description: 'Photos, screenshots and artwork' },
+        { key: 'videos', label: 'Videos', description: 'MP4, WebM, MOV and similar files' },
+        { key: 'audio', label: 'Audio', description: 'Music, voice notes and podcasts' },
+        { key: 'docs', label: 'Documents', description: 'PDF, Office, text and EPUB files' },
+        { key: 'other', label: 'Other', description: 'Everything not matched above' },
+    ];
     const activityFilters: ActivityFilter[] = ['all', 'upload', 'download', 'copy', 'share', 'preview', 'backup', 'security'];
     const activityListRef = useRef<HTMLDivElement>(null);
     const shortcutActions = Object.keys(DEFAULT_SHORTCUTS) as ShortcutAction[];
@@ -220,6 +278,95 @@ export function SettingsModal({
             [action]: normalizeShortcut(value),
         });
     };
+    const saveDownloadDestinations = (next: DownloadDestinationMap) => {
+        setDownloadDestinations(next);
+        localStorage.setItem(DOWNLOAD_DESTINATIONS_KEY, JSON.stringify(next));
+    };
+    const chooseDownloadDestination = async (key: DownloadDestinationKey) => {
+        const selected = await open({ multiple: false, directory: true, title: `Select ${key} download folder` });
+        if (!selected) return;
+        saveDownloadDestinations({ ...downloadDestinations, [key]: selected as string });
+        toast.success('Download destination saved');
+    };
+    const clearDownloadDestination = (key: DownloadDestinationKey) => {
+        const next = { ...downloadDestinations };
+        delete next[key];
+        saveDownloadDestinations(next);
+        toast.info('Download destination cleared');
+    };
+    const setOpenAfterDownloadSetting = (value: boolean) => {
+        setOpenAfterDownload(value);
+        localStorage.setItem(OPEN_AFTER_DOWNLOAD_KEY, String(value));
+        toast.success(value ? 'Downloads will open when finished' : 'Open after download disabled');
+    };
+    const setSecureDeleteSetting = (value: boolean) => {
+        setSecureDelete(value);
+        localStorage.setItem(SECURE_DELETE_KEY, String(value));
+        toast.success(value ? 'Secure delete enabled' : 'Secure delete disabled');
+    };
+    const rotateEncryptionKey = async () => {
+        const encryptedFiles = files.filter((file) => file.is_encrypted);
+        if (encryptedFiles.length === 0) {
+            toast.info('No encrypted files are indexed locally.');
+            return;
+        }
+        if (!rotationOldPassword || rotationNewPassword.length < 8) {
+            toast.error('Enter the current password and a new password with at least 8 characters.');
+            return;
+        }
+        setRotationLoading(true);
+        setRotationProgress(`0/${encryptedFiles.length}: preparing`);
+        try {
+            const rotated = await tauriApi.rotateEncryptionKey(
+                encryptedFiles.map((file) => ({
+                    messageId: file.id,
+                    folderId: file.folder_id ?? null,
+                    filename: file.name,
+                })),
+                rotationOldPassword,
+                rotationNewPassword,
+            );
+            await tauriApi.setEncryptionKey(rotationNewPassword);
+            setRotationOldPassword('');
+            setRotationNewPassword('');
+            setRotationProgress('');
+            toast.success(`Rotated ${rotated} encrypted file${rotated === 1 ? '' : 's'}.`);
+        } catch (error) {
+            toast.error(`Key rotation stopped safely: ${error}`);
+        } finally {
+            setRotationLoading(false);
+        }
+    };
+    const encryptPlainFiles = async () => {
+        if (plainFiles.length === 0) return;
+        if (auditPassword.length < 8) {
+            toast.error('Enter your encryption password before converting plain files.');
+            return;
+        }
+        setAuditLoading(true);
+        setRotationProgress(`0/${plainFiles.length}: preparing`);
+        try {
+            const encrypted = await tauriApi.encryptRemoteFiles(
+                plainFiles.map((file) => ({
+                    messageId: file.id,
+                    folderId: file.folder_id ?? null,
+                    filename: file.name,
+                })),
+                auditPassword,
+            );
+            await tauriApi.setEncryptionKey(auditPassword);
+            setAuditPassword('');
+            setRotationProgress('');
+            toast.success(`Encrypted ${encrypted} existing file${encrypted === 1 ? '' : 's'}. Sync to refresh the audit.`);
+        } catch (error) {
+            toast.error(`Encryption stopped safely: ${error}`);
+        } finally {
+            setAuditLoading(false);
+        }
+    };
+    const passwordStrength = estimatePasswordStrength(password);
+    const encryptedCount = files.filter((file) => file.is_encrypted).length;
+    const plainFiles = files.filter((file) => !file.is_encrypted);
     const formatShareExpiry = (value?: number | null) => {
         if (!value) return 'Never';
         const diff = value - Date.now();
@@ -313,6 +460,7 @@ export function SettingsModal({
                                 <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">Section</p>
                                 <h3 className="mt-1 text-xl font-semibold tracking-tight text-telegram-text">
                                     {tab === 'general' && 'General'}
+                                    {tab === 'downloads' && 'Downloads'}
                                     {tab === 'encryption' && 'Encryption'}
                                     {tab === 'backup' && 'Auto Backup'}
                                     {tab === 'sharing' && 'Sharing'}
@@ -385,6 +533,55 @@ export function SettingsModal({
                             </>
                         )}
 
+                        {tab === 'downloads' && (
+                            <SectionCard
+                                title="Download Destinations"
+                                icon={<Download className="w-4 h-4" />}
+                                description="Route downloads by type without asking every time. Empty categories keep using the save dialog."
+                            >
+                                <ToggleRow
+                                    icon={<FolderOpen className="w-3.5 h-3.5" />}
+                                    title="Open after download"
+                                    description="Open completed files with the system default app."
+                                    checked={openAfterDownload}
+                                    onChange={setOpenAfterDownloadSetting}
+                                />
+
+                                <div className="space-y-2">
+                                    {downloadDestinationRows.map((row) => (
+                                        <div key={row.key} className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-medium text-telegram-text">{row.label}</p>
+                                                    <p className="mt-0.5 text-xs text-telegram-subtext">{row.description}</p>
+                                                    <p className="mt-2 truncate font-mono text-xs text-telegram-subtext/80">
+                                                        {downloadDestinations[row.key] || 'Ask where to save'}
+                                                    </p>
+                                                </div>
+                                                <div className="flex shrink-0 items-center gap-2">
+                                                    <button
+                                                        onClick={() => chooseDownloadDestination(row.key)}
+                                                        className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-text transition hover:bg-white/[0.05]"
+                                                    >
+                                                        Choose
+                                                    </button>
+                                                    {downloadDestinations[row.key] && (
+                                                        <button
+                                                            onClick={() => clearDownloadDestination(row.key)}
+                                                            className="rounded-lg p-2 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-300"
+                                                            title="Clear destination"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </SectionCard>
+                        )}
+
                         {tab === 'encryption' && (
                             <SectionCard
                                 title="Local Encryption"
@@ -421,6 +618,77 @@ export function SettingsModal({
                                                 <option value={30}>30 minutes</option>
                                                 <option value={60}>60 minutes</option>
                                             </select>
+                                        </div>
+                                        <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                            <p className="text-sm font-medium text-telegram-text">Rotate encryption key</p>
+                                            <p className="mt-1 text-xs leading-5 text-telegram-subtext">
+                                                Replaces encrypted files one at a time. The original Telegram message is deleted only after its replacement uploads successfully.
+                                            </p>
+                                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                                <input
+                                                    type="password"
+                                                    value={rotationOldPassword}
+                                                    onChange={(event) => setRotationOldPassword(event.target.value)}
+                                                    placeholder="Current password"
+                                                    className="rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                                />
+                                                <input
+                                                    type="password"
+                                                    value={rotationNewPassword}
+                                                    onChange={(event) => setRotationNewPassword(event.target.value)}
+                                                    placeholder="New password"
+                                                    className="rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                                />
+                                            </div>
+                                            {rotationProgress && <p className="mt-2 truncate text-xs text-telegram-subtext">{rotationProgress}</p>}
+                                            <button
+                                                onClick={() => void rotateEncryptionKey()}
+                                                disabled={rotationLoading || files.filter((file) => file.is_encrypted).length === 0}
+                                                className="mt-3 rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16 disabled:opacity-50"
+                                            >
+                                                {rotationLoading ? 'Rotating...' : 'Start Rotation'}
+                                            </button>
+                                        </div>
+                                        <ToggleRow
+                                            icon={<Trash2 className="w-3.5 h-3.5" />}
+                                            title="Secure delete"
+                                            description="Replace the Telegram caption with [SD-DELETED] before deleting the message."
+                                            checked={secureDelete}
+                                            onChange={setSecureDeleteSetting}
+                                        />
+                                        <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-medium text-telegram-text">Encryption audit</p>
+                                                    <p className="mt-1 text-xs text-telegram-subtext">{encryptedCount} encrypted / {plainFiles.length} plain files indexed locally.</p>
+                                                </div>
+                                                <span className="rounded-md bg-telegram-primary/10 px-2 py-1 text-xs text-telegram-primary">{files.length} total</span>
+                                            </div>
+                                            {plainFiles.length > 0 && (
+                                                <div className="mt-3">
+                                                    <div className="max-h-28 space-y-1 overflow-y-auto">
+                                                        {plainFiles.slice(0, 20).map((file) => (
+                                                            <p key={`${file.folder_id ?? 'home'}-${file.id}`} className="truncate text-xs text-telegram-subtext">{file.name}</p>
+                                                        ))}
+                                                    </div>
+                                                    <div className="mt-3 flex gap-2">
+                                                        <input
+                                                            type="password"
+                                                            value={auditPassword}
+                                                            onChange={(event) => setAuditPassword(event.target.value)}
+                                                            placeholder="Encryption password"
+                                                            className="min-w-0 flex-1 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-xs text-telegram-text outline-none focus:border-telegram-primary/70"
+                                                        />
+                                                        <button
+                                                            onClick={() => void encryptPlainFiles()}
+                                                            disabled={auditLoading}
+                                                            className="rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16 disabled:opacity-50"
+                                                        >
+                                                            {auditLoading ? 'Encrypting...' : 'Encrypt now'}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
                                             <label className="mb-2 block text-xs font-medium text-telegram-text">Protected Telegram session PIN</label>
@@ -484,6 +752,14 @@ export function SettingsModal({
                                             </div>
                                             {password.length > 0 && password.length < 8 && (
                                                 <p className="mt-1.5 text-xs text-red-400">{8 - password.length} more character{8 - password.length !== 1 ? 's' : ''} needed</p>
+                                            )}
+                                            {password.length > 0 && (
+                                                <div className="mt-3">
+                                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                                                        <div className="h-full rounded-full bg-telegram-primary transition-all" style={{ width: `${passwordStrength.width}%` }} />
+                                                    </div>
+                                                    <p className="mt-1.5 text-xs text-telegram-subtext">{passwordStrength.label} · {passwordStrength.bits} bits · {passwordStrength.crackTime}</p>
+                                                </div>
                                             )}
                                         </div>
                                         <button

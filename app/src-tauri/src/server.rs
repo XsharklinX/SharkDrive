@@ -3,8 +3,11 @@ use crate::commands::utils::resolve_peer;
 use crate::commands::TelegramState;
 use actix_cors::Cors;
 use actix_web::{
-    get, http::header, middleware::DefaultHeaders, web, App, HttpRequest, HttpResponse, HttpServer,
-    Responder,
+    cookie::{time::Duration as CookieDuration, Cookie, SameSite},
+    get,
+    http::header,
+    middleware::DefaultHeaders,
+    post, web, App, HttpRequest, HttpResponse, HttpServer, Responder,
 };
 use grammers_client::types::Media;
 
@@ -18,6 +21,41 @@ pub struct StreamTokenData {
 #[derive(serde::Deserialize)]
 struct StreamQuery {
     token: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct SharePasswordForm {
+    password: String,
+}
+
+fn password_form_html(filename: &str, wrong: bool) -> String {
+    let error = if wrong {
+        "<p style='color:#e55;margin:0 0 12px'>Incorrect password.</p>"
+    } else {
+        ""
+    };
+    format!(
+        r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protected file</title>
+<style>*{{box-sizing:border-box}}body{{font-family:system-ui,sans-serif;background:#0b1521;color:#c8d6e5;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+.card{{background:#0f1c2d;border:1px solid #1e3148;border-radius:12px;padding:32px;width:100%;max-width:380px}}
+h2{{margin:0 0 6px;font-size:1.1rem;color:#e8f1fa}}p{{margin:0 0 18px;font-size:.85rem;color:#8899aa}}
+input{{width:100%;padding:10px 14px;background:#07111b;border:1px solid #1e3148;border-radius:8px;color:#c8d6e5;font-size:.9rem;margin-bottom:14px;outline:none}}
+button{{width:100%;padding:10px;background:#2aabee;color:#06111d;font-weight:600;border:none;border-radius:8px;cursor:pointer;font-size:.9rem}}</style></head>
+<body><div class="card"><h2>🔒 Protected file</h2><p>{}</p>{}
+<form method="POST"><input type="password" name="password" placeholder="Password" autofocus required>
+<button type="submit">Download</button></form></div></body></html>"#,
+        html_escape(filename),
+        error
+    )
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn parse_range_header(range_header: &str, size: i64) -> Option<(i64, i64)> {
@@ -214,6 +252,7 @@ async fn stream_media(
 
 #[get("/share/{token}/{filename}")]
 async fn share_file(
+    req: HttpRequest,
     path: web::Path<(String, String)>,
     data: web::Data<Arc<TelegramState>>,
     share_store: web::Data<Arc<ShareStore>>,
@@ -230,6 +269,32 @@ async fn share_file(
         Some(e) => e,
         None => return HttpResponse::NotFound().body("Share link not found or expired"),
     };
+
+    // Enforce download limit
+    if let Some(max) = entry.max_downloads {
+        if entry.download_count >= u64::from(max) {
+            return HttpResponse::Gone()
+                .content_type("text/plain")
+                .body(format!(
+                    "Download limit reached ({}/{}).",
+                    entry.download_count, max
+                ));
+        }
+    }
+
+    // Enforce password
+    if entry.password_hash.is_some() {
+        let authorized = req
+            .cookie("sd_share_auth")
+            .map(|cookie| share_store.is_authorized(&token, cookie.value()))
+            .unwrap_or(false);
+        if !authorized {
+            return HttpResponse::Ok()
+                .content_type("text/html; charset=utf-8")
+                .insert_header(("Cache-Control", "no-store"))
+                .body(password_form_html(&entry.filename, false));
+        }
+    }
 
     let client_opt = { data.client.lock().await.clone() };
     let client = match client_opt {
@@ -283,6 +348,54 @@ async fn share_file(
     HttpResponse::NotFound().body("File not found")
 }
 
+#[post("/share/{token}/{filename}")]
+async fn authorize_share_file(
+    path: web::Path<(String, String)>,
+    form: web::Form<SharePasswordForm>,
+    share_store: web::Data<Arc<ShareStore>>,
+) -> impl Responder {
+    let (token, filename) = path.into_inner();
+    share_store.purge_expired();
+    let entry = {
+        let Ok(shares) = share_store.shares.lock() else {
+            return HttpResponse::InternalServerError().body("Server error");
+        };
+        shares.get(&token).cloned()
+    };
+    let Some(entry) = entry else {
+        return HttpResponse::NotFound().body("Share link not found or expired");
+    };
+    let Some(password_hash) = entry.password_hash else {
+        return HttpResponse::SeeOther()
+            .insert_header((
+                header::LOCATION,
+                format!("/share/{token}/{}", urlencoding::encode(&filename)),
+            ))
+            .finish();
+    };
+    if !bcrypt::verify(&form.password, &password_hash).unwrap_or(false) {
+        return HttpResponse::Unauthorized()
+            .content_type("text/html; charset=utf-8")
+            .insert_header(("Cache-Control", "no-store"))
+            .body(password_form_html(&entry.filename, true));
+    }
+
+    let authorization = share_store.issue_authorization(&token);
+    let cookie = Cookie::build("sd_share_auth", authorization)
+        .path(format!("/share/{token}/"))
+        .http_only(true)
+        .same_site(SameSite::Strict)
+        .max_age(CookieDuration::minutes(10))
+        .finish();
+    HttpResponse::SeeOther()
+        .cookie(cookie)
+        .insert_header((
+            header::LOCATION,
+            format!("/share/{token}/{}", urlencoding::encode(&filename)),
+        ))
+        .finish()
+}
+
 fn mime_type_from_media(media: &Media) -> String {
     match media {
         Media::Document(d) => d
@@ -310,7 +423,7 @@ pub async fn start_server(
             .allowed_origin("tauri://localhost")
             .allowed_origin("http://localhost:1420")
             .allowed_origin("https://tauri.localhost")
-            .allowed_methods(vec!["GET"])
+            .allowed_methods(vec!["GET", "POST"])
             .allow_any_header()
             .max_age(3600);
 
@@ -327,6 +440,7 @@ pub async fn start_server(
             .app_data(share_data.clone())
             .service(stream_media)
             .service(share_file)
+            .service(authorize_share_file)
     })
     .bind(("0.0.0.0", port))?
     .run();

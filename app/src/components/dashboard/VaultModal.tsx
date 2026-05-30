@@ -245,6 +245,59 @@ export function VaultModal({ files, folders, activity, onClose }: VaultModalProp
         }
     };
 
+    const handleExportManifest = async () => {
+        try {
+            const path = await save({
+                defaultPath: 'sharkdrive-manifest.json',
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+            });
+            if (!path) return;
+            setExporting(true);
+            const manifest = {
+                app: 'SharkDrive',
+                exported_at: new Date().toISOString(),
+                totals: {
+                    folders: folders.length,
+                    files: files.length,
+                    bytes: stats.totalBytes,
+                },
+                folders: folders.map((folder) => ({
+                    id: folder.id,
+                    name: folder.name,
+                    parent_id: folder.parent_id ?? null,
+                    files: files
+                        .filter((file) => file.folder_id === folder.id)
+                        .map((file) => ({
+                            id: file.id,
+                            name: file.name,
+                            size: file.size,
+                            hash: file.sha256 ?? null,
+                            created_at: file.created_at ?? null,
+                            encrypted: Boolean(file.is_encrypted),
+                            mime_type: file.mime_type ?? null,
+                        })),
+                })),
+                saved_messages: files
+                    .filter((file) => file.folder_id == null)
+                    .map((file) => ({
+                        id: file.id,
+                        name: file.name,
+                        size: file.size,
+                        hash: file.sha256 ?? null,
+                        created_at: file.created_at ?? null,
+                        encrypted: Boolean(file.is_encrypted),
+                        mime_type: file.mime_type ?? null,
+                    })),
+            };
+            await tauriApi.exportManifestJson(path, JSON.stringify(manifest, null, 2));
+            toast.success('Manifest exported to ' + path.split(/[/\\]/).pop());
+        } catch (e) {
+            toast.error('Manifest export failed: ' + String(e));
+        } finally {
+            setExporting(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
             <div
@@ -351,8 +404,16 @@ export function VaultModal({ files, folders, activity, onClose }: VaultModalProp
                                 <span className="ml-1 text-xs text-telegram-subtext">({files.length.toLocaleString()} files)</span>
                             )}
                         </button>
+                        <button
+                            onClick={handleExportManifest}
+                            disabled={exporting || files.length === 0}
+                            className="ml-2 inline-flex items-center gap-2 rounded-lg border border-telegram-border bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-telegram-text transition hover:bg-white/[0.07] disabled:opacity-50"
+                        >
+                            <FileText className="h-4 w-4" />
+                            Manifest JSON
+                        </button>
                         <p className="mt-1.5 text-xs text-telegram-subtext/60">
-                            Exports name, size, date, and folder for every indexed file.
+                            CSV exports tabular data. Manifest JSON includes folder tree, file ids, size, hash, date and encryption metadata.
                         </p>
                     </section>
                 </div>
