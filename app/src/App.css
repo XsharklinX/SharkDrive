@@ -279,3 +279,43 @@ body {
   border-color: rgba(47, 155, 255, 0.28);
   background: rgba(47, 155, 255, 0.12);
 }
+
+/* ── Light-mode: overlay buttons on cards ─────────────────────────── */
+:root.light .bg-telegram-bg\/90,
+:root.light .bg-telegram-bg {
+  background-color: var(--color-telegram-surface);
+}
+
+/* FileCard gradient overlays use telegram-bg tokens, override for light */
+:root.light .from-telegram-bg\/95,
+:root.light .via-telegram-bg\/60 {
+  --tw-gradient-from: rgba(247, 251, 255, 0.97);
+  --tw-gradient-via: rgba(247, 251, 255, 0.55);
+}
+
+/* Gallery thumbnails and card backgrounds */
+:root.light .bg-telegram-surface\/95 {
+  background-color: rgba(251, 253, 255, 0.97);
+}
+
+/* Modals and panels that hard-code dark bg */
+:root.light .bg-\[radial-gradient\(circle_at_top\,rgba\(105\,199\,255\,0\.14\)\,transparent_28\%\)\,linear-gradient\(180deg\,rgba\(10\,18\,28\,0\.95\)\,rgba\(6\,11\,18\,1\)\)\] {
+  background: radial-gradient(circle at top, rgba(10, 119, 213, 0.08), transparent 28%),
+              linear-gradient(180deg, rgba(240, 247, 255, 0.98), rgba(248, 252, 255, 1));
+}
+
+/* Animated progress bar in dark UI */
+:root.light .bg-telegram-secondary {
+  background-color: var(--color-telegram-secondary);
+}
+
+/* Force text colors on light mode for common utility classes */
+:root.light .text-white {
+  color: var(--color-telegram-text);
+}
+:root.light .text-white\/70 {
+  color: rgba(21, 37, 53, 0.7);
+}
+:root.light .text-white\/65 {
+  color: rgba(21, 37, 53, 0.65);
+}

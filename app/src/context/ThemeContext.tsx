@@ -32,6 +32,10 @@ function applyTheme(theme: Theme) {
         root.classList.add('dark');
         root.classList.remove('light');
     }
+    const accentColor = localStorage.getItem('sharkdrive.accentColor.v1');
+    if (accentColor) {
+        root.style.setProperty('--color-telegram-primary', accentColor);
+    }
 }
 
 // Apply theme immediately on script load (before React hydration)

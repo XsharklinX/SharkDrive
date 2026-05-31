@@ -134,7 +134,7 @@ export function FileListItem({
                     )}
                     {file.is_encrypted && <span className="text-[10px] text-yellow-200">Encrypted</span>}
                 </div>
-                <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center rounded-md border border-telegram-border bg-[#0b1521]/90 px-0.5 py-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center rounded-md border border-telegram-border bg-telegram-bg/90 px-0.5 py-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                     <button onClick={(e) => { e.stopPropagation(); onPreview(file) }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text" title="Preview"><Eye className="w-3.5 h-3.5" /></button>
                     <button onClick={(e) => { e.stopPropagation(); onDownload(file) }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text" title="Download"><HardDrive className="w-3.5 h-3.5" /></button>
                     <button onClick={(e) => { e.stopPropagation(); onDelete(file) }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-400" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>

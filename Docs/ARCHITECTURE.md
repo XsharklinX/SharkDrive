@@ -1,6 +1,6 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 2.8.1
+> **Version:** 2.9.0
 > **Last updated:** 2026-05-30
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 
@@ -271,6 +271,15 @@ The old monolithic `fs.rs` has been split into:
 - upload naming rules remain client-side and only change the remote Telegram display name
 - `backup_hashes.json` stores the last uploaded hash per watched path so automatic uploads distinguish local-only updates from real two-sided conflicts
 - automatic uploads skip unchanged duplicates and surface two-sided same-name conflicts before uploading a new version
+
+### Polish and localization
+
+- `LanguageContext` owns the explicit `en` / `es` dictionary and a document-level fallback for legacy visible strings that have not yet migrated to `t(...)`
+- the fallback localizes labels, placeholders and titles added by modals or toast portals without translating arbitrary file metadata
+- `OnboardingWizard` runs once after the first authenticated dashboard load and reuses existing folder and encryption commands
+- sidebar width and accent color are local UI preferences persisted in `localStorage`
+- rename undo is a frontend-only buffer of the latest ten file or folder renames and calls the existing rename commands
+- offline mode keeps cached indexed files visible, pauses queued uploads and relies on the existing connection hook for retry
 
 ---
 

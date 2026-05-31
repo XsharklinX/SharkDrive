@@ -1,6 +1,7 @@
 use tokio::time::{sleep, Duration};
 use crate::bandwidth::BandwidthManager;
 use crate::commands::TelegramState;
+use crate::StartupArgs;
 use grammers_client::types::Peer;
 use grammers_client::Client;
 use tauri::State;
@@ -117,6 +118,13 @@ where
         }
     }
     Err(last_err)
+}
+
+/// Returns the startup argument (protocol URL or file path) once, then clears it.
+/// The frontend calls this on mount to detect context-menu uploads or deep links.
+#[tauri::command]
+pub fn cmd_get_startup_args(state: State<'_, StartupArgs>) -> Option<String> {
+    state.0.lock().ok()?.take()
 }
 
 pub fn map_error(e: impl std::fmt::Display) -> String {

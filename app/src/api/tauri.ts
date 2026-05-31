@@ -146,6 +146,9 @@ export const tauriApi = {
     setFolderParent(folderId: number, parentId: number | null) {
         return invoke<TelegramFolder>('cmd_set_folder_parent', { folderId, parentId });
     },
+    getStartupArgs() {
+        return invoke<string | null>('cmd_get_startup_args');
+    },
     exportCsv(savePath: string) {
         return invoke<void>('cmd_export_csv', { savePath });
     },

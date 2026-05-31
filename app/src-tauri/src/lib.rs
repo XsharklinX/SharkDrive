@@ -27,6 +27,42 @@ fn generate_stream_token() -> String {
 
 pub struct ActixServerHandle(pub Arc<std::sync::Mutex<Option<actix_web::dev::ServerHandle>>>);
 
+/// Startup arguments (protocol URL or file path) consumed once by the frontend.
+pub struct StartupArgs(pub std::sync::Mutex<Option<String>>);
+
+/// Register context-menu entry and sharkdrive:// protocol handler in HKCU (no admin required).
+#[cfg(target_os = "windows")]
+fn register_windows_integration(exe_path: &str) {
+    use winreg::RegKey;
+    use winreg::enums::*;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    // sharkdrive:// URL scheme
+    if let Ok((proto, _)) = hkcu.create_subkey(r"Software\Classes\sharkdrive") {
+        let _ = proto.set_value("", &"URL:SharkDrive Protocol");
+        let _ = proto.set_value("URL Protocol", &"");
+        if let Ok((cmd, _)) = hkcu.create_subkey(r"Software\Classes\sharkdrive\shell\open\command") {
+            let _ = cmd.set_value("", &format!("\"{}\" \"%1\"", exe_path));
+        }
+        if let Ok((icon, _)) = hkcu.create_subkey(r"Software\Classes\sharkdrive\DefaultIcon") {
+            let _ = icon.set_value("", &format!("{},0", exe_path));
+        }
+    }
+
+    // Right-click context menu on all files
+    if let Ok((shell, _)) = hkcu.create_subkey(r"Software\Classes\*\shell\SharkDrive") {
+        let _ = shell.set_value("", &"Upload to SharkDrive");
+        let _ = shell.set_value("Icon", &format!("{},0", exe_path));
+        if let Ok((cmd, _)) = hkcu.create_subkey(r"Software\Classes\*\shell\SharkDrive\command") {
+            // Launch app with sharkdrive://upload?path=<file> so it's handled as a protocol URL
+            let _ = cmd.set_value(
+                "",
+                &format!("\"{}\" \"sharkdrive://upload?path=%1\"", exe_path),
+            );
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     env_logger::init();
@@ -35,6 +71,11 @@ pub fn run() {
     let server_handle: Arc<std::sync::Mutex<Option<actix_web::dev::ServerHandle>>> =
         Arc::new(std::sync::Mutex::new(None));
     let server_handle_for_setup = server_handle.clone();
+
+    // Capture any startup argument (protocol URL or file path from context menu)
+    let startup_arg: Option<String> = std::env::args()
+        .nth(1)
+        .filter(|a| !a.starts_with("--") && !a.is_empty());
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -45,7 +86,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
+            app.manage(StartupArgs(std::sync::Mutex::new(startup_arg.clone())));
             // Manage all states
             app.manage(TelegramState {
                 client: Arc::new(Mutex::new(None)),
@@ -81,26 +124,41 @@ pub fn run() {
                 }
             }
 
-            // System tray
-            let show_item = MenuItem::with_id(app, "show", "Open SharkDrive", true, None::<&str>)?;
-            let sep = PredefinedMenuItem::separator(app)?;
-            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_item, &sep, &quit_item])?;
+            // System tray — improved menu
+            let upload_item = MenuItem::with_id(app, "tray-upload", "Upload File…", true, None::<&str>)?;
+            let sync_item   = MenuItem::with_id(app, "tray-sync",   "Sync Now",      true, None::<&str>)?;
+            let sep1        = PredefinedMenuItem::separator(app)?;
+            let show_item   = MenuItem::with_id(app, "show",        "Open SharkDrive", true, None::<&str>)?;
+            let sep2        = PredefinedMenuItem::separator(app)?;
+            let quit_item   = MenuItem::with_id(app, "quit",        "Quit",          true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&upload_item, &sync_item, &sep1, &show_item, &sep2, &quit_item])?;
 
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .tooltip("SharkDrive")
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                .on_menu_event(|app, event| {
+                    match event.id.as_ref() {
+                        "tray-upload" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                            let _ = app.emit("tray-upload-file", ());
                         }
+                        "tray-sync" => {
+                            let _ = app.emit("tray-sync-now", ());
+                        }
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
                     }
-                    "quit" => app.exit(0),
-                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -117,6 +175,14 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Register Windows shell integration (HKCU — no admin needed)
+            #[cfg(target_os = "windows")]
+            if let Ok(exe) = std::env::current_exe() {
+                let exe_str = exe.to_string_lossy().to_string();
+                register_windows_integration(&exe_str);
+                log::info!("Registered Windows integration for: {}", exe_str);
+            }
 
             // Start Streaming + Share Server
             let state = Arc::new(app.state::<TelegramState>().inner().clone());
@@ -221,6 +287,7 @@ pub fn run() {
             commands::cmd_save_clipboard_image,
             commands::cmd_get_file_size,
             commands::cmd_export_csv,
+            commands::cmd_get_startup_args,
             commands::cmd_export_manifest_json,
             commands::cmd_duplicate_file,
             commands::cmd_batch_rename,

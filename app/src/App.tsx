@@ -10,6 +10,7 @@ import "./App.css";
 import { Toaster } from "sonner";
 import { ConfirmProvider } from "./context/ConfirmContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import { DropZoneProvider } from "./contexts/DropZoneContext";
 import { Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
@@ -150,15 +151,17 @@ function AppContent() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
-          <ConfirmProvider>
-            <DropZoneProvider>
-              <AppContent />
-            </DropZoneProvider>
-          </ConfirmProvider>
-        </QueryClientProvider>
-      </ThemeProvider>
+      <LanguageProvider>
+        <ThemeProvider>
+          <QueryClientProvider client={queryClient}>
+            <ConfirmProvider>
+              <DropZoneProvider>
+                <AppContent />
+              </DropZoneProvider>
+            </ConfirmProvider>
+          </QueryClientProvider>
+        </ThemeProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   );
 }

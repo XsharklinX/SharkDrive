@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface TopBarProps {
     currentFolderName: string;
@@ -38,6 +39,7 @@ interface TopBarProps {
     failedUploadCount: number;
     uploadProgress?: number | null;
     isDraggingFiles: boolean;
+    isConnected?: boolean;
 }
 
 export function TopBar({
@@ -76,19 +78,21 @@ export function TopBar({
     failedUploadCount,
     uploadProgress,
     isDraggingFiles,
+    isConnected = true,
 }: TopBarProps) {
     const { theme, toggleTheme } = useTheme();
+    const { lang, t } = useLanguage();
     const [searchFocused, setSearchFocused] = useState(false);
     const hasQueuedUploads = queuedUploadCount > 0;
     const showRecentSearches = searchFocused && recentSearches.length > 0;
     const shouldShowTransferHint = isDraggingFiles || hasQueuedUploads || failedUploadCount > 0;
     const transferStatusLabel = isDraggingFiles
-        ? 'Drop files to upload'
+        ? (lang === 'es' ? 'Arrastra archivos para subir' : 'Drop files to upload')
         : uploadingCount > 0
-            ? `${uploadingCount} uploading`
+            ? (lang === 'es' ? `${uploadingCount} subiendo` : `${uploadingCount} uploading`)
             : failedUploadCount > 0
-                ? `${failedUploadCount} need attention`
-                : `${queuedUploadCount} queued`;
+                ? (lang === 'es' ? `${failedUploadCount} requieren atención` : `${failedUploadCount} need attention`)
+                : (lang === 'es' ? `${queuedUploadCount} en cola` : `${queuedUploadCount} queued`);
 
     return (
         <header className="sticky top-0 z-10 border-b border-telegram-border/80 bg-telegram-bg/95 px-5 py-3 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
@@ -102,7 +106,12 @@ export function TopBar({
                                     <span key={segment.id ?? 'root'} className="flex min-w-0 items-center gap-0.5">
                                         {i > 0 && <ChevronRight className="h-4 w-4 flex-shrink-0 text-telegram-subtext/40" />}
                                         {isLast ? (
-                                            <span className="truncate text-[1.3rem] font-semibold tracking-tight text-telegram-text">{segment.name}</span>
+                                            <span className="truncate text-[1.3rem] font-semibold tracking-tight text-telegram-text inline-flex items-center gap-2">
+                                                {segment.name}
+                                                {!isConnected && (
+                                                    <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs font-semibold text-red-400">Offline</span>
+                                                )}
+                                            </span>
                                         ) : (
                                             <button
                                                 onClick={() => onNavigateTo(segment.id)}
@@ -116,7 +125,12 @@ export function TopBar({
                             })}
                         </nav>
                     ) : (
-                        <h1 className="truncate text-[1.5rem] font-semibold tracking-tight text-telegram-text">{currentFolderName}</h1>
+                        <h1 className="truncate text-[1.5rem] font-semibold tracking-tight text-telegram-text inline-flex items-center gap-2">
+                            {currentFolderName}
+                            {!isConnected && (
+                                <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs font-semibold text-red-400">Offline</span>
+                            )}
+                        </h1>
                     )}
                     {shouldShowTransferHint && (
                         <div className="mt-1 max-w-56">
@@ -139,11 +153,11 @@ export function TopBar({
                     <button
                         onClick={onToggleFavoritesFilter}
                         className={`relative rounded-lg border px-2.5 py-2 text-sm transition ${showFavoritesOnly ? 'border-yellow-300/35 bg-yellow-300/10 text-yellow-200' : 'border-telegram-border text-telegram-subtext hover:text-telegram-text'}`}
-                        title={showFavoritesOnly ? 'Show all files' : 'Show starred only'}
+                        title={showFavoritesOnly ? (lang === 'es' ? 'Mostrar todos' : 'Show all files') : (lang === 'es' ? 'Mostrar destacados' : 'Show starred only')}
                     >
                         <span className="flex items-center gap-2">
                             <Star className={`h-4 w-4 ${showFavoritesOnly ? 'fill-yellow-300' : ''}`} />
-                            <span className="hidden sm:inline">Starred</span>
+                            <span className="hidden sm:inline">{t('starred')}</span>
                         </span>
                         {favoriteCount > 0 && !showFavoritesOnly && (
                             <span className="absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-yellow-300 px-1 text-[10px] font-bold text-black">
@@ -155,7 +169,7 @@ export function TopBar({
                     <button
                         onClick={toggleTheme}
                         className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                        title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+                        title={theme === 'dark' ? (lang === 'es' ? 'Cambiar a modo claro' : 'Switch to Light Mode') : (lang === 'es' ? 'Cambiar a modo oscuro' : 'Switch to Dark Mode')}
                     >
                         {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                     </button>
@@ -164,7 +178,7 @@ export function TopBar({
                         <button
                             onClick={onOpenLinks}
                             className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title="My Share Links"
+                            title={lang === 'es' ? 'Mis enlaces compartidos' : 'My Share Links'}
                         >
                             <Link2 className="h-4 w-4" />
                         </button>
@@ -173,7 +187,7 @@ export function TopBar({
                     <button
                         onClick={onOpenSettings}
                         className="relative rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                        title="Settings"
+                        title={t('settings')}
                     >
                         <Settings className="h-4 w-4" />
                         {nextSyncIn !== null && nextSyncIn !== undefined && (
@@ -191,7 +205,7 @@ export function TopBar({
                         <Search className="h-4 w-4 shrink-0 text-telegram-subtext" />
                         <input
                             type="text"
-                            placeholder="Search files and folders"
+                            placeholder={t('searchPlaceholder')}
                             data-vault-search="true"
                             className="w-full bg-transparent text-sm text-telegram-text placeholder:text-telegram-subtext focus:outline-none"
                             value={searchTerm}
@@ -209,7 +223,7 @@ export function TopBar({
                             <button
                                 onClick={() => onSearchChange('')}
                                 className="rounded-md p-1 text-telegram-subtext transition hover:text-telegram-text"
-                                title="Clear search"
+                                title={lang === 'es' ? 'Limpiar búsqueda' : 'Clear search'}
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -217,7 +231,7 @@ export function TopBar({
                     </div>
                     {showRecentSearches && (
                         <div className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 rounded-lg border border-telegram-border bg-telegram-surface p-1.5 shadow-2xl">
-                            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-telegram-subtext">Recent searches</div>
+                            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-telegram-subtext">{lang === 'es' ? 'Búsquedas recientes' : 'Recent searches'}</div>
                             {recentSearches.map((term) => (
                                 <button
                                     key={term}
@@ -243,7 +257,7 @@ export function TopBar({
                                 onChange={(event) => onSearchCurrentFolderOnlyChange(event.target.checked)}
                                 className="accent-telegram-primary"
                             />
-                            Search only in this folder
+                            {t('searchOnlyThisFolder')}
                         </label>
                     )}
                 </div>
@@ -256,44 +270,46 @@ export function TopBar({
                                 ? 'border-telegram-primary/30 bg-telegram-primary/10 text-telegram-primary'
                                 : 'border-telegram-border text-telegram-subtext hover:text-telegram-text'
                         }`}
-                        title={selectionMode ? 'Exit selection mode' : 'Select multiple files'}
+                        title={selectionMode ? (lang === 'es' ? 'Salir del modo de selección' : 'Exit selection mode') : (lang === 'es' ? 'Seleccionar múltiples archivos' : 'Select multiple files')}
                     >
                         <span className="flex items-center gap-2">
                             <CheckSquare className="h-4 w-4" />
-                            {selectionMode ? 'Done' : 'Select'}
+                            {selectionMode ? (lang === 'es' ? 'Listo' : 'Done') : t('select')}
                         </span>
                     </button>
 
                     {selectedIds.length > 0 && (
                         <div className="flex items-center gap-1.5 rounded-lg border border-telegram-primary/20 bg-telegram-primary/[0.06] px-2 py-1.5">
-                            <span className="px-1.5 text-xs font-medium text-telegram-text">{selectedIds.length} selected</span>
-                            <button onClick={onShowMoveModal} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title="Move selected">
-                                <span className="flex items-center gap-1.5"><MoveRight className="h-3 w-3" />Move</span>
+                            <span className="px-1.5 text-xs font-medium text-telegram-text">
+                                {t('selectedCount').replace('{count}', String(selectedIds.length))}
+                            </span>
+                            <button onClick={onShowMoveModal} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title={lang === 'es' ? 'Mover seleccionados' : 'Move selected'}>
+                                <span className="flex items-center gap-1.5"><MoveRight className="h-3 w-3" />{t('move')}</span>
                             </button>
-                            <button onClick={onShowCopyModal} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title="Copy selected">
-                                <span className="flex items-center gap-1.5"><Copy className="h-3 w-3" />Copy</span>
+                            <button onClick={onShowCopyModal} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title={lang === 'es' ? 'Copiar seleccionados' : 'Copy selected'}>
+                                <span className="flex items-center gap-1.5"><Copy className="h-3 w-3" />{t('copy')}</span>
                             </button>
-                            <button onClick={onBulkShare} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title="Share selected">
-                                <span className="flex items-center gap-1.5"><Link2 className="h-3 w-3" />Share All</span>
+                            <button onClick={onBulkShare} className="rounded-md bg-telegram-primary/15 px-2.5 py-1.5 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/22" title={lang === 'es' ? 'Compartir seleccionados' : 'Share selected'}>
+                                <span className="flex items-center gap-1.5"><Link2 className="h-3 w-3" />{t('shareAll')}</span>
                             </button>
-                            <button onClick={onBulkDownload} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title="Download selected">
-                                <span className="flex items-center gap-1.5"><Download className="h-3 w-3" />Download</span>
+                            <button onClick={onBulkDownload} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title={lang === 'es' ? 'Descargar seleccionados' : 'Download selected'}>
+                                <span className="flex items-center gap-1.5"><Download className="h-3 w-3" />{t('bulkDownload')}</span>
                             </button>
                             {selectedIds.length > 1 && (
-                                <button onClick={onBulkDownloadZip} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title="Download selected as ZIP">
-                                    <span className="flex items-center gap-1.5"><HardDrive className="h-3 w-3" />ZIP</span>
+                                <button onClick={onBulkDownloadZip} className="rounded-md border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-text transition hover:bg-white/[0.04]" title={lang === 'es' ? 'Descargar seleccionados como ZIP' : 'Download selected as ZIP'}>
+                                    <span className="flex items-center gap-1.5"><HardDrive className="h-3 w-3" />{t('zip')}</span>
                                 </button>
                             )}
-                            <button onClick={onBulkDelete} className="rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 transition hover:bg-red-500/18" title="Delete selected">
-                                <span className="flex items-center gap-1.5"><Trash2 className="h-3 w-3" />Delete</span>
+                            <button onClick={onBulkDelete} className="rounded-md bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 transition hover:bg-red-500/18" title={lang === 'es' ? 'Eliminar seleccionados' : 'Delete selected'}>
+                                <span className="flex items-center gap-1.5"><Trash2 className="h-3 w-3" />{t('bulkDelete')}</span>
                             </button>
                         </div>
                     )}
 
-                    <button onClick={onFileUpload} className="rounded-lg bg-telegram-primary px-3 py-2 text-sm font-semibold text-black transition hover:opacity-90" title="Add Files">
+                    <button onClick={onFileUpload} className="rounded-lg bg-telegram-primary px-3 py-2 text-sm font-semibold text-black transition hover:opacity-90" title={t('addFiles')}>
                         <span className="flex items-center gap-2">
                             <Plus className="h-4 w-4" />
-                            Add Files
+                            {t('addFiles')}
                             {hasQueuedUploads && (
                                 <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold text-black">
                                     {queuedUploadCount}
@@ -301,29 +317,29 @@ export function TopBar({
                             )}
                         </span>
                     </button>
-                    <button onClick={onEncryptedFileUpload} className="rounded-lg border border-yellow-300/25 px-3 py-2 text-sm text-yellow-200 transition hover:bg-yellow-300/10" title="Add encrypted files">
+                    <button onClick={onEncryptedFileUpload} className="rounded-lg border border-yellow-300/25 px-3 py-2 text-sm text-yellow-200 transition hover:bg-yellow-300/10" title={lang === 'es' ? 'Añadir archivos cifrados' : 'Add encrypted files'}>
                         <span className="flex items-center gap-2">
                             <ShieldIcon />
-                            Add Encrypted
+                            {t('addEncrypted')}
                         </span>
                     </button>
-                    <button onClick={onFolderUpload} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Upload Folder">
+                    <button onClick={onFolderUpload} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={t('uploadFolder')}>
                         <span className="flex items-center gap-2">
                             <FolderOpen className="h-4 w-4" />
-                            Upload Folder
+                            {t('uploadFolder')}
                         </span>
                     </button>
-                    <button onClick={onDownloadFolder} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Download all files in this folder (flat)">
+                    <button onClick={onDownloadFolder} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={lang === 'es' ? 'Descargar todos los archivos de esta carpeta (plano)' : 'Download all files in this folder (flat)'}>
                         <span className="flex items-center gap-2">
                             <HardDrive className="h-4 w-4" />
-                            Download All
+                            {t('downloadAll')}
                         </span>
                     </button>
                     {onDownloadFolderTree && (
-                        <button onClick={onDownloadFolderTree} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title="Download this folder and all subfolders preserving directory structure">
+                        <button onClick={onDownloadFolderTree} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={lang === 'es' ? 'Descargar esta carpeta y subcarpetas' : 'Download this folder and all subfolders'}>
                             <span className="flex items-center gap-2">
                                 <HardDrive className="h-4 w-4" />
-                                With Subfolders
+                                {t('withSubfolders')}
                             </span>
                         </button>
                     )}

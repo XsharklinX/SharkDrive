@@ -1,4 +1,5 @@
 import { FolderPlus, Search, Star, Upload } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 type EmptyVariant = 'folder' | 'search' | 'favorites';
 
@@ -8,26 +9,30 @@ interface EmptyStateProps {
     searchTerm?: string;
 }
 
-const VARIANTS: Record<EmptyVariant, { Icon: React.ElementType; title: string; sub: string }> = {
+const VARIANTS = {
     folder: {
         Icon: FolderPlus,
-        title: 'No files here yet',
-        sub: 'Upload files or drop them into this folder to get started.',
+        titleKey: 'emptyFolder' as const,
+        subKey: 'emptyFolderSub' as const,
     },
     search: {
         Icon: Search,
-        title: 'No results found',
-        sub: 'Try a different search term or remove some filters.',
+        titleKey: 'noResults' as const,
+        subKey: 'noResultsSub' as const,
     },
     favorites: {
         Icon: Star,
-        title: 'No starred files',
-        sub: 'Star files by clicking the ★ icon on any file card.',
+        titleKey: 'noStarred' as const,
+        subKey: 'noStarredSub' as const,
     },
 };
 
 export function EmptyState({ onUpload, variant = 'folder', searchTerm }: EmptyStateProps) {
-    const { Icon, title, sub } = VARIANTS[variant];
+    const { t } = useLanguage();
+    const { Icon, titleKey, subKey } = VARIANTS[variant];
+    const title = t(titleKey);
+    const sub = t(subKey);
+
     return (
         <div className="flex min-h-[22rem] flex-col items-center justify-center rounded-lg border border-telegram-border bg-white/[0.015] px-8 py-12 text-center">
             <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.03]">
@@ -36,7 +41,7 @@ export function EmptyState({ onUpload, variant = 'folder', searchTerm }: EmptySt
 
             <div className="max-w-md">
                 <h3 className="text-lg font-semibold tracking-tight text-telegram-text">
-                    {variant === 'search' && searchTerm ? `No results for "${searchTerm}"` : title}
+                    {variant === 'search' && searchTerm ? `${t('noResults')} "${searchTerm}"` : title}
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-telegram-subtext">{sub}</p>
             </div>
@@ -47,7 +52,7 @@ export function EmptyState({ onUpload, variant = 'folder', searchTerm }: EmptySt
                     className="mt-6 inline-flex items-center gap-2 rounded-lg bg-telegram-primary px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
                 >
                     <Upload className="w-4 h-4" />
-                    Add Files
+                    {t('addFiles')}
                 </button>
             )}
         </div>

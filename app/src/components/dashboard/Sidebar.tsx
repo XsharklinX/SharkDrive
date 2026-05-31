@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Activity, BarChart2, ChevronDown, Clock, FileText, Folder, HardDrive, Image, Lock, LogOut, Plus, RefreshCw, Sparkles, Star, Tag, Video } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
 import { ActivityEntry, BandwidthStats, TelegramFolder } from '../../types';
@@ -98,6 +99,7 @@ export function Sidebar({
     const [createParentId, setCreateParentId] = useState<number | null>(null);
     const [showActivity, setShowActivity] = useState(false);
     const [showSmartFolders, setShowSmartFolders] = useState(true);
+    const { t } = useLanguage();
 
     const selectedFolder = folders.find((folder) => folder.id === activeFolderId) ?? null;
     const createTargetParentId = createParentId ?? (selectedFolder ? selectedFolder.id : null);
@@ -206,8 +208,46 @@ export function Sidebar({
     const rootPinnedCount = (groupedFolders.root ?? []).filter((folder) => pinnedSet.has(folder.id)).length;
     const rootNormalCount = (groupedFolders.root ?? []).length - rootPinnedCount;
 
+    // ── Drag-to-resize ────────────────────────────────────────────────────────
+    const SIDEBAR_WIDTH_KEY = 'sharkdrive.sidebarWidth.v1';
+    const MIN_W = 180;
+    const MAX_W = 320;
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        const saved = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) ?? '256', 10);
+        return isNaN(saved) ? 256 : Math.min(MAX_W, Math.max(MIN_W, saved));
+    });
+    const isResizing = useRef(false);
+    const handleResizeMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault();
+        isResizing.current = true;
+        const startX = e.clientX;
+        const startW = sidebarWidth;
+        const onMove = (ev: MouseEvent) => {
+            if (!isResizing.current) return;
+            const next = Math.min(MAX_W, Math.max(MIN_W, startW + ev.clientX - startX));
+            setSidebarWidth(next);
+        };
+        const onUp = () => {
+            isResizing.current = false;
+            setSidebarWidth(w => { localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w)); return w; });
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    };
+
     return (
-        <aside className="vault-sidebar flex w-64 flex-col border-r border-telegram-border/80 text-telegram-text" onClick={(e) => e.stopPropagation()}>
+        <aside
+            className="vault-sidebar relative flex flex-col border-r border-telegram-border/80 text-telegram-text"
+            style={{ width: sidebarWidth, flexShrink: 0 }}
+            onClick={(e) => e.stopPropagation()}
+        >
+            {/* Resize handle */}
+            <div
+                className="absolute inset-y-0 right-0 z-50 w-1 cursor-col-resize hover:bg-telegram-primary/40 transition-colors"
+                onMouseDown={handleResizeMouseDown}
+            />
             <div className="border-b border-telegram-border/70 px-4 py-5">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -234,15 +274,17 @@ export function Sidebar({
                     )}
                 </div>
                 <div className="mt-4 flex items-center gap-2 text-xs text-telegram-subtext">
-                    <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                    <span>{isConnected ? 'Connected to Telegram' : 'Disconnected'}</span>
+                    <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-500 animate-pulse'}`} />
+                    <span className={isConnected ? '' : 'text-red-400 font-semibold'}>
+                        {isConnected ? 'Connected to Telegram' : 'Offline Mode'}
+                    </span>
                 </div>
             </div>
 
             <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
                 <SidebarItem
                     icon={HardDrive}
-                    label="Saved Messages"
+                    label={t('savedMessages')}
                     active={activeFolderId === null}
                     onClick={() => setActiveFolderId(null)}
                     onDrop={(e: React.DragEvent) => onDrop(e, null)}
@@ -256,7 +298,7 @@ export function Sidebar({
                 />
                 <SidebarItem
                     icon={Clock}
-                    label={`Recent${recentCount > 0 ? ` (${recentCount})` : ''}`}
+                    label={`${t('recent')}${recentCount > 0 ? ` (${recentCount})` : ''}`}
                     active={activeFolderId === RECENT_FOLDER_ID}
                     onClick={() => setActiveFolderId(RECENT_FOLDER_ID)}
                     onDrop={() => {}}
@@ -265,7 +307,7 @@ export function Sidebar({
                 {onToggleStarred && (
                     <SidebarItem
                         icon={Star}
-                        label={`Starred${starredCount > 0 ? ` (${starredCount})` : ''}`}
+                        label={`${t('starred')}${starredCount > 0 ? ` (${starredCount})` : ''}`}
                         active={showFavoritesOnly}
                         onClick={onToggleStarred}
                         onDrop={() => {}}

@@ -3,7 +3,7 @@ import { X, File, ChevronLeft, ChevronRight, Shield, Eye, ZoomIn, ZoomOut, Rotat
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
-import { isImageFile, resolveFileFolderId } from '../../utils';
+import { isImageFile, resolveFileFolderId, formatBytes, isTextPreviewFile } from '../../utils';
 
 const PREVIEW_CACHE_TTL_MS = 5 * 60 * 1000;
 const PREVIEW_CACHE_MAX_ITEMS = 8;
@@ -62,9 +62,10 @@ interface PreviewModalProps {
     nextFile?: TelegramFile | null;
     prevFile?: TelegramFile | null;
     activeFolderId: number | null;
+    onOpenTextPreview?: (file: TelegramFile) => void;
 }
 
-export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, totalItems, nextFile, prevFile, activeFolderId }: PreviewModalProps) {
+export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, totalItems, nextFile, prevFile, activeFolderId, onOpenTextPreview }: PreviewModalProps) {
     const [src, setSrc] = useState<string | null>(null);
     const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -276,10 +277,23 @@ export function PreviewModal({ file, onClose, onNext, onPrev, currentIndex, tota
                         </div>
                         <div className="min-w-0">
                             <h3 className="truncate text-sm font-semibold text-telegram-text" title={file.name}>{file.name}</h3>
+                            <p className="text-xs text-telegram-subtext mt-0.5">
+                                {file.sizeStr || formatBytes(file.size)} · {file.created_at ? new Date(file.created_at).toLocaleDateString() : 'Unknown date'}
+                            </p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {isTextPreviewFile(file.name) && onOpenTextPreview && (
+                            <button
+                                onClick={() => onOpenTextPreview(file)}
+                                className="flex items-center gap-2 rounded-lg border border-telegram-primary/30 bg-telegram-primary/10 px-3 py-2 text-xs font-semibold text-telegram-primary transition hover:bg-telegram-primary/20"
+                                title="Open text file in viewer"
+                            >
+                                <Eye className="w-3.5 h-3.5" />
+                                View Text
+                            </button>
+                        )}
                         {file.is_encrypted && (
                             <div className="flex items-center gap-2 rounded-full border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-xs text-yellow-200">
                                 <Shield className="w-3.5 h-3.5" />

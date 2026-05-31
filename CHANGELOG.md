@@ -4,6 +4,21 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [2.9.0] - 2026-05-30
+
+### Polish and Completeness
+
+- **Keyboard shortcuts overlay** - Pressing `?` opens a categorized reference overlay backed by the configured shortcut map.
+- **Resizable sidebar** - The sidebar width can be dragged between 180 px and 320 px and persists locally.
+- **Custom accent color** - Settings exposes eight presets plus a custom hex/color picker applied through the shared CSS variable.
+- **Offline explorer** - Cached indexed files remain visible while Telegram is unavailable, uploads pause in queue, and reconnect retries automatically.
+- **First-run onboarding** - A four-step post-login wizard explains the product, confirms credentials, offers initial folder creation, and optionally enables encryption.
+- **Rename undo** - `Ctrl+Z` restores the latest file or folder rename outside text inputs with a ten-entry local action buffer.
+- **Improved previews** - Preview headers include filename, size, and date; text-compatible files can open in the text viewer.
+- **Complete Spanish fallback** - The language provider localizes legacy visible labels, titles, placeholders, overlays, and newly mounted modal content while older components are migrated to translation keys.
+
+---
+
 ## [2.8.1] - 2026-05-30
 
 ### Automation 2.0
@@ -74,6 +89,19 @@ All notable changes to SharkDrive are documented here.
 
 - The current LAN password form authenticates through a query string. The hash is never exposed or stored as plaintext, but POST plus a temporary authorization token remains a hardening task to prevent browser-history leakage.
 - The current AES-GCM helper buffers a complete file in memory. Chunked authenticated encryption remains required before describing the system as enterprise-grade for large files.
+
+---
+
+## [2.8.2] - 2026-05-30
+
+### Windows Integration
+
+- **Context menu Explorer** — Al iniciar, registra `HKCU\Software\Classes\*\shell\SharkDrive` (no requiere admin). Right-click en cualquier archivo en Explorer muestra "Upload to SharkDrive". El ejecutable se lanza con `sharkdrive://upload?path=<file>`, que el frontend parsea y encola.
+- **Protocol handler** — Registra el esquema `sharkdrive://` en `HKCU\Software\Classes\sharkdrive`. Soporta `sharkdrive://open/{folder_id}` (navega a la carpeta) y `sharkdrive://upload?path=<file>` (encola upload). El argumento de startup se guarda en `StartupArgs` state y se consume una vez por el frontend via `cmd_get_startup_args`.
+- **System tray mejorado** — Menu extendido: "Upload File…" → abre el file dialog (emite `tray-upload-file` al frontend), "Sync Now" → emite `tray-sync-now` al frontend, separador, "Open SharkDrive", separador, "Quit". Left-click sigue mostrando la ventana.
+- **Rich notifications** — Añadido `tauri-plugin-notification` (Cargo + npm). `showNativeNotification(title, body)` reemplaza `new Notification()` en `useFileUpload.ts` y `useFileDownload.ts`. Muestra toast notifications nativas de Windows con ícono de la app y persistencia en el Action Center.
+- **Jump List** — Skip por ahora (requiere COM interfaces via windows-rs crate, complejidad alta).
+- **Startup speed** — Ya optimizado en v2.0 (splash screen + cached-files stale-while-revalidate).
 
 ---
 

@@ -1,7 +1,7 @@
 use rand::Rng;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
 
@@ -176,7 +176,7 @@ pub async fn cmd_create_share_link(
     expires_in_minutes: Option<u64>,
     max_downloads: Option<u32>,
     password: Option<String>,
-    state: State<'_, ShareStore>,
+    state: State<'_, Arc<ShareStore>>,
 ) -> Result<String, String> {
     state.purge_expired();
     let token: String = rand::thread_rng()
@@ -230,7 +230,7 @@ pub async fn cmd_create_share_link(
 #[tauri::command]
 pub async fn cmd_revoke_share_link(
     token: String,
-    state: State<'_, ShareStore>,
+    state: State<'_, Arc<ShareStore>>,
 ) -> Result<(), String> {
     state.purge_expired();
     state
@@ -246,7 +246,7 @@ pub async fn cmd_revoke_share_link(
 #[tauri::command]
 pub async fn cmd_revoke_share_links(
     tokens: Vec<String>,
-    state: State<'_, ShareStore>,
+    state: State<'_, Arc<ShareStore>>,
 ) -> Result<u32, String> {
     let mut removed = 0_u32;
     {
@@ -264,7 +264,7 @@ pub async fn cmd_revoke_share_links(
 
 #[tauri::command]
 pub async fn cmd_list_share_links(
-    state: State<'_, ShareStore>,
+    state: State<'_, Arc<ShareStore>>,
 ) -> Result<Vec<ShareLinkInfo>, String> {
     state.purge_expired();
     let shares = state.shares.lock().map_err(|e| e.to_string())?;

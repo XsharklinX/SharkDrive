@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useLanguage, type Lang } from '../../context/LanguageContext';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ActivityEntry, BackupFolder, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
 import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
@@ -64,6 +65,27 @@ export function SettingsModal({
     onShortcutsChange,
 }: SettingsModalProps) {
     const [tab, setTab] = useState<Tab>('general');
+    const { lang, t } = useLanguage();
+    const [accentColor, setAccentColor] = useState(() => {
+        return localStorage.getItem('sharkdrive.accentColor.v1') || '#2f9bff';
+    });
+
+    const presetColors = [
+        '#2f9bff',
+        '#2aabee',
+        '#10b981',
+        '#8b5cf6',
+        '#f43f5e',
+        '#f97316',
+        '#f59e0b',
+        '#06b6d4',
+    ];
+
+    const handleAccentColorChange = (color: string) => {
+        setAccentColor(color);
+        localStorage.setItem('sharkdrive.accentColor.v1', color);
+        document.documentElement.style.setProperty('--color-telegram-primary', color);
+    };
     const [closeToTray, setCloseToTray] = useState(false);
     const [autostart, setAutostart] = useState(false);
     const [password, setPassword] = useState('');
@@ -137,9 +159,9 @@ export function SettingsModal({
         try {
             await invoke('cmd_set_close_to_tray', { enabled: value });
             setCloseToTray(value);
-            toast.success(value ? 'App will minimize to tray on close' : 'App will exit on close');
+            toast.success(value ? t('closeToTrayMin') : t('closeToTrayExit'));
         } catch (e) {
-            toast.error(`Failed to save tray setting: ${e instanceof Error ? e.message : String(e)}`);
+            toast.error(`${lang === 'es' ? 'Fallo al guardar ajuste de bandeja' : 'Failed to save tray setting'}: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -147,9 +169,9 @@ export function SettingsModal({
         setAutostart(value);
         try {
             await invoke('cmd_set_autostart', { enabled: value });
-            toast.success(value ? 'SharkDrive will start with Windows' : 'Removed from startup');
+            toast.success(value ? t('runAtStartupEnabled') : t('runAtStartupDisabled'));
         } catch (e) {
-            toast.error(`Startup setting failed: ${e}`);
+            toast.error(`${lang === 'es' ? 'Fallo al configurar inicio automático' : 'Startup setting failed'}: ${e}`);
             setAutostart(!value);
         }
     };
@@ -305,21 +327,21 @@ export function SettingsModal({
     ];
 
     const tabs: { id: Tab; label: string; icon: typeof Monitor; description: string }[] = [
-        { id: 'general', label: 'General', icon: Monitor, description: 'App behavior, startup and sync cadence' },
-        { id: 'downloads', label: 'Downloads', icon: Download, description: 'Default destinations and post-download behavior' },
-        { id: 'encryption', label: 'Encryption', icon: Shield, description: 'Key loading, recovery and local security' },
-        { id: 'backup', label: 'Auto Backup', icon: FolderSync, description: 'Watched folders and remote destinations' },
-        { id: 'sharing', label: 'Sharing', icon: Link2, description: 'Active links, expiry and download counts' },
-        { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard, description: 'Keyboard actions and conflict checks' },
-        { id: 'activity', label: 'Activity', icon: History, description: 'Local history of app actions' },
+        { id: 'general', label: t('general'), icon: Monitor, description: lang === 'es' ? 'Comportamiento de la aplicación, inicio y frecuencia' : 'App behavior, startup and sync cadence' },
+        { id: 'downloads', label: t('downloads'), icon: Download, description: lang === 'es' ? 'Destinos predeterminados y comportamiento post-descarga' : 'Default destinations and post-download behavior' },
+        { id: 'encryption', label: t('encryption'), icon: Shield, description: lang === 'es' ? 'Carga de claves, recuperación y seguridad local' : 'Key loading, recovery and local security' },
+        { id: 'backup', label: t('autoBackup'), icon: FolderSync, description: lang === 'es' ? 'Carpetas vigiladas y destinos remotos' : 'Watched folders and remote destinations' },
+        { id: 'sharing', label: t('sharing'), icon: Link2, description: lang === 'es' ? 'Enlaces activos, caducidad y conteo de descargas' : 'Active links, expiry and download counts' },
+        { id: 'shortcuts', label: t('shortcuts'), icon: Keyboard, description: lang === 'es' ? 'Acciones de teclado y comprobación de conflictos' : 'Keyboard actions and conflict checks' },
+        { id: 'activity', label: t('activityTab'), icon: History, description: lang === 'es' ? 'Historial local de acciones de la aplicación' : 'Local history of app actions' },
     ];
     const visibleActivity = activityFilter === 'all' ? activity : activity.filter((entry) => entry.type === activityFilter);
     const downloadDestinationRows: { key: DownloadDestinationKey; label: string; description: string }[] = [
-        { key: 'images', label: 'Images', description: 'Photos, screenshots and artwork' },
-        { key: 'videos', label: 'Videos', description: 'MP4, WebM, MOV and similar files' },
-        { key: 'audio', label: 'Audio', description: 'Music, voice notes and podcasts' },
-        { key: 'docs', label: 'Documents', description: 'PDF, Office, text and EPUB files' },
-        { key: 'other', label: 'Other', description: 'Everything not matched above' },
+        { key: 'images', label: lang === 'es' ? 'Imágenes' : 'Images', description: lang === 'es' ? 'Fotos, capturas de pantalla e ilustraciones' : 'Photos, screenshots and artwork' },
+        { key: 'videos', label: lang === 'es' ? 'Videos' : 'Videos', description: lang === 'es' ? 'Archivos MP4, WebM, MOV y similares' : 'MP4, WebM, MOV and similar files' },
+        { key: 'audio', label: lang === 'es' ? 'Audio' : 'Audio', description: lang === 'es' ? 'Música, notas de voz y podcasts' : 'Music, voice notes and podcasts' },
+        { key: 'docs', label: lang === 'es' ? 'Documentos' : 'Documents', description: lang === 'es' ? 'Archivos PDF, Office, texto y EPUB' : 'PDF, Office, text and EPUB files' },
+        { key: 'other', label: lang === 'es' ? 'Otros' : 'Other', description: lang === 'es' ? 'Todo lo que no coincida con lo anterior' : 'Everything not matched above' },
     ];
     const activityFilters: ActivityFilter[] = ['all', 'upload', 'download', 'copy', 'share', 'preview', 'backup', 'security'];
     const activityListRef = useRef<HTMLDivElement>(null);
@@ -500,11 +522,11 @@ export function SettingsModal({
                                 <Settings className="w-5 h-5" />
                             </div>
                             <div>
-                                <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">Settings</p>
-                                <h2 className="text-lg font-semibold tracking-tight text-telegram-text">Settings</h2>
+                                <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">{t('settings')}</p>
+                                <h2 className="text-lg font-semibold tracking-tight text-telegram-text">{t('settings')}</h2>
                             </div>
                         </div>
-                        <button onClick={onClose} className="rounded-lg border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text">
+                        <button onClick={onClose} className="rounded-lg border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text" title={t('close')}>
                             <X className="w-4 h-4" />
                         </button>
                     </div>
@@ -544,13 +566,13 @@ export function SettingsModal({
                             <div>
                                 <p className="text-[10px] uppercase tracking-[0.24em] text-telegram-subtext">Section</p>
                                 <h3 className="mt-1 text-xl font-semibold tracking-tight text-telegram-text">
-                                    {tab === 'general' && 'General'}
-                                    {tab === 'downloads' && 'Downloads'}
-                                    {tab === 'encryption' && 'Encryption'}
-                                    {tab === 'backup' && 'Auto Backup'}
-                                    {tab === 'sharing' && 'Sharing'}
-                                    {tab === 'shortcuts' && 'Shortcuts'}
-                                    {tab === 'activity' && 'Activity'}
+                                    {tab === 'general' && t('general')}
+                                    {tab === 'downloads' && t('downloads')}
+                                    {tab === 'encryption' && t('encryption')}
+                                    {tab === 'backup' && t('autoBackup')}
+                                    {tab === 'sharing' && t('sharing')}
+                                    {tab === 'shortcuts' && t('shortcuts')}
+                                    {tab === 'activity' && t('activityTab')}
                                 </h3>
                             </div>
                             <div className="text-xs text-telegram-subtext">
@@ -563,9 +585,9 @@ export function SettingsModal({
                         {tab === 'general' && (
                             <>
                                 <SectionCard
-                                    title="Auto Sync"
+                                    title={t('autoSync')}
                                     icon={<Clock className="w-4 h-4" />}
-                                    description="Refresh your folders automatically without waiting for a manual sync."
+                                    description={t('autoSyncDesc')}
                                 >
                                     <div className="grid grid-cols-5 gap-2">
                                         {syncOptions.map((opt) => (
@@ -573,7 +595,10 @@ export function SettingsModal({
                                                 key={opt.value}
                                                 onClick={() => {
                                                     onAutoSyncChange(opt.value);
-                                                    toast.success(opt.value > 0 ? `Auto sync every ${opt.label.toLowerCase()}` : 'Auto sync disabled');
+                                                    toast.success(opt.value > 0
+                                                        ? (lang === 'es' ? `Sincronización automática cada ${opt.value} min` : `Auto sync every ${opt.value} min`)
+                                                        : (lang === 'es' ? 'Sincronización automática desactivada' : 'Auto sync disabled')
+                                                    );
                                                 }}
                                                 className={`rounded-2xl border px-3 py-2 text-xs font-medium transition ${
                                                     autoSyncInterval === opt.value
@@ -581,19 +606,25 @@ export function SettingsModal({
                                                         : 'border-telegram-border bg-white/[0.03] text-telegram-subtext hover:text-telegram-text'
                                                 }`}
                                             >
-                                                {opt.label}
+                                                {lang === 'es'
+                                                    ? (opt.value === 0 ? 'Desactivado' : `Cada ${opt.value} min`)
+                                                    : opt.label
+                                                }
                                             </button>
                                         ))}
                                     </div>
                                     {autoSyncInterval > 0 && (
                                         <p className="text-xs text-telegram-subtext">
-                                            Folder list will sync every {autoSyncInterval} minute{autoSyncInterval > 1 ? 's' : ''}.
+                                            {lang === 'es'
+                                                ? `La lista de carpetas se sincronizará cada ${autoSyncInterval} minuto${autoSyncInterval > 1 ? 's' : ''}.`
+                                                : `Folder list will sync every ${autoSyncInterval} minute${autoSyncInterval > 1 ? 's' : ''}.`
+                                            }
                                         </p>
                                     )}
                                     <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                        <label className="mb-2 block text-xs font-medium text-telegram-text">Daily scheduled sync</label>
+                                        <label className="mb-2 block text-xs font-medium text-telegram-text">{t('dailySync')}</label>
                                         <p className="mb-3 text-xs leading-5 text-telegram-subtext">
-                                            Run one additional sync at a specific local time. This remains active after restarting SharkDrive.
+                                            {t('dailySyncDesc')}
                                         </p>
                                         <div className="flex gap-2">
                                             <input
@@ -606,17 +637,17 @@ export function SettingsModal({
                                                 onClick={() => void saveScheduledSyncTime()}
                                                 className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90"
                                             >
-                                                Save
+                                                {t('save')}
                                             </button>
                                             {scheduledSyncTime && (
                                                 <button
                                                     onClick={() => {
                                                         setScheduledSyncTime('');
-                                                        void tauriApi.setScheduledSyncTime(null).then(() => toast.info('Daily sync disabled'));
+                                                        void tauriApi.setScheduledSyncTime(null).then(() => toast.info(lang === 'es' ? 'Sincronización diaria desactivada' : 'Daily sync disabled'));
                                                     }}
                                                     className="rounded-lg border border-telegram-border px-3 py-2 text-xs text-telegram-subtext transition hover:text-telegram-text"
                                                 >
-                                                    Clear
+                                                    {t('clear')}
                                                 </button>
                                             )}
                                         </div>
@@ -624,41 +655,92 @@ export function SettingsModal({
                                 </SectionCard>
 
                                 <SectionCard
-                                    title="Desktop Behavior"
+                                    title={t('desktopBehavior')}
                                     icon={<Monitor className="w-4 h-4" />}
-                                    description="Choose how SharkDrive behaves when you close the window or start Windows."
+                                    description={t('desktopBehaviorDesc')}
                                 >
                                     <div className="space-y-4">
                                         <ToggleRow
                                             icon={<Monitor className="w-3.5 h-3.5" />}
-                                            title="Minimize to Tray"
-                                            description="Hide to the system tray instead of exiting."
+                                            title={t('minimizeToTray')}
+                                            description={t('minimizeToTrayDesc')}
                                             checked={closeToTray}
                                             onChange={handleCloseToTray}
                                         />
                                         <div className="h-px bg-telegram-border" />
                                         <ToggleRow
                                             icon={<LogIn className="w-3.5 h-3.5" />}
-                                            title="Run at Startup"
-                                            description="Launch SharkDrive automatically when Windows starts."
+                                            title={t('runAtStartup')}
+                                            description={t('runAtStartupDesc')}
                                             checked={autostart}
                                             onChange={handleAutostart}
                                         />
                                     </div>
                                 </SectionCard>
+
+                                <SectionCard
+                                    title={t('appearance')}
+                                    icon={<Palette className="w-4 h-4" />}
+                                    description={t('appearanceDesc')}
+                                >
+                                    <div className="space-y-3">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            {presetColors.map((color) => (
+                                                <button
+                                                    key={color}
+                                                    onClick={() => handleAccentColorChange(color)}
+                                                    className="relative h-8 w-8 rounded-full border border-telegram-border transition-transform hover:scale-110 focus:outline-none"
+                                                    style={{ backgroundColor: color }}
+                                                    title={color}
+                                                >
+                                                    {accentColor.toLowerCase() === color.toLowerCase() && (
+                                                        <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-black bg-white/20 rounded-full">
+                                                            ✓
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            ))}
+                                            <div className="relative flex items-center gap-2 ml-2">
+                                                <input
+                                                    type="color"
+                                                    value={accentColor}
+                                                    onChange={(e) => handleAccentColorChange(e.target.value)}
+                                                    className="h-8 w-8 cursor-pointer rounded border border-telegram-border bg-transparent p-0"
+                                                    title={lang === 'es' ? 'Selector de color personalizado' : 'Custom color picker'}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={accentColor}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setAccentColor(val);
+                                                        if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+                                                            localStorage.setItem('sharkdrive.accentColor.v1', val);
+                                                            document.documentElement.style.setProperty('--color-telegram-primary', val);
+                                                        }
+                                                    }}
+                                                    placeholder="#2f9bff"
+                                                    className="w-24 rounded-lg border border-telegram-border bg-white/[0.03] px-2.5 py-1 text-xs font-mono text-telegram-text focus:outline-none focus:border-telegram-primary/70"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </SectionCard>
+
+                                <LanguageCard />
                             </>
                         )}
 
                         {tab === 'downloads' && (
                             <SectionCard
-                                title="Download Destinations"
+                                title={t('downloadDestinations')}
                                 icon={<Download className="w-4 h-4" />}
-                                description="Route downloads by type without asking every time. Empty categories keep using the save dialog."
+                                description={t('downloadDestinationsDesc')}
                             >
                                 <ToggleRow
                                     icon={<FolderOpen className="w-3.5 h-3.5" />}
-                                    title="Open after download"
-                                    description="Open completed files with the system default app."
+                                    title={t('openAfterDownloadSetting')}
+                                    description={t('openAfterDownloadDesc')}
                                     checked={openAfterDownload}
                                     onChange={setOpenAfterDownloadSetting}
                                 />
@@ -671,7 +753,7 @@ export function SettingsModal({
                                                     <p className="text-sm font-medium text-telegram-text">{row.label}</p>
                                                     <p className="mt-0.5 text-xs text-telegram-subtext">{row.description}</p>
                                                     <p className="mt-2 truncate font-mono text-xs text-telegram-subtext/80">
-                                                        {downloadDestinations[row.key] || 'Ask where to save'}
+                                                        {downloadDestinations[row.key] || t('askWhereToSave')}
                                                     </p>
                                                 </div>
                                                 <div className="flex shrink-0 items-center gap-2">
@@ -679,7 +761,7 @@ export function SettingsModal({
                                                         onClick={() => chooseDownloadDestination(row.key)}
                                                         className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-text transition hover:bg-white/[0.05]"
                                                     >
-                                                        Choose
+                                                        {t('choose')}
                                                     </button>
                                                     {downloadDestinations[row.key] && (
                                                         <button
@@ -701,47 +783,47 @@ export function SettingsModal({
                         {tab === 'encryption' && (
                             <>
                             <SectionCard
-                                title="Local Encryption"
+                                title={t('localEncryption')}
                                 icon={<Shield className="w-4 h-4" />}
-                                description="Files are encrypted on this device before upload. The key stays local."
+                                description={t('localEncryptionDesc')}
                             >
                                 {encryptionEnabled ? (
                                     <div className="space-y-4">
                                         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
                                             <div className="flex items-center gap-2 text-sm font-medium text-emerald-300">
                                                 <Shield className="w-4 h-4" />
-                                                Encryption active
+                                                {t('encryptionActive')}
                                             </div>
                                             <p className="mt-2 text-xs text-emerald-100/80">
-                                                Encrypted files can be previewed and downloaded while your password is loaded.
+                                                {t('encryptionActiveDesc')}
                                             </p>
                                         </div>
                                         <button
                                             onClick={handleDisableEncryption}
                                             className="rounded-xl bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-300 transition hover:bg-red-500/18"
                                         >
-                                            Disable Encryption
+                                            {t('disableEncryption')}
                                         </button>
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                            <label className="mb-2 block text-xs font-medium text-telegram-text">Auto-lock after inactivity</label>
+                                            <label className="mb-2 block text-xs font-medium text-telegram-text">{t('autoLock')}</label>
                                             <select
                                                 value={autoLockMinutes}
                                                 onChange={(event) => void handleAutoLockChange(Number(event.target.value))}
                                                 className="w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text focus:outline-none focus:border-telegram-primary/70"
                                             >
-                                                <option value={0}>Disabled</option>
-                                                <option value={5}>5 minutes</option>
-                                                <option value={15}>15 minutes</option>
-                                                <option value={30}>30 minutes</option>
-                                                <option value={60}>60 minutes</option>
+                                                <option value={0}>{lang === 'es' ? 'Desactivado' : 'Disabled'}</option>
+                                                <option value={5}>{lang === 'es' ? '5 minutos' : '5 minutes'}</option>
+                                                <option value={15}>{lang === 'es' ? '15 minutos' : '15 minutes'}</option>
+                                                <option value={30}>{lang === 'es' ? '30 minutos' : '30 minutes'}</option>
+                                                <option value={60}>{lang === 'es' ? '60 minutos' : '60 minutes'}</option>
                                             </select>
                                         </div>
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
                                             <div className="flex items-center justify-between gap-3">
                                                 <div>
-                                                    <p className="text-sm font-medium text-telegram-text">Rotate encryption key</p>
+                                                    <p className="text-sm font-medium text-telegram-text">{t('rotateKey')}</p>
                                                     <p className="mt-1 text-xs leading-5 text-telegram-subtext">
-                                                        Replace encrypted files safely, one at a time. Originals remain until each replacement uploads.
+                                                        {t('rotateKeyDesc')}
                                                     </p>
                                                 </div>
                                                 {!rotationWizardOpen && (
@@ -753,7 +835,7 @@ export function SettingsModal({
                                                         disabled={encryptedCount === 0}
                                                         className="shrink-0 rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16 disabled:opacity-50"
                                                     >
-                                                        Open wizard
+                                                        {t('openWizard')}
                                                     </button>
                                                 )}
                                             </div>
@@ -1311,6 +1393,44 @@ export function SettingsModal({
                 </div>
             </motion.div>
         </motion.div>
+    );
+}
+
+function LanguageCard() {
+    const { lang, setLang, t } = useLanguage();
+    const options: { value: Lang; label: string; flag: string }[] = [
+        { value: 'en', label: t('english'), flag: '🇬🇧' },
+        { value: 'es', label: t('spanish'), flag: '🇪🇸' },
+    ];
+    return (
+        <div className="rounded-xl border border-telegram-border bg-white/[0.02] p-5">
+            <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary text-base">
+                    🌐
+                </div>
+                <div>
+                    <p className="text-sm font-semibold text-telegram-text">{t('language')}</p>
+                    <p className="text-xs text-telegram-subtext">
+                        {lang === 'es' ? 'Idioma de la interfaz para SharkDrive.' : 'Interface language for SharkDrive.'}
+                    </p>
+                </div>
+            </div>
+            <div className="flex gap-2">
+                {options.map(opt => (
+                    <button
+                        key={opt.value}
+                        onClick={() => setLang(opt.value)}
+                        className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition ${lang === opt.value
+                            ? 'border-telegram-primary/50 bg-telegram-primary/12 text-telegram-primary'
+                            : 'border-telegram-border text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'
+                        }`}
+                    >
+                        <span>{opt.flag}</span>
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
+        </div>
     );
 }
 

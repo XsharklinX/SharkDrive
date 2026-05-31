@@ -4,8 +4,22 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { ActivityEntry, QueueItem } from '../types';
 import { useFileDrop } from './useFileDrop';
+
+async function showNativeNotification(title: string, body: string) {
+    try {
+        let granted = await isPermissionGranted();
+        if (!granted) {
+            const permission = await requestPermission();
+            granted = permission === 'granted';
+        }
+        if (granted) sendNotification({ title, body });
+    } catch {
+        // Fallback silently — notification is non-critical
+    }
+}
 import type { Store } from '@tauri-apps/plugin-store';
 import { applyUploadNamingPattern, buildQueuedUploadKey, UPLOAD_NAMING_PATTERN_KEY } from '../utils';
 
@@ -37,6 +51,7 @@ export function useFileUpload(
     encryptByDefault = false,
     onActivity?: (entry: ActivityEntry) => void,
     folderNameResolver?: (folderId: number | null) => string | undefined,
+    isConnected = true,
 ) {
     const queryClient = useQueryClient();
     const [uploadQueue, setUploadQueue] = useState<QueueItem[]>([]);
@@ -83,12 +98,12 @@ export function useFileUpload(
     }, [store, uploadQueue, initialized]);
 
     useEffect(() => {
-        if (processing) return;
+        if (processing || !isConnected) return;
         const nextItem = uploadQueue.find(i => i.status === 'pending');
         if (nextItem) {
             processItem(nextItem);
         }
-    }, [uploadQueue, processing]);
+    }, [uploadQueue, processing, isConnected]);
 
     const MAX_RETRIES = 2;
     const isNetworkError = (err: string) => {
@@ -165,12 +180,7 @@ export function useFileUpload(
                     } else {
                         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'success', progress: 100 } : i));
                         queryClient.invalidateQueries({ queryKey: ['files', item.folderId] });
-                        if ('Notification' in window && Notification.permission === 'granted') {
-                            new Notification('Upload complete', {
-                                body: fileName,
-                                silent: true,
-                            });
-                        }
+                        void showNativeNotification('Upload complete', fileName ?? '');
                         onActivity?.(buildActivity('upload', `Uploaded ${fileName}`, fileName, item.folderId));
                     }
                 } else {

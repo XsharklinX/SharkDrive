@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="SharkDrive convierte tu cuenta de Telegram en una nube privada para organizar, proteger y compartir tus archivos desde Windows."
+    />
+    <meta name="theme-color" content="#071722" />
+    <meta property="og:title" content="SharkDrive | Tu nube privada sobre Telegram" />
+    <meta
+      property="og:description"
+      content="Guarda, organiza, cifra y comparte tus archivos desde una app de escritorio simple y rápida."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./logo.svg" />
+    <title>SharkDrive | Tu nube privada sobre Telegram</title>
+    <link rel="icon" href="./logo.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <svg class="svg-sprite" aria-hidden="true">
+      <symbol id="icon-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h13m-5-5 5 5-5 5" />
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4L19 6" />
+      </symbol>
+      <symbol id="icon-cloud" viewBox="0 0 24 24">
+        <path d="M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.28 9.1 4.5 4.5 0 0 0 7 18Z" />
+      </symbol>
+      <symbol id="icon-code" viewBox="0 0 24 24">
+        <path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2.5-9-3 12" />
+      </symbol>
+      <symbol id="icon-download" viewBox="0 0 24 24">
+        <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
+      </symbol>
+      <symbol id="icon-file" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+        <path d="M14 2v6h6" />
+      </symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24">
+        <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2h7.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z" />
+      </symbol>
+      <symbol id="icon-github" viewBox="0 0 24 24">
+        <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3.3-.4 6.8-1.6 6.8-7.3A5.7 5.7 0 0 0 19.3 3 5.3 5.3 0 0 0 19.1-.9S17.9-1.3 15 1a13.4 13.4 0 0 0-6 0C6.1-1.3 4.9-.9 4.9-.9A5.3 5.3 0 0 0 4.7 3a5.7 5.7 0 0 0-1.5 4.2c0 5.7 3.5 6.9 6.8 7.3a4.8 4.8 0 0 0-1 3.5v4" />
+        <path d="M9 19c-3 .9-4-1.5-4-1.5" />
+      </symbol>
+      <symbol id="icon-image" viewBox="0 0 24 24">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <circle cx="8.5" cy="8.5" r="1.5" />
+        <path d="m21 15-5-5L5 21" />
+      </symbol>
+      <symbol id="icon-lock" viewBox="0 0 24 24">
+        <rect width="18" height="11" x="3" y="11" rx="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4m-5 4v3" />
+      </symbol>
+      <symbol id="icon-menu" viewBox="0 0 24 24">
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </symbol>
+      <symbol id="icon-play" viewBox="0 0 24 24">
+        <path d="m8 5 11 7-11 7Z" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m20 20-3.5-3.5" />
+      </symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="m8.6 10.5 6.8-4m-6.8 7 6.8 4" />
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+      <symbol id="icon-spark" viewBox="0 0 24 24">
+        <path d="m12 3-1.5 6.5L4 11l6.5 1.5L12 19l1.5-6.5L20 11l-6.5-1.5Z" />
+      </symbol>
+      <symbol id="icon-telegram" viewBox="0 0 24 24">
+        <path d="m21 4-3 16-6-4-3 3v-5l8-7-10 6-4-2Z" />
+      </symbol>
+      <symbol id="icon-upload" viewBox="0 0 24 24">
+        <path d="M12 21V9m0 0-4 4m4-4 4 4M5 3h14" />
+      </symbol>
+    </svg>
+
+    <header class="site-header">
+      <div class="container nav-shell">
+        <a class="brand" href="#top" aria-label="SharkDrive inicio">
+          <img src="./logo.svg" alt="" width="42" height="42" />
+          <span>Shark<span>Drive</span></span>
+        </a>
+        <button class="mobile-menu-button" type="button" aria-label="Abrir menú" aria-expanded="false">
+          <svg><use href="#icon-menu"></use></svg>
+        </button>
+        <nav class="main-nav" aria-label="Navegación principal">
+          <a href="#product">Producto</a>
+          <a href="#features">Funciones</a>
+          <a href="#guide">Cómo empezar</a>
+          <a href="#faq">Preguntas</a>
+        </nav>
+        <div class="nav-actions">
+          <a class="icon-link" href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer" aria-label="Ver SharkDrive en GitHub">
+            <svg><use href="#icon-github"></use></svg>
+          </a>
+          <a class="button button-small button-primary" data-download-link href="https://github.com/XsharklinX/SharkDrive/releases">
+            Descargar
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero section">
+        <div class="hero-glow"></div>
+        <div class="container hero-grid">
+          <div class="hero-copy reveal">
+            <div class="eyebrow"><span class="status-dot"></span> Aplicación de escritorio para Windows</div>
+            <h1>Tu nube privada.<br /><span>Bajo tu control.</span></h1>
+            <p class="hero-text">
+              Convierte tu cuenta de Telegram en un espacio personal para guardar, organizar y proteger tus archivos.
+              Sin cuotas mensuales. Sin una interfaz complicada.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary button-large" data-download-link href="https://github.com/XsharklinX/SharkDrive/releases">
+                <svg><use href="#icon-download"></use></svg>
+                <span data-download-label>Ver descargas</span>
+              </a>
+              <a class="button button-ghost button-large" href="#guide">
+                Cómo funciona
+                <svg><use href="#icon-arrow"></use></svg>
+              </a>
+            </div>
+            <div class="release-line" aria-live="polite">
+              <span class="release-status-icon"></span>
+              <span data-release-status>Consultando la última versión publicada...</span>
+            </div>
+          </div>
+
+          <div class="hero-product reveal reveal-delay">
+            <div class="app-preview">
+              <div class="app-window-bar">
+                <div class="window-dots"><span></span><span></span><span></span></div>
+                <div class="window-title"><img src="./logo.svg" alt="" /> SharkDrive</div>
+                <div class="window-actions"><i></i><i></i><i></i></div>
+              </div>
+              <div class="app-body">
+                <aside class="mock-sidebar">
+                  <div class="mock-brand"><img src="./logo.svg" alt="" /><b>SharkDrive</b></div>
+                  <small>ARCHIVOS</small>
+                  <a><svg><use href="#icon-cloud"></use></svg> Mi espacio</a>
+                  <a><svg><use href="#icon-folder"></use></svg> Recientes</a>
+                  <small>CARPETAS</small>
+                  <a class="selected"><svg><use href="#icon-folder"></use></svg> Proyectos</a>
+                  <a><svg><use href="#icon-folder"></use></svg> Fotos</a>
+                  <a><svg><use href="#icon-folder"></use></svg> Documentos</a>
+                  <div class="mock-online"><span></span> Telegram conectado</div>
+                </aside>
+                <div class="mock-content">
+                  <div class="mock-topbar">
+                    <div>
+                      <small>MI ESPACIO</small>
+                      <h3>Proyectos</h3>
+                    </div>
+                    <button><svg><use href="#icon-upload"></use></svg> Subir archivos</button>
+                  </div>
+                  <div class="mock-search"><svg><use href="#icon-search"></use></svg> Buscar archivos y carpetas</div>
+                  <div class="mock-filter">
+                    <b>12 archivos</b>
+                    <span class="active">Todos</span><span>Imágenes</span><span>Docs</span><span>Videos</span>
+                  </div>
+                  <div class="mock-files">
+                    <article class="mock-file photo">
+                      <div class="file-image image-one"></div>
+                      <div><b>Diseño portada.jpg</b><small>2.4 MB</small></div>
+                    </article>
+                    <article class="mock-file">
+                      <div class="file-icon"><svg><use href="#icon-file"></use></svg></div>
+                      <div><b>Propuesta final.pdf</b><small>4.8 MB</small></div>
+                    </article>
+                    <article class="mock-file photo">
+                      <div class="file-image image-two"></div>
+                      <div><b>Fotografía 04.png</b><small>1.7 MB</small></div>
+                    </article>
+                    <article class="mock-file video">
+                      <div class="file-image image-three"><svg><use href="#icon-play"></use></svg></div>
+                      <div><b>Presentación.mp4</b><small>18.2 MB</small></div>
+                    </article>
+                    <article class="mock-file">
+                      <div class="file-icon"><svg><use href="#icon-file"></use></svg></div>
+                      <div><b>Ideas de producto.md</b><small>26 KB</small></div>
+                    </article>
+                    <article class="mock-add">
+                      <svg><use href="#icon-upload"></use></svg>
+                      <b>Añadir archivos</b>
+                    </article>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="floating-card floating-card-security">
+              <svg><use href="#icon-shield"></use></svg>
+              <div><b>Cifrado local</b><small>AES-256-GCM</small></div>
+            </div>
+            <div class="floating-card floating-card-sync">
+              <span class="sync-mark"></span>
+              <div><b>Sincronizado</b><small>Hace unos segundos</small></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="container trust-row reveal">
+          <div><svg><use href="#icon-telegram"></use></svg><span>Almacenamiento sobre Telegram</span></div>
+          <div><svg><use href="#icon-lock"></use></svg><span>Cifrado local opcional</span></div>
+          <div><svg><use href="#icon-code"></use></svg><span>Código abierto</span></div>
+          <div><svg><use href="#icon-download"></use></svg><span>Instalador para Windows</span></div>
+        </div>
+      </section>
+
+      <section class="section product-section" id="product">
+        <div class="container split-intro">
+          <div class="section-heading reveal">
+            <div class="eyebrow">Un drive sin intermediarios</div>
+            <h2>Tus archivos siguen siendo tuyos.</h2>
+          </div>
+          <div class="intro-copy reveal">
+            <p>
+              SharkDrive usa la API oficial MTProto de Telegram. Tus carpetas se guardan como canales privados y tus
+              archivos como mensajes dentro de tu propia cuenta.
+            </p>
+            <p>
+              La app añade la experiencia que esperas de un drive moderno: búsquedas, vistas, previsualizaciones,
+              organización y automatización, sin convertir cada tarea simple en un panel técnico.
+            </p>
+          </div>
+        </div>
+
+        <div class="container metric-strip reveal">
+          <div><strong>2 GB</strong><span>por archivo según el límite estándar de Telegram</span></div>
+          <div><strong>AES-256</strong><span>cifrado local opcional antes de subir</span></div>
+          <div><strong>0</strong><span>suscripciones adicionales para usar SharkDrive</span></div>
+        </div>
+      </section>
+
+      <section class="section capabilities-section" id="features">
+        <div class="container">
+          <div class="section-heading centered reveal">
+            <div class="eyebrow">Más capacidad, menos ruido</div>
+            <h2>Todo lo importante está cerca.<br /><span>Lo avanzado aparece cuando lo necesitas.</span></h2>
+          </div>
+
+          <div class="capability-shell reveal">
+            <div class="capability-nav" role="tablist" aria-label="Capacidades principales">
+              <button class="capability-tab active" role="tab" aria-selected="true" data-capability="explore">
+                <svg><use href="#icon-search"></use></svg><span>Explorar</span>
+              </button>
+              <button class="capability-tab" role="tab" aria-selected="false" data-capability="protect">
+                <svg><use href="#icon-shield"></use></svg><span>Proteger</span>
+              </button>
+              <button class="capability-tab" role="tab" aria-selected="false" data-capability="automate">
+                <svg><use href="#icon-spark"></use></svg><span>Automatizar</span>
+              </button>
+              <button class="capability-tab" role="tab" aria-selected="false" data-capability="share">
+                <svg><use href="#icon-share"></use></svg><span>Compartir</span>
+              </button>
+            </div>
+            <div class="capability-content">
+              <div class="capability-copy">
+                <div class="eyebrow" data-capability-kicker>Explorador de archivos</div>
+                <h3 data-capability-title>Encuentra lo que buscas sin perder tiempo.</h3>
+                <p data-capability-description>
+                  Navega carpetas anidadas, usa vistas grid o lista y localiza archivos por nombre, tipo, tamaño o fecha.
+                </p>
+                <ul class="check-list" data-capability-list>
+                  <li><svg><use href="#icon-check"></use></svg>Búsqueda global y filtros discretos</li>
+                  <li><svg><use href="#icon-check"></use></svg>Previsualización de imágenes, video, audio y PDF</li>
+                  <li><svg><use href="#icon-check"></use></svg>Selección múltiple para acciones en lote</li>
+                </ul>
+              </div>
+              <div class="capability-visual" aria-hidden="true">
+                <div class="visual-search"><svg><use href="#icon-search"></use></svg><span data-visual-search>Buscar archivos y carpetas</span></div>
+                <div class="visual-result primary">
+                  <div class="visual-icon"><svg><use href="#icon-folder"></use></svg></div>
+                  <div><b data-visual-main>Proyectos</b><small data-visual-main-sub>12 archivos · Sincronizado</small></div>
+                  <i></i>
+                </div>
+                <div class="visual-result">
+                  <div class="visual-icon image"><svg><use href="#icon-image"></use></svg></div>
+                  <div><b data-visual-secondary>Diseño portada.jpg</b><small data-visual-secondary-sub>2.4 MB · Imagen</small></div>
+                  <em data-visual-badge>Vista previa</em>
+                </div>
+                <div class="visual-footer"><span></span><span></span><span></span><b data-visual-footer>Todo organizado en un solo lugar</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section feature-grid-section">
+        <div class="container">
+          <div class="section-heading reveal">
+            <div class="eyebrow">Diseñado para el uso diario</div>
+            <h2>Simple por fuera.<br /><span>Completo por dentro.</span></h2>
+          </div>
+          <div class="feature-grid">
+            <article class="feature-card feature-card-large reveal">
+              <div class="feature-icon"><svg><use href="#icon-upload"></use></svg></div>
+              <h3>Sube sin fricción.</h3>
+              <p>Arrastra archivos desde Windows, pega imágenes desde el portapapeles o automatiza carpetas locales.</p>
+              <div class="upload-demo">
+                <div><svg><use href="#icon-file"></use></svg><span><b>documentos.zip</b><small>Subiendo a Telegram</small></span><em>74%</em></div>
+                <i><span></span></i>
+              </div>
+            </article>
+            <article class="feature-card reveal">
+              <div class="feature-icon"><svg><use href="#icon-search"></use></svg></div>
+              <h3>Busca de verdad.</h3>
+              <p>Filtra por tipo, extensión, tamaño, carpeta o estado de cifrado.</p>
+            </article>
+            <article class="feature-card reveal">
+              <div class="feature-icon"><svg><use href="#icon-image"></use></svg></div>
+              <h3>Revisa antes de bajar.</h3>
+              <p>Abre previews de imágenes, video, audio y documentos sin interrumpir tu flujo.</p>
+            </article>
+            <article class="feature-card reveal">
+              <div class="feature-icon"><svg><use href="#icon-folder"></use></svg></div>
+              <h3>Organiza a tu manera.</h3>
+              <p>Usa carpetas anidadas, colores, etiquetas, fijados y notas rápidas.</p>
+            </article>
+            <article class="feature-card feature-card-accent reveal">
+              <div class="feature-icon"><svg><use href="#icon-share"></use></svg></div>
+              <h3>Comparte con control.</h3>
+              <p>Crea enlaces locales con vencimiento, límite de descargas y código QR desde tu propio equipo.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section guide-section" id="guide">
+        <div class="container">
+          <div class="section-heading centered reveal">
+            <div class="eyebrow">Primeros pasos</div>
+            <h2>Tu espacio privado en tres pasos.</h2>
+            <p>No necesitas montar servidores ni aprender una herramienta nueva.</p>
+          </div>
+          <div class="steps">
+            <article class="step reveal">
+              <span>01</span>
+              <div class="step-icon"><svg><use href="#icon-download"></use></svg></div>
+              <h3>Instala SharkDrive</h3>
+              <p>Descarga el instalador para Windows desde la última release publicada en GitHub.</p>
+            </article>
+            <article class="step reveal">
+              <span>02</span>
+              <div class="step-icon"><svg><use href="#icon-telegram"></use></svg></div>
+              <h3>Conecta Telegram</h3>
+              <p>Inicia sesión con tu cuenta y usa Saved Messages o canales privados como carpetas.</p>
+            </article>
+            <article class="step reveal">
+              <span>03</span>
+              <div class="step-icon"><svg><use href="#icon-upload"></use></svg></div>
+              <h3>Empieza a guardar</h3>
+              <p>Sube archivos, crea carpetas y activa cifrado o backups solo si los necesitas.</p>
+            </article>
+          </div>
+          <div class="guide-note reveal">
+            <svg><use href="#icon-lock"></use></svg>
+            <div>
+              <b>Tu clave de cifrado no se sube a Telegram.</b>
+              <p>Cuando activas cifrado, SharkDrive protege el archivo localmente antes de enviarlo.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section download-section" id="download">
+        <div class="container download-shell reveal">
+          <div>
+            <div class="eyebrow">SharkDrive para Windows</div>
+            <h2>Descarga la app<br />y crea tu espacio.</h2>
+            <p>
+              El instalador se publica mediante GitHub Releases. Esta página detecta automáticamente la versión más
+              reciente disponible.
+            </p>
+          </div>
+          <div class="download-card">
+            <div class="download-card-head">
+              <img src="./logo.svg" alt="" width="54" height="54" />
+              <div><b>SharkDrive</b><span data-release-version>Release pendiente</span></div>
+            </div>
+            <a class="button button-primary button-full" data-download-link href="https://github.com/XsharklinX/SharkDrive/releases">
+              <svg><use href="#icon-download"></use></svg>
+              <span data-download-label>Ver descargas disponibles</span>
+            </a>
+            <small data-release-meta>La primera release pública todavía no está disponible.</small>
+            <div class="download-links">
+              <a href="https://github.com/XsharklinX/SharkDrive/releases" target="_blank" rel="noreferrer">Todas las releases</a>
+              <a href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer">Código fuente</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section faq-section" id="faq">
+        <div class="container faq-grid">
+          <div class="section-heading reveal">
+            <div class="eyebrow">Preguntas frecuentes</div>
+            <h2>Lo esencial,<br /><span>sin letra pequeña.</span></h2>
+          </div>
+          <div class="faq-list reveal">
+            <details>
+              <summary>¿Dónde se guardan mis archivos?<span>+</span></summary>
+              <p>
+                En tu propia cuenta de Telegram. SharkDrive usa Saved Messages y canales privados para ofrecer una
+                experiencia similar a un drive de escritorio.
+              </p>
+            </details>
+            <details>
+              <summary>¿SharkDrive tiene un costo mensual?<span>+</span></summary>
+              <p>
+                No. SharkDrive es un proyecto open source. Aplican los límites normales de Telegram, incluido el tamaño
+                máximo permitido por archivo.
+              </p>
+            </details>
+            <details>
+              <summary>¿Tengo que cifrar todos mis archivos?<span>+</span></summary>
+              <p>
+                No. El cifrado es opcional. Puedes activarlo para una carpeta o elegirlo cuando necesites proteger
+                contenido sensible.
+              </p>
+            </details>
+            <details>
+              <summary>¿Puedo usarlo sin conocimientos técnicos?<span>+</span></summary>
+              <p>
+                Sí. La interfaz principal está pensada para subir, encontrar y descargar archivos sin exponer opciones
+                avanzadas hasta que las necesites.
+              </p>
+            </details>
+            <details>
+              <summary>¿Dónde puedo reportar un problema?<span>+</span></summary>
+              <p>
+                Puedes abrir un issue en el repositorio público de GitHub para describir el error o proponer una
+                mejora.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-shell">
+        <a class="brand" href="#top"><img src="./logo.svg" alt="" width="38" height="38" /><span>Shark<span>Drive</span></span></a>
+        <p>Tu nube privada sobre Telegram.</p>
+        <div>
+          <a href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://github.com/XsharklinX/SharkDrive/issues" target="_blank" rel="noreferrer">Issues</a>
+          <span>© <span data-current-year></span></span>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

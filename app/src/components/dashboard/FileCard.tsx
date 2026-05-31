@@ -179,7 +179,7 @@ export function FileCard({
                     if (onDragEnd) onDragEnd();
                 }}
                 whileHover={{ y: -1 }}
-                className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-[#0b1521] transition-all
+                className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-telegram-bg transition-all
                 ${isSelected ? 'border-telegram-primary/55 ring-1 ring-telegram-primary/25' : 'border-telegram-border/85 hover:border-telegram-primary/25'}
                 ${isDragOver ? 'border-telegram-primary/60 ring-2 ring-telegram-primary/40' : ''}`}
                 style={height ? { height: `${height}px` } : { aspectRatio: '4/3' }}
@@ -201,8 +201,8 @@ export function FileCard({
                         onError={() => setVideoError(true)}
                     />
                 ) : null}
-                {thumbnail ? <div className="absolute inset-0 bg-gradient-to-t from-[#07111b] via-[#07111bcc] to-[#07111b66]" /> : null}
-                {!thumbnail && videoReady ? <div className="absolute inset-0 bg-gradient-to-t from-[#07111b] via-[#07111bcc] to-[#07111b66]" /> : null}
+                {thumbnail ? <div className="absolute inset-0 bg-gradient-to-t from-telegram-bg/95 via-telegram-bg/60 to-transparent" /> : null}
+                {!thumbnail && videoReady ? <div className="absolute inset-0 bg-gradient-to-t from-telegram-bg/95 via-telegram-bg/60 to-transparent" /> : null}
 
                 {isDragOver && isFolder && (
                     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-lg bg-telegram-primary/25 backdrop-blur-[2px]">
@@ -216,14 +216,14 @@ export function FileCard({
                         e.stopPropagation();
                         onToggleSelection?.(e);
                     }}
-                    className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border transition ${isSelected ? 'border-telegram-primary bg-telegram-primary text-black' : 'border-telegram-border bg-[#0b1521]/90 text-telegram-subtext hover:text-telegram-text'} ${selectionMode ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'}`}
+                    className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border transition ${isSelected ? 'border-telegram-primary bg-telegram-primary text-black' : 'border-telegram-border bg-telegram-bg/90 text-telegram-subtext hover:text-telegram-text'} ${selectionMode ? 'opacity-100' : 'opacity-80 group-hover:opacity-100'}`}
                     title={isSelected ? 'Remove from selection' : 'Add to selection'}
                 >
                     {isSelected ? <Check className="h-3.5 w-3.5" /> : <div className="h-2 w-2 rounded-full border border-current/60" />}
                 </button>
 
                 {!isFolder && (
-                    <span className="absolute right-2 top-2 z-10 rounded-md border border-telegram-border/80 bg-[#0b1521]/85 px-1.5 py-0.5 text-[10px] text-telegram-subtext">
+                    <span className="absolute right-2 top-2 z-10 rounded-md border border-telegram-border/80 bg-telegram-bg/85 px-1.5 py-0.5 text-[10px] text-telegram-subtext">
                         {getExtensionLabel(file.name)}
                     </span>
                 )}
@@ -306,7 +306,7 @@ export function FileCard({
                                 e.stopPropagation();
                                 onToggleFavorite(file.id);
                             }}
-                            className={`rounded-md p-1 transition ${isFavorite ? 'bg-yellow-400/14 text-yellow-300' : 'bg-[#0b1521]/90 text-telegram-subtext hover:text-yellow-300'}`}
+                            className={`rounded-md p-1 transition ${isFavorite ? 'bg-yellow-400/14 text-yellow-300' : 'bg-telegram-bg/90 text-telegram-subtext hover:text-yellow-300'}`}
                             title={isFavorite ? 'Remove from Starred' : 'Add to Starred'}
                         >
                             <Star className={`h-3.5 w-3.5 ${isFavorite ? 'fill-yellow-300' : ''}`} />
@@ -317,7 +317,7 @@ export function FileCard({
                             e.stopPropagation();
                             if (onPreview) onPreview();
                         }}
-                        className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
+                        className="rounded-md bg-telegram-bg/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
                         title={isFolder ? 'Open Folder' : 'Preview'}
                     >
                         <Eye className="h-3.5 w-3.5" />
@@ -327,7 +327,7 @@ export function FileCard({
                             e.stopPropagation();
                             onDownload();
                         }}
-                        className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
+                        className="rounded-md bg-telegram-bg/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
                         title="Download"
                     >
                         <Download className="h-3.5 w-3.5" />
@@ -337,7 +337,7 @@ export function FileCard({
                             e.stopPropagation();
                             onDelete();
                         }}
-                        className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-red-300"
+                        className="rounded-md bg-telegram-bg/90 p-1 text-telegram-subtext transition hover:text-red-300"
                         title="Delete"
                     >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -348,7 +348,7 @@ export function FileCard({
                                 e.stopPropagation();
                                 onInfo(file);
                             }}
-                            className="rounded-md bg-[#0b1521]/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
+                            className="rounded-md bg-telegram-bg/90 p-1 text-telegram-subtext transition hover:text-telegram-text"
                             title="File Info"
                         >
                             <Info className="h-3.5 w-3.5" />

@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, CheckCheck, List, LayoutGrid, RefreshCcw, Image as ImageIcon, Pencil } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useLanguage } from '../../context/LanguageContext';
 import { FileCard } from './FileCard';
 import { EmptyState } from './EmptyState';
 import { TelegramFile } from '../../types';
@@ -18,14 +19,7 @@ const VIDEO_EXT = new Set(['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4
 const AUDIO_EXT = new Set(['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'opus']);
 const DOC_EXT = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'csv', 'rtf', 'epub']);
 
-const FILTER_LABELS: Record<FilterType, string> = {
-    all: 'All',
-    image: 'Images',
-    video: 'Videos',
-    audio: 'Audio',
-    doc: 'Docs',
-    other: 'Other',
-};
+
 
 const EXPLORER_CONTROLS_KEY = 'sharkdrive.explorerControls.v1';
 
@@ -103,6 +97,7 @@ function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
 }
 
 function ExplorerUploadCard({ onManualUpload, height }: { onManualUpload: () => void; height: number }) {
+    const { lang, t } = useLanguage();
     return (
         <button
             onClick={(e) => {
@@ -112,8 +107,8 @@ function ExplorerUploadCard({ onManualUpload, height }: { onManualUpload: () => 
             className="flex flex-col items-center justify-center rounded-lg border border-dashed border-telegram-border bg-white/[0.015] text-telegram-subtext transition hover:border-telegram-primary/30 hover:bg-white/[0.03] hover:text-telegram-text"
             style={{ height: `${height}px` }}
         >
-            <span className="text-sm font-medium text-telegram-text">Add files</span>
-            <span className="mt-1 text-xs text-telegram-subtext">Upload to this folder</span>
+            <span className="text-sm font-medium text-telegram-text">{t('addFiles')}</span>
+            <span className="mt-1 text-xs text-telegram-subtext">{lang === 'es' ? 'Subir a esta carpeta' : 'Upload to this folder'}</span>
         </button>
     );
 }
@@ -125,6 +120,28 @@ export function FileExplorer({
     onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo,
     availableTags = [], activeTag = null, onTagFilterChange, getFolderColor,
 }: FileExplorerProps) {
+    const { lang, t } = useLanguage();
+    const getFilterLabel = (type: FilterType) => {
+        if (lang === 'es') {
+            switch (type) {
+                case 'all': return 'Todo';
+                case 'image': return 'Imágenes';
+                case 'video': return 'Videos';
+                case 'audio': return 'Audio';
+                case 'doc': return 'Documentos';
+                case 'other': return 'Otros';
+            }
+        } else {
+            switch (type) {
+                case 'all': return 'All';
+                case 'image': return 'Images';
+                case 'video': return 'Videos';
+                case 'audio': return 'Audio';
+                case 'doc': return 'Docs';
+                case 'other': return 'Other';
+            }
+        }
+    };
     const [sortField, setSortField] = useState<SortField>('name');
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
     const [filterType, setFilterType] = useState<FilterType>('all');
@@ -338,7 +355,10 @@ export function FileExplorer({
         >
             <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-telegram-border/70 pb-3 text-sm">
                 <div className="mr-1 font-medium text-telegram-text">
-                    {selectedIds.length > 0 ? `${selectedIds.length} selected` : `${sortedFiles.length} items`}
+                    {selectedIds.length > 0
+                        ? t('selectedCount').replace('{count}', String(selectedIds.length))
+                        : t('itemsCount').replace('{count}', String(sortedFiles.length))
+                    }
                 </div>
 
                 <button
@@ -347,11 +367,11 @@ export function FileExplorer({
                         else onSelectVisible?.();
                     }}
                     className="rounded-md px-2 py-1 text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
-                    title={selectedIds.length === sortedFiles.length && sortedFiles.length > 0 ? 'Clear selection' : 'Select all'}
+                    title={selectedIds.length === sortedFiles.length && sortedFiles.length > 0 ? t('clearSelection') : t('selectAll')}
                 >
                     <span className="flex items-center gap-1.5">
                         <CheckCheck className="h-3.5 w-3.5" />
-                        {selectedIds.length === sortedFiles.length && sortedFiles.length > 0 ? 'Clear' : 'Select all'}
+                        {selectedIds.length === sortedFiles.length && sortedFiles.length > 0 ? t('clear') : t('selectAll')}
                     </span>
                 </button>
 
@@ -362,11 +382,11 @@ export function FileExplorer({
                             if (selected.length > 0) onBatchRename(selected);
                         }}
                         className="rounded-md px-2 py-1 text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
-                        title="Batch rename selected files"
+                        title={lang === 'es' ? 'Renombrar archivos seleccionados' : 'Batch rename selected files'}
                     >
                         <span className="flex items-center gap-1.5">
                             <Pencil className="h-3.5 w-3.5" />
-                            Rename {selectedIds.length}
+                            {lang === 'es' ? `Renombrar ${selectedIds.length}` : `Rename ${selectedIds.length}`}
                         </span>
                     </button>
                 )}
@@ -378,20 +398,20 @@ export function FileExplorer({
                             onClick={() => setFilterType(type)}
                             className={`rounded-md px-2 py-1 transition ${filterType === type ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
                         >
-                            {FILTER_LABELS[type]} <span className="opacity-60">{type === 'all' ? files.length : filterCounts[type]}</span>
+                            {getFilterLabel(type)} <span className="opacity-60">{type === 'all' ? files.length : filterCounts[type]}</span>
                         </button>
                     ))}
                 </div>
 
                 {availableTags.length > 0 && (
                     <div className="flex max-w-full flex-wrap items-center gap-0.5 text-sm">
-                        <span className="px-1 text-xs text-telegram-subtext/70">Tags</span>
+                        <span className="px-1 text-xs text-telegram-subtext/70">{lang === 'es' ? 'Etiquetas' : 'Tags'}</span>
                         {availableTags.slice(0, 8).map((tag) => (
                             <button
                                 key={tag}
                                 onClick={() => onTagFilterChange?.(activeTag === tag ? null : tag)}
                                 className={`rounded-md px-2 py-1 transition ${activeTag === tag ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
-                                title={`Filter by #${tag}`}
+                                title={lang === 'es' ? `Filtrar por #${tag}` : `Filter by #${tag}`}
                             >
                                 #{tag}
                             </button>
@@ -403,21 +423,21 @@ export function FileExplorer({
                     <button
                         onClick={() => setViewMode('grid')}
                         className={`rounded-md px-2 py-1 transition ${viewMode === 'grid' ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
-                        title="Grid view"
+                        title={lang === 'es' ? 'Vista de cuadrícula' : 'Grid view'}
                     >
                         <LayoutGrid className="h-4 w-4" />
                     </button>
                     <button
                         onClick={() => setViewMode('list')}
                         className={`rounded-md px-2 py-1 transition ${viewMode === 'list' ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
-                        title="List view"
+                        title={lang === 'es' ? 'Vista de lista' : 'List view'}
                     >
                         <List className="h-4 w-4" />
                     </button>
                     <button
                         onClick={() => setViewMode('gallery')}
                         className={`rounded-md px-2 py-1 transition ${viewMode === 'gallery' ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
-                        title="Gallery view"
+                        title={lang === 'es' ? 'Vista de galería' : 'Gallery view'}
                     >
                         <ImageIcon className="h-4 w-4" />
                     </button>
@@ -428,7 +448,10 @@ export function FileExplorer({
                             className={`rounded-md px-2 py-1 capitalize transition ${sortField === field ? 'bg-telegram-primary/12 text-telegram-primary' : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'}`}
                         >
                             <span className="flex items-center gap-1">
-                                {field}
+                                {lang === 'es'
+                                    ? (field === 'name' ? 'Nombre' : field === 'size' ? 'Tamaño' : 'Fecha')
+                                    : field
+                                }
                                 <SortIcon field={field} />
                             </span>
                         </button>
@@ -437,7 +460,7 @@ export function FileExplorer({
                         <button
                             onClick={resetExplorerControls}
                             className="rounded-md px-2 py-1 text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
-                            title="Reset filters and sorting"
+                            title={t('resetFilters')}
                         >
                             <RefreshCcw className="h-3.5 w-3.5" />
                         </button>
@@ -447,13 +470,13 @@ export function FileExplorer({
 
             {sortedFiles.length === 0 && viewMode !== 'gallery' ? (
                 <div className="flex flex-col items-center rounded-xl border border-telegram-border bg-white/[0.02] px-6 py-14 text-center">
-                    <p className="text-lg font-semibold text-telegram-text">No files match this filter</p>
-                    <p className="mt-2 max-w-md text-sm text-telegram-subtext">Try another filter or reset the current view.</p>
+                    <p className="text-lg font-semibold text-telegram-text">{t('noFilesMatch')}</p>
+                    <p className="mt-2 max-w-md text-sm text-telegram-subtext">{t('tryAnotherFilter')}</p>
                     <button
                         onClick={resetExplorerControls}
                         className="mt-4 rounded-xl bg-telegram-primary px-4 py-2 text-sm font-semibold text-black transition hover:opacity-90"
                     >
-                        Reset view
+                        {t('resetView')}
                     </button>
                 </div>
             ) : viewMode === 'gallery' ? (
@@ -523,13 +546,13 @@ export function FileExplorer({
                     <div className="mb-1 grid grid-cols-[2.5rem_minmax(0,1fr)_6rem_7rem] items-center gap-3 px-2.5 py-1.5 text-xs font-medium text-telegram-subtext">
                         <div></div>
                         <button onClick={() => handleSort('name')} className="flex items-center gap-1 transition-colors hover:text-telegram-text">
-                            Name <SortIcon field="name" />
+                            {lang === 'es' ? 'Nombre' : 'Name'} <SortIcon field="name" />
                         </button>
                         <button onClick={() => handleSort('size')} className="flex items-center justify-end gap-1 transition-colors hover:text-telegram-text">
-                            Size <SortIcon field="size" />
+                            {lang === 'es' ? 'Tamaño' : 'Size'} <SortIcon field="size" />
                         </button>
                         <button onClick={() => handleSort('date')} className="flex items-center justify-end gap-1 transition-colors hover:text-telegram-text">
-                            Date <SortIcon field="date" />
+                            {lang === 'es' ? 'Fecha' : 'Date'} <SortIcon field="date" />
                         </button>
                     </div>
 

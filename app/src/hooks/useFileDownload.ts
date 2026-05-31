@@ -3,10 +3,22 @@ import { save, open } from '@tauri-apps/plugin-dialog';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { open as openPath } from '@tauri-apps/plugin-shell';
 import { toast } from 'sonner';
+import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { ActivityEntry, DownloadItem, TelegramFile } from '../types';
 import type { Store } from '@tauri-apps/plugin-store';
 import { tauriApi } from '../api/tauri';
 import { buildRemoteFileKey, isAudioFile, isImageFile, isPdfFile, isVideoFile, resolveFileFolderId } from '../utils';
+
+async function showNativeNotification(title: string, body: string) {
+    try {
+        let granted = await isPermissionGranted();
+        if (!granted) {
+            const permission = await requestPermission();
+            granted = permission === 'granted';
+        }
+        if (granted) sendNotification({ title, body });
+    } catch { /* non-critical */ }
+}
 
 interface ProgressPayload {
     id: string;
@@ -118,9 +130,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
                 if (item.openAfter ?? shouldOpenAfterDownload()) {
                     openPath(savePath).catch(() => toast.error(`Could not open: ${item.filename}`));
                 }
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification('Download complete', { body: item.filename, silent: true });
-                }
+                void showNativeNotification('Download complete', item.filename);
                 onActivity?.(buildActivity('download', `Downloaded ${item.filename}`, item.filename, item.folderId));
             }
         } catch (e) {

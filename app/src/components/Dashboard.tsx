@@ -32,6 +32,8 @@ import { DuplicateDialog } from './dashboard/DuplicateDialog';
 import { BackupConflictDialog } from './dashboard/BackupConflictDialog';
 import { TextPreviewModal } from './dashboard/TextPreviewModal';
 import { FileInfoPanel } from './dashboard/FileInfoPanel';
+import { KeyboardShortcutsOverlay } from './dashboard/KeyboardShortcutsOverlay';
+import { OnboardingWizard } from './dashboard/OnboardingWizard';
 import { ErrorBoundary } from './ErrorBoundary';
 import { VaultLockScreen } from './dashboard/VaultLockScreen';
 import { FolderStatsModal } from './dashboard/FolderStatsModal';
@@ -76,6 +78,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [showSettings, setShowSettings] = useState(false);
     const [showVault, setShowVault] = useState(false);
     const [showLinksDashboard, setShowLinksDashboard] = useState(false);
+    const [showShortcutsOverlay, setShowShortcutsOverlay] = useState(false);
+    const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('sharkdrive.onboarding.v1') !== 'complete');
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
     const [textPreviewFile, setTextPreviewFile] = useState<TelegramFile | null>(null);
     const [infoFile, setInfoFile] = useState<TelegramFile | null>(null);
@@ -92,9 +96,17 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const previousSyncingRef = useRef(false);
     const syncFoldersRef = useRef(handleSyncFolders);
     syncFoldersRef.current = handleSyncFolders;
+    const handleManualUploadRef = useRef<(encrypted?: boolean) => void>(() => {});
+    const renameHistoryRef = useRef<Array<{
+        type: 'file' | 'folder';
+        id: number;
+        folderId: number | null;
+        oldName: string;
+        newName: string;
+    }>>([]);
 
     const { favoriteIds, showFavoritesOnly, setShowFavoritesOnly, handleToggleFavorite } = useFavorites(store);
-    const { recentFiles, addToRecent } = useRecentFiles(store, activeFolderId);
+    const { recentFiles, addToRecent, removeFromRecent, pruneStaleRecent } = useRecentFiles(store, activeFolderId);
     const { activity, recordActivity } = useActivityLog(store);
     const { encryptedFolderIds, encryptionEnabled, setEncryptionEnabled, handleToggleEncryption } = useEncryptedFolders(store);
     const { recentSearches, commitSearchTerm } = useRecentSearches(store);
@@ -149,7 +161,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     useEffect(() => {
         if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission();
+            void Notification.requestPermission();
         }
     }, []);
 
@@ -253,6 +265,51 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         return () => { unlisten?.(); };
     }, [encryptedFolderIds, encryptionEnabled, recordActivity]);
 
+    // Tray: "Upload File…" menu item
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        listen('tray-upload-file', () => {
+            handleManualUploadRef.current();
+        }).then(fn => { unlisten = fn; });
+        return () => { unlisten?.(); };
+    }, []);
+
+    // Tray: "Sync Now" menu item
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        listen('tray-sync-now', () => {
+            void syncFoldersRef.current();
+        }).then(fn => { unlisten = fn; });
+        return () => { unlisten?.(); };
+    }, []);
+
+    // Startup args: protocol URL (sharkdrive://open/{id}) or file path from context menu
+    useEffect(() => {
+        tauriApi.getStartupArgs().then((arg) => {
+            if (!arg) return;
+            if (arg.startsWith('sharkdrive://open/')) {
+                const rawId = arg.replace('sharkdrive://open/', '').split('?')[0];
+                const folderId = parseInt(rawId, 10);
+                if (!isNaN(folderId)) setActiveFolderId(folderId);
+            } else if (arg.startsWith('sharkdrive://upload?')) {
+                try {
+                    const params = new URLSearchParams(arg.replace('sharkdrive://upload?', ''));
+                    const path = params.get('path');
+                    if (path) {
+                        queueUploadCandidatesRef.current([{ path, folderId: activeFolderId }]);
+                        toast.info(`Queued from Explorer: ${path.split(/[/\\]/).pop()}`);
+                    }
+                } catch { /* ignore malformed URL */ }
+            } else if (arg.length > 2 && !arg.startsWith('-')) {
+                // Raw file path (context menu fallback)
+                queueUploadCandidatesRef.current([{ path: arg, folderId: activeFolderId }]);
+                toast.info(`Queued from Explorer: ${arg.split(/[/\\]/).pop()}`);
+            }
+        }).catch(() => {});
+    // Only run once on mount — args are consumed after first read
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     useEffect(() => {
         const handlePaste = async (e: ClipboardEvent) => {
             const items = e.clipboardData?.items;
@@ -296,7 +353,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const { data: allFiles = cachedFiles ?? [], isLoading, error } = useQuery({
         queryKey: ['files', activeFolderId],
         queryFn: () => tauriApi.getFiles(activeFolderId).then(mapFileList),
-        enabled: !!store && activeFolderId !== RECENT_FOLDER_ID,
+        enabled: !!store && activeFolderId !== RECENT_FOLDER_ID && isConnected,
         placeholderData: cachedFiles,
         staleTime: 60 * 1000,
         gcTime: 5 * 60 * 1000,
@@ -435,15 +492,29 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         return { fileCount, totalBytes };
     }, [allIndexedRaw]);
 
+    // Evict stale recent-file entries whenever the full index refreshes
+    useEffect(() => {
+        if (allIndexedRaw.length === 0) return;
+        const keys = new Set(allIndexedRaw.map(f => `${f.folder_id ?? 'home'}:${f.id}`));
+        pruneStaleRecent(keys);
+    }, [allIndexedRaw, pruneStaleRecent]);
+
     const {
-        handleDelete, handleBulkDelete, handleBulkMove, handleBulkCopy,
+        handleDelete: _handleDeleteBase, handleBulkDelete, handleBulkMove, handleBulkCopy,
     } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles);
 
+    // Wrapper: after delete also purge from recent-files list
+    const handleDelete = useCallback(async (file: TelegramFile) => {
+        await _handleDeleteBase(file);
+        removeFromRecent(file.id);
+    }, [_handleDeleteBase, removeFromRecent]);
+
     const encryptByDefault = encryptionEnabled || (typeof activeFolderId === 'number' && activeFolderId > 0 && encryptedFolderIds.has(activeFolderId));
-    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, conflictItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity, folderNameResolver);
+    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, conflictItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity, folderNameResolver, isConnected);
     const { downloadQueue, queueDownload, queueBulkDownload, clearFinished: clearDownloads, retryDownload, moveDownloadToFront, reorderDownloadQueue, cancelDownloadItem, cancelAll: cancelDownloads } = useFileDownload(store, recordActivity);
     handleDroppedFilesRef.current = handleDroppedFiles;
     queueUploadCandidatesRef.current = queueUploadCandidates;
+    handleManualUploadRef.current = handleManualUpload;
 
     const queuedUploadCount = uploadQueue.filter((item) => item.status === 'pending' || item.status === 'uploading').length;
     const uploadingCount = uploadQueue.filter((item) => item.status === 'uploading').length;
@@ -702,14 +773,61 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         setShowMoveModal(true);
     }, []);
 
+    const rememberRename = useCallback((action: {
+        type: 'file' | 'folder';
+        id: number;
+        folderId: number | null;
+        oldName: string;
+        newName: string;
+    }) => {
+        renameHistoryRef.current = [...renameHistoryRef.current.slice(-9), action];
+    }, []);
+
+    const undoLastRename = useCallback(async () => {
+        const action = renameHistoryRef.current.pop();
+        if (!action) {
+            toast.info('No rename action to undo.');
+            return;
+        }
+
+        try {
+            if (action.type === 'folder') {
+                await handleRenameFolder(action.id, action.oldName);
+            } else {
+                await tauriApi.renameFile(action.id, action.folderId, action.oldName);
+                queryClient.invalidateQueries({ queryKey: ['files'] });
+                queryClient.invalidateQueries({ queryKey: ['cached-files'] });
+            }
+            toast.success(`Restored "${action.oldName}"`);
+        } catch (error) {
+            renameHistoryRef.current.push(action);
+            toast.error(`Undo rename failed: ${error}`);
+        }
+    }, [handleRenameFolder, queryClient]);
+
     const handleRename = async (newName: string) => {
         if (!renameTarget) return;
         if (renameTarget.type === 'folder') {
             await handleRenameFolder(renameTarget.id, newName);
+            rememberRename({
+                type: 'folder',
+                id: renameTarget.id,
+                folderId: null,
+                oldName: renameTarget.name,
+                newName,
+            });
         } else {
-            await tauriApi.renameFile(renameTarget.id, resolveFileFolderId(renameTarget, activeFolderId), newName);
+            const folderId = resolveFileFolderId(renameTarget, activeFolderId);
+            await tauriApi.renameFile(renameTarget.id, folderId, newName);
             queryClient.invalidateQueries({ queryKey: ['files'] });
             queryClient.invalidateQueries({ queryKey: ['cached-files'] });
+            rememberRename({
+                type: 'file',
+                id: renameTarget.id,
+                folderId,
+                oldName: renameTarget.name,
+                newName,
+            });
             recordActivity({
                 id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 type: 'rename',
@@ -738,6 +856,31 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         shortcuts: organization.shortcuts,
         enabled: !previewFile && !playingFile && !pdfFile && !showMoveModal && !renameTarget && !showSettings
     });
+
+    // ? key → shortcuts overlay
+    useEffect(() => {
+        const handle = (e: KeyboardEvent) => {
+            if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+                const tag = (e.target as HTMLElement).tagName;
+                if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+                setShowShortcutsOverlay(v => !v);
+            }
+        };
+        window.addEventListener('keydown', handle);
+        return () => window.removeEventListener('keydown', handle);
+    }, []);
+
+    useEffect(() => {
+        const handle = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement;
+            if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.shiftKey) return;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+            event.preventDefault();
+            void undoLastRename();
+        };
+        window.addEventListener('keydown', handle);
+        return () => window.removeEventListener('keydown', handle);
+    }, [undoLastRename]);
 
     const handleDropOnFolder = async (e: React.DragEvent, targetFolderId: number | null) => {
         e.preventDefault();
@@ -824,13 +967,16 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         if (!newName.trim() || newName === file.name) return;
         if (file.type === 'folder') {
             await handleRenameFolder(file.id, newName);
+            rememberRename({ type: 'folder', id: file.id, folderId: null, oldName: file.name, newName });
         } else {
-            await tauriApi.renameFile(file.id, resolveFileFolderId(file, activeFolderId), newName);
+            const folderId = resolveFileFolderId(file, activeFolderId);
+            await tauriApi.renameFile(file.id, folderId, newName);
             queryClient.invalidateQueries({ queryKey: ['files'] });
             queryClient.invalidateQueries({ queryKey: ['cached-files'] });
+            rememberRename({ type: 'file', id: file.id, folderId, oldName: file.name, newName });
             toast.success(`Renamed to "${newName}"`);
         }
-    }, [activeFolderId, handleRenameFolder, queryClient]);
+    }, [activeFolderId, handleRenameFolder, queryClient, rememberRename]);
 
     const handleRootDragOver = (e: React.DragEvent) => {
         if (internalDragRef.current) {
@@ -888,6 +1034,21 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     <ShareLinksDashboard
                         key="links-dashboard"
                         onClose={() => setShowLinksDashboard(false)}
+                    />
+                )}
+                {showShortcutsOverlay && (
+                    <KeyboardShortcutsOverlay
+                        key="shortcuts-overlay"
+                        shortcuts={organization.shortcuts}
+                        onClose={() => setShowShortcutsOverlay(false)}
+                    />
+                )}
+                {showOnboarding && (
+                    <OnboardingWizard
+                        key="onboarding-wizard"
+                        onClose={() => setShowOnboarding(false)}
+                        onCreateFolder={(name) => handleCreateFolder(name, null)}
+                        onEncryptionEnabled={() => setEncryptionEnabled(true)}
                     />
                 )}
                 {showVault && (
@@ -1106,6 +1267,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     failedUploadCount={failedUploadCount}
                     uploadProgress={uploadProgress}
                     isDraggingFiles={isDragging}
+                    isConnected={isConnected}
                 />
                 {searchTerm.length > 2 && (
                     <div className="px-6 pt-4 pb-0">
@@ -1216,6 +1378,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         totalItems={previewContextFiles.length}
                         nextFile={previewNeighborState.nextFile}
                         prevFile={previewNeighborState.prevFile}
+                        onOpenTextPreview={(file) => {
+                            setPreviewFile(null);
+                            setTextPreviewFile(file);
+                        }}
                     />
                 </ErrorBoundary>
             )}

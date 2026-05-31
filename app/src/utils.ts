@@ -31,11 +31,13 @@ export const isDocumentFile = (name: string) => (
     /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|md|markdown|csv|rtf|epub)$/i.test(name)
 );
 
+// RECENT_FOLDER_ID (-1) is a UI sentinel, not a real Telegram folder.
+// When used as fallback it must be converted to null (= Saved Messages).
 export const resolveFileFolderId = (file: TelegramFile, fallbackFolderId: number | null): number | null => {
     if (typeof file.folder_id === 'number') {
         return file.folder_id;
     }
-    return fallbackFolderId;
+    return fallbackFolderId === -1 ? null : fallbackFolderId;
 };
 
 export const buildRemoteFileKey = (file: Pick<TelegramFile, 'id' | 'folder_id'>, fallbackFolderId: number | null) =>
