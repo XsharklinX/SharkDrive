@@ -45,6 +45,7 @@ Update-JsonVersion 'app\package.json'
 Update-PackageLockVersion
 Update-JsonVersion 'app\src-tauri\tauri.conf.json'
 Update-RegexVersion 'app\src-tauri\Cargo.toml' '(?m)^version = "[^"]+"' "version = `"$Version`""
+Update-RegexVersion 'app\src-tauri\Cargo.lock' '(?ms)(\[\[package\]\]\r?\nname = "app"\r?\nversion = ")[^"]+(")' "`${1}$Version`${2}"
 Update-RegexVersion 'README.md' 'version-[0-9]+\.[0-9]+\.[0-9]+-brightgreen' "version-$Version-brightgreen"
 Update-RegexVersion 'Docs\ARCHITECTURE.md' '> \*\*Version:\*\* [0-9]+\.[0-9]+\.[0-9]+' "> **Version:** $Version"
 

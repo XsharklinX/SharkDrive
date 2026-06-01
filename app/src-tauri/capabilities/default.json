@@ -9,6 +9,7 @@
     "shell:allow-open",
     "store:default",
     "dialog:default",
+    "process:default",
     "fs:default",
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 
-const SHARKDRIVE_UPDATES_ENABLED = false;
+const SHARKDRIVE_UPDATES_ENABLED = true;
 
 interface UpdateState {
     checking: boolean;

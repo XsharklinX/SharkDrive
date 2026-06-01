@@ -281,6 +281,15 @@ The old monolithic `fs.rs` has been split into:
 - rename undo is a frontend-only buffer of the latest ten file or folder renames and calls the existing rename commands
 - offline mode keeps cached indexed files visible, pauses queued uploads and relies on the existing connection hook for retry
 
+### Updates and releases
+
+- Tauri Updater checks the signed static feed at `https://github.com/XsharklinX/SharkDrive/releases/latest/download/latest.json`
+- `bundle.createUpdaterArtifacts` is enabled so release builds create updater archives and `.sig` files in addition to installers
+- `.github/workflows/release.yml` is the only tag-triggered release workflow and uploads `latest.json` through `tauri-apps/tauri-action`
+- run `scripts/setup-updater.ps1` once per signing identity; it stores the private key outside the repository and patches the public key into `tauri.conf.json`
+- keep the updater private key backed up securely and add it to GitHub Actions as `TAURI_SIGNING_PRIVATE_KEY`
+- publish future versions with valid SemVer tags only, preferably through `scripts/publish-release.ps1 -Version <version> -Publish`
+
 ---
 
 ## 7. Current Priorities
@@ -310,5 +319,5 @@ These are the active product and engineering priorities:
 
 - continue simplifying secondary UI components for consistency
 - finish extracting dashboard state into hooks
-- revisit updater only when SharkDrive has its own real release feed
+- verify the first signed GitHub release and test updater installation from the previous desktop version
 - add more tests around caption parsing and encryption behavior as features evolve

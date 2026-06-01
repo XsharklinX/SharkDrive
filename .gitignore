@@ -18,3 +18,7 @@ CompiledApps/
 *.log
 Error.html
 **/LatestError.html
+
+# Tauri updater signing keys must never be committed
+*.key
+*.key.pub

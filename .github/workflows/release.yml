@@ -17,7 +17,13 @@ jobs:
       
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release tag '$GITHUB_REF_NAME'. Use tags such as v2.9.1 or v3.0.0-beta.1."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
       
       - name: Create Release
         id: create-release
@@ -28,8 +34,8 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: `v${{ steps.get_version.outputs.VERSION }}`,
-              name: `Telegram Drive v${{ steps.get_version.outputs.VERSION }}`,
-              body: `Fixed: process not terminating on Ctrl+C when launched from a terminal. The Actix-web streaming server and grammers network runner were blocking exit because neither received a shutdown signal. A RunEvent::Exit handler now gracefully stops both services before the process exits.\n\nSee the assets below to download and install.`,
+              name: `SharkDrive v${{ steps.get_version.outputs.VERSION }}`,
+              body: `SharkDrive v${{ steps.get_version.outputs.VERSION }}.\n\nDownload the installer for your platform from the assets below. Existing installations can update automatically through the signed Tauri updater feed.`,
               draft: true,
               prerelease: false
             });
@@ -96,6 +102,16 @@ jobs:
         working-directory: app
         run: npm install
 
+      - name: Verify updater signing secret
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Missing TAURI_SIGNING_PRIVATE_KEY. Run scripts/setup-updater.ps1 once and add the copied value as a GitHub Actions secret."
+            exit 1
+          fi
+
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -104,8 +120,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
           projectPath: ./app
           args: ${{ matrix.args }}
+          updaterJsonPreferNsis: true
 
       - name: Patch AppImage for cross-distro EGL compatibility
         if: matrix.platform == 'ubuntu-22.04'
