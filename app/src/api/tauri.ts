@@ -270,4 +270,18 @@ export const tauriApi = {
     crossAccountCleanup(transferId: string) {
         return invoke<void>('cmd_cross_account_cleanup', { transferId });
     },
+
+    // ── v3.4 — Companion Móvil ───────────────────────────────────────────────
+    setWebPin(pin: string) {
+        return invoke<void>('cmd_set_web_pin', { pin });
+    },
+    clearWebPin() {
+        return invoke<void>('cmd_clear_web_pin');
+    },
+    hasWebPin() {
+        return invoke<boolean>('cmd_has_web_pin');
+    },
+    getWebAccessUrl() {
+        return invoke<string>('cmd_get_web_access_url');
+    },
 };

@@ -4,6 +4,52 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.4.0] - 2026-06-02
+
+### Companion Móvil
+
+**Web viewer LAN (`/web`)**
+- SPA embebida en el binario de Rust via `include_str!("web_app.html")` — sin build step adicional
+- Accesible desde cualquier dispositivo en la misma red en `http://IP:14200/web`
+- Navegación por carpetas (lista con chips), lista de archivos con iconos por tipo
+- Thumbnails automáticos: el servidor sirve el cache de `app_data_dir/thumbnails/` si ya existen
+- Download de archivos directamente desde el browser móvil
+- Tema oscuro Telegram, responsive, mobile-first (no pinch-zoom, taps grandes)
+- Rutas actix nuevas: `GET /web`, `POST /web/auth`, `GET /web/api/folders`, `GET /web/api/files/{key}`, `GET /web/api/stream/{key}/{id}`, `GET /web/api/thumbnail/{key}/{id}`
+
+**Autenticación web (PIN de 6 dígitos)**
+- `web_auth.rs` — `WebAuthState`: hash SHA256 del PIN + tokens de sesión en memoria
+- PIN separado del session PIN del escritorio (solo protege acceso web)
+- Sin PIN configurado: acceso libre en la LAN (útil para uso doméstico)
+- `POST /web/auth { pin }` → `{ token }`, token enviado en header `X-Web-Token` en requests siguientes
+- Comandos Tauri: `cmd_set_web_pin`, `cmd_clear_web_pin`, `cmd_has_web_pin`
+
+**QR de acceso rápido**
+- `cmd_get_web_access_url()` → `http://{local_ip}:14200/web` (detecta IP local via UDP)
+- `WebAccessModal.tsx`: genera QR con `qrcode` lib, muestra URL copiable, gestiona PIN
+- Botón `Smartphone` en el TopBar para abrir el modal
+
+**Upload desde móvil**
+- Botón FAB (floating action button) en la web app → file picker nativo del teléfono
+- `POST /web/api/upload/{folder_key}?t=TOKEN` con `Content-Type: application/octet-stream` y header `X-Filename`
+- El servidor guarda bytes en temp, emite evento `web-upload-pending` al frontend de escritorio
+- Dashboard.tsx escucha `web-upload-pending` → `queueUploadCandidates()` → procesado por upload queue existente
+- Toast "Mobile upload received: {filename}" en el escritorio
+- `cmd_cross_account_cleanup` elimina archivos temp tras upload
+
+### Cambios técnicos
+- `web_app.html` — SPA vanilla JS/CSS embebida, ~250 líneas minificadas
+- `web_auth.rs` — nuevo módulo `WebAuthState`
+- `commands/web.rs` — 4 comandos Tauri nuevos
+- `server.rs` — signature de `start_server` extendida con `web_auth`, `account_manager`, `app_handle`; 7 nuevas rutas actix
+- `lib.rs` — gestiona `Arc<WebAuthState>`, pasa a servidor en spawn thread
+- `WebAccessModal.tsx` — QR + PIN setup/clear
+- `TopBar.tsx` — botón Smartphone + `onOpenWebAccess` prop
+- `Dashboard.tsx` — `showWebAccess` state + listener `web-upload-pending`
+- CORS: `X-Frame-Options: SAMEORIGIN` (era DENY) para permitir iframe en web viewer
+
+---
+
 ## [3.3.0] - 2026-06-02
 
 ### Multi-Cuenta

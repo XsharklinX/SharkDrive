@@ -5,6 +5,7 @@ pub mod index_store;
 pub mod models;
 pub mod server;
 pub mod sync_log;
+pub mod web_auth;
 
 use commands::automation::AutomationState;
 use commands::backup::{start_watching, BackupState};
@@ -16,6 +17,7 @@ use commands::TelegramState;
 use account_manager::AccountManager;
 use index_store::PersistentIndexState;
 use sync_log::SyncLog;
+use web_auth::WebAuthState;
 use rand::Rng;
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -168,6 +170,8 @@ pub fn run() {
             app.manage(PersistentIndexState::new(account_manager.index_path()));
             let sync_log = Arc::new(SyncLog::new(account_manager.sync_log_path()));
             app.manage(sync_log);
+            let web_auth = Arc::new(WebAuthState::new(app_data_dir.join("web_auth.json")));
+            app.manage(web_auth.clone());
             app.manage(account_manager.clone());
 
             if let Some(window) = app.get_webview_window("main") {
@@ -236,14 +240,25 @@ pub fn run() {
                 log::info!("Registered Windows integration for: {}", exe_str);
             }
 
-            // Start Streaming + Share Server
+            // Start Streaming + Share + Web companion Server
             let state = Arc::new(app.state::<TelegramState>().inner().clone());
             let token_for_server = stream_token.clone();
             let handle_for_thread = server_handle_for_setup.clone();
+            let web_auth_for_server = web_auth.clone();
+            let account_manager_for_server = account_manager.clone();
+            let app_handle_for_server = app.handle().clone();
             std::thread::spawn(move || {
                 let sys = actix_rt::System::new();
                 sys.block_on(async move {
-                    match server::start_server(state, share_store, 14200, token_for_server).await {
+                    match server::start_server(
+                        state,
+                        share_store,
+                        web_auth_for_server,
+                        account_manager_for_server,
+                        app_handle_for_server,
+                        14200,
+                        token_for_server,
+                    ).await {
                         Ok(server) => {
                             if let Ok(mut h) = handle_for_thread.lock() {
                                 *h = Some(server.handle());
@@ -366,6 +381,11 @@ pub fn run() {
             commands::cmd_fetch_account_avatar,
             commands::cmd_cross_account_download,
             commands::cmd_cross_account_cleanup,
+            // v3.4 — Companion Móvil
+            commands::cmd_set_web_pin,
+            commands::cmd_clear_web_pin,
+            commands::cmd_has_web_pin,
+            commands::cmd_get_web_access_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

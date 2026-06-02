@@ -42,6 +42,7 @@ import { VersionHistoryModal } from './dashboard/VersionHistoryModal';
 import { SyncHistoryPanel } from './dashboard/SyncHistoryPanel';
 import { DuplicatesPanel } from './dashboard/DuplicatesPanel';
 import { CrossAccountCopyModal } from './dashboard/CrossAccountCopyModal';
+import { WebAccessModal } from './dashboard/WebAccessModal';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -93,6 +94,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [versionHistoryFile, setVersionHistoryFile] = useState<TelegramFile | null>(null);
     const [crossCopyFiles, setCrossCopyFiles] = useState<TelegramFile[] | null>(null);
     const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+    const [showWebAccess, setShowWebAccess] = useState(false);
     const pendingUploadPathsRef = useRef<string[]>([]);
     const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('sharkdrive.onboarding.v1') !== 'complete');
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
@@ -294,6 +296,20 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         }).then(fn => { unlisten = fn; });
         return () => { unlisten?.(); };
     }, []);
+
+    // Web companion: file uploaded from mobile phone
+    useEffect(() => {
+        let unlisten: (() => void) | undefined;
+        listen<{ path: string; filename: string; folderId: number | null }>(
+            'web-upload-pending',
+            event => {
+                const { path, folderId } = event.payload;
+                queueUploadCandidatesRef.current([{ path, folderId: folderId ?? activeFolderId }]);
+                toast.info(`Mobile upload received: ${event.payload.filename}`);
+            }
+        ).then(fn => { unlisten = fn; });
+        return () => { unlisten?.(); };
+    }, [activeFolderId]);
 
     // Tray: "Sync Now" menu item
     useEffect(() => {
@@ -1201,6 +1217,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         onClose={() => setShowLinksDashboard(false)}
                     />
                 )}
+                {showWebAccess && (
+                    <WebAccessModal
+                        key="web-access-modal"
+                        onClose={() => setShowWebAccess(false)}
+                    />
+                )}
+
                 {showSyncHistory && (
                     <SyncHistoryPanel
                         key="sync-history-panel"
@@ -1503,6 +1526,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onOpenLinks={() => setShowLinksDashboard(true)}
                     onOpenSyncHistory={() => setShowSyncHistory(true)}
                     onOpenDuplicates={() => setShowDuplicates(true)}
+                    onOpenWebAccess={() => setShowWebAccess(true)}
                     nextSyncIn={autoSyncInterval > 0 ? nextSyncIn : null}
                     queuedUploadCount={queuedUploadCount}
                     uploadingCount={uploadingCount}

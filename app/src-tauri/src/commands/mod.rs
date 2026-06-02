@@ -40,6 +40,7 @@ pub mod share;
 pub mod streaming;
 pub mod utils;
 pub mod versions;
+pub mod web;
 
 pub use accounts::*;
 pub use auth::*;
@@ -56,3 +57,4 @@ pub use share::*;
 pub use streaming::*;
 pub use utils::*;
 pub use versions::*;
+pub use web::*;

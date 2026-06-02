@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>SharkDrive</title>
+<style>
+:root{--bg:#0d1117;--sf:#161b22;--bo:#30363d;--ac:#2481cc;--tx:#e6edf3;--su:#7d8590;--er:#da3633;--ok:#3fb950}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;overscroll-behavior:none}
+.header{background:var(--sf);border-bottom:1px solid var(--bo);padding:12px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:20;backdrop-filter:blur(8px)}
+.h-title{font-size:16px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbtn{background:none;border:none;color:var(--su);cursor:pointer;padding:8px;border-radius:8px;display:flex;align-items:center;justify-content:center;min-width:36px;min-height:36px}
+.hbtn:active{background:rgba(255,255,255,.06)}
+.hbtn svg{width:20px;height:20px}
+/* Login */
+.lp{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.lcard{background:var(--sf);border:1px solid var(--bo);border-radius:16px;padding:32px 24px;width:100%;max-width:320px;text-align:center}
+.llogo{width:60px;height:60px;background:var(--ac);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:28px}
+.ltit{font-size:20px;font-weight:700;margin-bottom:6px}
+.lsub{font-size:13px;color:var(--su);margin-bottom:24px}
+.prow{display:flex;gap:8px;justify-content:center;margin-bottom:22px}
+.pd{width:44px;height:52px;background:rgba(255,255,255,.04);border:1.5px solid var(--bo);border-radius:10px;font-size:22px;font-weight:700;text-align:center;color:var(--tx);outline:none;appearance:none;-webkit-appearance:none}
+.pd:focus{border-color:var(--ac);background:rgba(36,129,204,.1)}
+.pbtn{width:100%;padding:14px;background:var(--ac);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s}
+.pbtn:hover{opacity:.9}
+.pbtn:disabled{opacity:.4;cursor:default}
+.err{background:rgba(218,54,51,.1);border:1px solid rgba(218,54,51,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#f85149;margin-bottom:16px;text-align:left}
+/* File list */
+.fl{padding:4px 8px 80px}
+.sh{padding:16px 12px 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--su)}
+.fc{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;cursor:pointer;transition:background .1s}
+.fc:active{background:rgba(255,255,255,.05)}
+.fi{width:46px;height:46px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:22px;overflow:hidden}
+.fi img{width:100%;height:100%;object-fit:cover;border-radius:10px}
+.finfo{flex:1;min-width:0}
+.fn{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fm{font-size:12px;color:var(--su);margin-top:2px}
+.fact{flex-shrink:0}
+.dl{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;color:var(--su);transition:color .1s,background .1s}
+.dl:active{color:var(--ac);background:rgba(36,129,204,.1)}
+.dl svg{width:18px;height:18px}
+/* Folder chips */
+.fgrid{display:flex;flex-wrap:wrap;padding:6px 8px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(255,255,255,.04);border:1px solid var(--bo);border-radius:20px;margin:4px;cursor:pointer;font-size:13px;transition:background .1s,border-color .1s}
+.chip:active{background:rgba(36,129,204,.12);border-color:var(--ac);color:var(--ac)}
+.chip svg{width:14px;height:14px}
+/* Type icon colors */
+.ti{background:rgba(59,130,246,.15)}
+.tv{background:rgba(239,68,68,.15)}
+.ta{background:rgba(168,85,247,.15)}
+.td{background:rgba(249,115,22,.15)}
+.tf{background:rgba(234,179,8,.15)}
+.to{background:rgba(99,102,241,.15)}
+/* Upload FAB */
+.fab{position:fixed;bottom:24px;right:20px;width:56px;height:56px;background:var(--ac);border:none;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(36,129,204,.45);z-index:30}
+.fab svg{width:24px;height:24px;color:#fff}
+/* Upload progress bar */
+.upb{position:fixed;bottom:0;left:0;right:0;background:var(--sf);border-top:1px solid var(--bo);padding:12px 16px;z-index:40;display:none}
+.upb.on{display:block}
+.uplabel{font-size:13px;color:var(--su);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prog{height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
+.progf{height:100%;background:var(--ac);border-radius:2px;transition:width .4s}
+/* Spinner */
+.spin{border:2.5px solid rgba(255,255,255,.1);border-top-color:var(--ac);border-radius:50%;width:28px;height:28px;animation:sp .7s linear infinite}
+.ldg{display:flex;justify-content:center;padding:60px}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* Empty */
+.empty{text-align:center;padding:72px 24px}
+.ei{font-size:52px;margin-bottom:14px}
+.et{font-size:16px;font-weight:600;margin-bottom:6px}
+.es{font-size:13px;color:var(--su)}
+/* Toast */
+.toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);background:var(--sf);border:1px solid var(--bo);border-radius:10px;padding:10px 18px;font-size:13px;z-index:100;display:none;box-shadow:0 4px 24px rgba(0,0,0,.5);white-space:nowrap;pointer-events:none}
+.toast.on{display:block}
+.toast.ok{border-color:rgba(63,185,80,.4);color:var(--ok)}
+.toast.er{border-color:rgba(218,54,51,.4);color:#f85149}
+</style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div id="app"></div>
+<script>
+const S={token:localStorage.getItem('sd_web_token')||'',folders:[],files:[],folder:null,folderName:'SharkDrive'};
+
+// ── Util ──────────────────────────────────────────────────────────────────────
+const fmt=b=>b>=1e9?(b/1e9).toFixed(1)+' GB':b>=1e6?(b/1e6).toFixed(1)+' MB':b>=1024?Math.round(b/1024)+' KB':b+' B';
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const ftype=n=>{const e=n.split('.').pop().toLowerCase();if(['jpg','jpeg','png','gif','webp','bmp','svg','heic'].includes(e))return'i';if(['mp4','mkv','avi','mov','webm'].includes(e))return'v';if(['mp3','wav','flac','aac','ogg','m4a','opus'].includes(e))return'a';if(['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','md','csv','epub'].includes(e))return'd';return'o'};
+const fkey=id=>id===null||id===undefined?'home':String(id);
+const fdate=s=>{try{return new Date(s).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}catch{return''}};
+
+function toast(m,t=''){const el=document.getElementById('toast');el.textContent=m;el.className='toast on'+(t?' '+t:'');clearTimeout(el._t);el._t=setTimeout(()=>el.className='toast',2600);}
+
+const EMOJI={i:'🖼️',v:'🎬',a:'🎵',d:'📄',o:'📦',f:'📁'};
+const TCLS={i:'ti',v:'tv',a:'ta',d:'td',o:'to',f:'tf'};
+
+// ── SVG icons ─────────────────────────────────────────────────────────────────
+const I={
+  back:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>`,
+  dl:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`,
+  up:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>`,
+  fo:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>`,
+  out:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>`,
+};
+
+// ── API ───────────────────────────────────────────────────────────────────────
+const api=async(path,opts={})=>{const h={...(opts.headers||{})};if(S.token)h['X-Web-Token']=S.token;return fetch(path,{...opts,headers:h})};
+const checkAuth=async()=>{if(!S.token)return false;const r=await api('/web/api/folders');return r.ok};
+const doLogin=async pin=>{const r=await fetch('/web/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});if(!r.ok)return null;const d=await r.json();return d.token||null};
+
+async function loadFolders(){const r=await api('/web/api/folders');if(!r.ok)throw new Error('auth');S.folders=await r.json()}
+async function loadFiles(id){const r=await api(`/web/api/files/${fkey(id)}`);if(!r.ok)throw new Error('auth');S.files=await r.json();S.folder=id}
+
+function dlUrl(f){return`/web/api/stream/${fkey(f.folder_id)}/${f.id}?t=${S.token}`}
+function thumbUrl(f){return`/web/api/thumbnail/${fkey(f.folder_id)}/${f.id}?t=${S.token}`}
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+async function doUpload(file){
+  const bar=document.getElementById('upb'),fill=document.getElementById('progf'),lbl=document.getElementById('uplbl');
+  bar.className='upb on';lbl.textContent=`Uploading ${file.name}…`;fill.style.width='20%';
+  try{
+    const r=await api(`/web/api/upload/${fkey(S.folder)}`,{
+      method:'POST',headers:{'X-Filename':encodeURIComponent(file.name),'Content-Type':'application/octet-stream'},body:file
+    });
+    fill.style.width='100%';
+    if(r.ok){toast(`${file.name} queued`,'ok')}else{toast('Upload failed','er')}
+  }catch(e){toast('Upload error','er')}
+  finally{setTimeout(()=>{bar.className='upb';fill.style.width='0%'},1600)}
+}
+
+// ── Login render ──────────────────────────────────────────────────────────────
+function renderLogin(){
+  const digits=Array(6).fill(0).map((_,i)=>`<input class="pd" id="pd${i}" maxlength="1" type="tel" inputmode="numeric" pattern="[0-9]" autocomplete="off">`).join('');
+  document.getElementById('app').innerHTML=`
+  <div class="lp"><div class="lcard">
+    <div class="llogo">🦈</div>
+    <div class="ltit">SharkDrive</div>
+    <div class="lsub">Enter your 6-digit web access PIN</div>
+    <div id="lerr" class="err" style="display:none"></div>
+    <div class="prow">${digits}</div>
+    <button class="pbtn" id="lbtn" disabled>Unlock</button>
+  </div></div>`;
+  const ds=Array.from({length:6},(_,i)=>document.getElementById(`pd${i}`));
+  const btn=document.getElementById('lbtn');
+  const getPin=()=>ds.map(d=>d.value).join('');
+  const upd=()=>{btn.disabled=getPin().length!==6};
+  ds.forEach((d,i)=>{
+    d.addEventListener('input',()=>{d.value=d.value.slice(-1);if(d.value&&i<5)ds[i+1].focus();upd()});
+    d.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!d.value&&i>0)ds[i-1].focus()});
+  });
+  ds[0].focus();
+  btn.addEventListener('click',async()=>{
+    const pin=getPin();btn.disabled=true;btn.textContent='Checking…';
+    const token=await doLogin(pin);
+    if(token){S.token=token;localStorage.setItem('sd_web_token',token);await init()}
+    else{
+      document.getElementById('lerr').textContent='Wrong PIN. Try again.';
+      document.getElementById('lerr').style.display='block';
+      ds.forEach(d=>d.value='');ds[0].focus();btn.textContent='Unlock';btn.disabled=true;
+    }
+  });
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+function renderMain(loading){
+  const isHome=S.folder===null||S.folder===undefined;
+  const title=isHome?'Saved Messages':S.folderName;
+  let foldersHtml='',filesHtml='';
+
+  if(loading){
+    filesHtml=`<div class="ldg"><div class="spin"></div></div>`;
+  }else if(S.files.length===0){
+    filesHtml=`<div class="empty"><div class="ei">📭</div><div class="et">Empty</div><div class="es">No files here</div></div>`;
+  }else{
+    const cards=S.files.map(f=>{
+      const t=ftype(f.name);
+      const thumbImg=t==='i'?`<img src="${esc(thumbUrl(f))}" loading="lazy" onerror="this.style.display='none';this.nextSibling.style.display=''" alt="">${EMOJI[t]}`:'';
+      const iconContent=t==='i'?`<img src="${esc(thumbUrl(f))}" loading="lazy" alt="" onerror="this.parentNode.textContent='${EMOJI[t]}'" style="width:100%;height:100%;object-fit:cover;border-radius:10px">`:`${EMOJI[t]}`;
+      return`<div class="fc">
+        <div class="fi ${TCLS[t]}">${iconContent}</div>
+        <div class="finfo"><div class="fn">${esc(f.name)}</div><div class="fm">${fmt(f.size||0)}${f.created_at?' · '+fdate(f.created_at):''}</div></div>
+        <div class="fact"><a href="${esc(dlUrl(f))}" download="${esc(f.name)}" class="dl">${I.dl}</a></div>
+      </div>`;
+    }).join('');
+    filesHtml=`<div class="fl">${cards}</div>`;
+  }
+
+  if(isHome&&S.folders.length>0){
+    const chips=S.folders.map(f=>`<div class="chip" onclick="openFolder(${f.id},${JSON.stringify(esc(f.name))})">${I.fo} ${esc(f.name)}</div>`).join('');
+    foldersHtml=`<div class="sh">Folders</div><div class="fgrid">${chips}</div><div class="sh">Saved Messages</div>`;
+  }
+
+  document.getElementById('app').innerHTML=`
+  <div class="header">
+    ${isHome?'<span style="width:36px"></span>':`<button class="hbtn" onclick="goHome()">${I.back}</button>`}
+    <div class="h-title">${esc(title)}</div>
+    <button class="hbtn" onclick="doLogout()" title="Log out">${I.out}</button>
+  </div>
+  ${foldersHtml}${filesHtml}
+  <button class="fab" onclick="document.getElementById('upl').click()" title="Upload">${I.up}</button>
+  <input type="file" id="upl" multiple style="display:none">
+  <div id="upb" class="upb"><div id="uplbl" class="uplabel">Uploading…</div><div class="prog"><div id="progf" class="progf" style="width:0%"></div></div></div>`;
+
+  document.getElementById('upl').addEventListener('change',async function(){
+    for(const f of Array.from(this.files))await doUpload(f);
+    this.value='';
+  });
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+async function openFolder(id,name){
+  S.folderName=name;
+  renderMain(true);
+  try{await loadFiles(id);renderMain(false)}catch{doLogout()}
+  window.scrollTo(0,0);
+}
+
+async function goHome(){
+  S.folderName='SharkDrive';
+  renderMain(true);
+  try{await loadFiles(null);renderMain(false)}catch{doLogout()}
+  window.scrollTo(0,0);
+}
+
+function doLogout(){
+  S.token='';localStorage.removeItem('sd_web_token');
+  S.folders=[];S.files=[];S.folder=null;
+  renderLogin();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init(){
+  renderMain(true);
+  try{
+    await loadFolders();
+    await loadFiles(null);
+    renderMain(false);
+  }catch{doLogout()}
+}
+
+(async()=>{
+  if(S.token&&await checkAuth()){await init()}
+  else{S.token='';renderLogin()}
+})();
+</script>
+</body>
+</html>

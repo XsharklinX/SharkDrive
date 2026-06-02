@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare, RefreshCw, GitFork } from 'lucide-react';
+import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare, RefreshCw, GitFork, Smartphone } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -39,6 +39,7 @@ interface TopBarProps {
     onOpenLinks?: () => void;
     onOpenSyncHistory?: () => void;
     onOpenDuplicates?: () => void;
+    onOpenWebAccess?: () => void;
     nextSyncIn?: number | null;
     queuedUploadCount: number;
     uploadingCount: number;
@@ -84,6 +85,7 @@ export function TopBar({
     onOpenLinks,
     onOpenSyncHistory,
     onOpenDuplicates,
+    onOpenWebAccess,
     nextSyncIn,
     queuedUploadCount,
     uploadingCount,
@@ -213,6 +215,16 @@ export function TopBar({
                             title={lang === 'es' ? 'Duplicados' : 'Find Duplicates'}
                         >
                             <GitFork className="h-4 w-4" />
+                        </button>
+                    )}
+
+                    {onOpenWebAccess && (
+                        <button
+                            onClick={onOpenWebAccess}
+                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
+                            title={lang === 'es' ? 'Acceso móvil' : 'Mobile Companion'}
+                        >
+                            <Smartphone className="h-4 w-4" />
                         </button>
                     )}
 

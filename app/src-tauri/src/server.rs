@@ -1,7 +1,10 @@
+use crate::account_manager::AccountManager;
 use crate::commands::share::ShareStore;
 use crate::commands::utils::resolve_peer;
 use crate::commands::TelegramState;
+use crate::web_auth::WebAuthState;
 use actix_cors::Cors;
+use tauri::Emitter as _;
 use actix_web::{
     cookie::{time::Duration as CookieDuration, Cookie, SameSite},
     get,
@@ -12,6 +15,8 @@ use actix_web::{
 use grammers_client::types::Media;
 
 use std::sync::Arc;
+
+const WEB_APP_HTML: &str = include_str!("web_app.html");
 
 /// Holds the per-session streaming token for Actix validation
 pub struct StreamTokenData {
@@ -406,17 +411,271 @@ fn mime_type_from_media(media: &Media) -> String {
     }
 }
 
+// ── Web companion routes ──────────────────────────────────────────────────────
+
+/// Extract the web token from the X-Web-Token header or `?t=` query param.
+fn get_web_token(req: &HttpRequest) -> String {
+    if let Some(h) = req.headers().get("X-Web-Token") {
+        if let Ok(s) = h.to_str() {
+            return s.to_string();
+        }
+    }
+    // Fall back to query parameter ?t=
+    if let Some(qs) = req.uri().query() {
+        for pair in qs.split('&') {
+            if let Some(v) = pair.strip_prefix("t=") {
+                return v.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+/// GET /web  — serves the SPA (login + file browser)
+#[get("/web")]
+async fn serve_web_app() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .insert_header(("Cache-Control", "no-store"))
+        .body(WEB_APP_HTML)
+}
+
+/// POST /web/auth  body: {"pin":"123456"}  → {"token":"..."}
+#[post("/web/auth")]
+async fn handle_web_auth(
+    body: web::Bytes,
+    auth_state: web::Data<Arc<WebAuthState>>,
+) -> HttpResponse {
+    #[derive(serde::Deserialize)]
+    struct PinBody { pin: String }
+    let parsed: PinBody = match serde_json::from_slice(&body) {
+        Ok(p) => p,
+        Err(_) => return HttpResponse::BadRequest().body("Invalid JSON"),
+    };
+    if !auth_state.has_pin() {
+        let token = auth_state.generate_token();
+        return HttpResponse::Ok().json(serde_json::json!({ "token": token }));
+    }
+    if auth_state.verify_pin(&parsed.pin) {
+        let token = auth_state.generate_token();
+        HttpResponse::Ok().json(serde_json::json!({ "token": token }))
+    } else {
+        HttpResponse::Unauthorized().json(serde_json::json!({ "error": "Wrong PIN" }))
+    }
+}
+
+/// GET /web/api/folders  — returns folders from the persisted index JSON
+#[get("/web/api/folders")]
+async fn web_api_folders(
+    req: HttpRequest,
+    auth_state: web::Data<Arc<WebAuthState>>,
+    acct_mgr: web::Data<Arc<AccountManager>>,
+) -> HttpResponse {
+    if !auth_state.is_authorized(&get_web_token(&req)) {
+        return HttpResponse::Unauthorized().json(serde_json::json!({"error":"auth"}));
+    }
+    let folders = read_index_folders(&acct_mgr);
+    HttpResponse::Ok().json(folders)
+}
+
+/// GET /web/api/files/{folder_key}  — returns files for a folder
+#[get("/web/api/files/{folder_key}")]
+async fn web_api_files(
+    req: HttpRequest,
+    path: web::Path<String>,
+    auth_state: web::Data<Arc<WebAuthState>>,
+    acct_mgr: web::Data<Arc<AccountManager>>,
+) -> HttpResponse {
+    if !auth_state.is_authorized(&get_web_token(&req)) {
+        return HttpResponse::Unauthorized().json(serde_json::json!({"error":"auth"}));
+    }
+    let folder_key = path.into_inner();
+    let files = read_index_files(&acct_mgr, &folder_key);
+    HttpResponse::Ok().json(files)
+}
+
+/// GET /web/api/thumbnail/{folder_key}/{msg_id}?t=TOKEN
+/// Serves the cached thumbnail PNG if available.
+#[get("/web/api/thumbnail/{folder_key}/{msg_id}")]
+async fn web_api_thumbnail(
+    req: HttpRequest,
+    path: web::Path<(String, i32)>,
+    auth_state: web::Data<Arc<WebAuthState>>,
+    acct_mgr: web::Data<Arc<AccountManager>>,
+) -> HttpResponse {
+    if !auth_state.is_authorized(&get_web_token(&req)) {
+        return HttpResponse::Unauthorized().finish();
+    }
+    let (folder_key, msg_id) = path.into_inner();
+    // Thumbnails are stored in app_data_dir/thumbnails/{folder_key}_{msg_id}.png
+    // AccountManager gives us the accounts dir; thumbnails are in the parent app_data_dir
+    if let Some(thumb_dir) = acct_mgr.accounts_dir.parent().map(|p| p.join("thumbnails")) {
+        let thumb_path = thumb_dir.join(format!("{}_{}.png", folder_key, msg_id));
+        if let Ok(bytes) = std::fs::read(&thumb_path) {
+            return HttpResponse::Ok()
+                .content_type("image/png")
+                .insert_header(("Cache-Control", "private, max-age=3600"))
+                .body(bytes);
+        }
+    }
+    HttpResponse::NotFound().finish()
+}
+
+/// GET /web/api/stream/{folder_key}/{msg_id}?t=TOKEN  — authenticated stream proxy
+#[get("/web/api/stream/{folder_key}/{msg_id}")]
+async fn web_api_stream(
+    req: HttpRequest,
+    path: web::Path<(String, i32)>,
+    auth_state: web::Data<Arc<WebAuthState>>,
+    data: web::Data<Arc<TelegramState>>,
+) -> HttpResponse {
+    if !auth_state.is_authorized(&get_web_token(&req)) {
+        return HttpResponse::Unauthorized().finish();
+    }
+
+    let (folder_key, message_id) = path.into_inner();
+    let folder_id = parse_folder_key(&folder_key);
+
+    let client_opt = { data.client.lock().await.clone() };
+    let client = match client_opt {
+        Some(c) => c,
+        None => return HttpResponse::ServiceUnavailable().body("Not connected"),
+    };
+
+    let peer = match resolve_peer(&client, folder_id, &data).await {
+        Ok(p) => p,
+        Err(e) => return HttpResponse::BadRequest().body(e),
+    };
+
+    let messages = match client.get_messages_by_id(&peer, &[message_id]).await {
+        Ok(m) => m,
+        Err(e) => return HttpResponse::InternalServerError().body(e.to_string()),
+    };
+
+    if let Some(Some(msg)) = messages.first() {
+        if let Some(media) = msg.media() {
+            let size = match &media { Media::Document(d) => d.size(), _ => 0 };
+            let mime = mime_type_from_media(&media);
+            let filename = match &media {
+                Media::Document(d) => d.name().to_string(),
+                _ => "file".to_string(),
+            };
+            let disposition = format!("attachment; filename=\"{}\"", filename.replace('"', "'"));
+            let mut dl = client.iter_download(&media);
+            let stream = async_stream::stream! {
+                while let Some(chunk) = dl.next().await.transpose() {
+                    match chunk {
+                        Ok(bytes) => yield Ok::<_, actix_web::Error>(web::Bytes::from(bytes)),
+                        Err(_) => break,
+                    }
+                }
+            };
+            return HttpResponse::Ok()
+                .content_type(mime)
+                .insert_header(("Content-Disposition", disposition))
+                .insert_header((header::CONTENT_LENGTH, size.to_string()))
+                .insert_header(("Cache-Control", "private, max-age=60"))
+                .streaming(stream);
+        }
+    }
+    HttpResponse::NotFound().body("File not found")
+}
+
+/// POST /web/api/upload/{folder_key}?t=TOKEN
+/// Receives file bytes in body, saves to temp, emits event to desktop for upload.
+#[post("/web/api/upload/{folder_key}")]
+async fn web_api_upload(
+    req: HttpRequest,
+    path: web::Path<String>,
+    body: web::Bytes,
+    auth_state: web::Data<Arc<WebAuthState>>,
+    app_handle: web::Data<tauri::AppHandle>,
+) -> HttpResponse {
+    if !auth_state.is_authorized(&get_web_token(&req)) {
+        return HttpResponse::Unauthorized().finish();
+    }
+
+    let folder_key = path.into_inner();
+    let folder_id: Option<i64> = if folder_key == "home" { None } else { folder_key.parse().ok() };
+
+    let filename = req
+        .headers()
+        .get("X-Filename")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| urlencoding::decode(s).ok().map(|d| d.into_owned()))
+        .unwrap_or_else(|| "upload.bin".to_string());
+
+    // Sanitize filename
+    let safe_name: String = filename.chars()
+        .filter(|c| !matches!(c, '/' | '\\' | '\0'))
+        .collect();
+    let safe_name = if safe_name.is_empty() { "upload.bin".to_string() } else { safe_name };
+
+    // Save to temp
+    let ext = std::path::Path::new(&safe_name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("bin");
+    let tmp_name = format!("sdweb_{}_{}.{}", rand_u32(), chrono::Utc::now().timestamp_millis(), ext);
+    let temp_path = std::env::temp_dir().join(&tmp_name);
+
+    if let Err(e) = std::fs::write(&temp_path, &body) {
+        return HttpResponse::InternalServerError().body(format!("Save failed: {}", e));
+    }
+
+    // Emit event to the Tauri frontend to pick up the file and queue it for upload
+    let payload = serde_json::json!({
+        "path": temp_path.to_string_lossy(),
+        "filename": safe_name,
+        "folderId": folder_id,
+    });
+    let _ = app_handle.get_ref().emit("web-upload-pending", payload);
+
+    HttpResponse::Ok().json(serde_json::json!({ "status": "queued", "filename": safe_name }))
+}
+
+// ── Index JSON helpers ────────────────────────────────────────────────────────
+
+fn read_index_folders(acct_mgr: &AccountManager) -> serde_json::Value {
+    let raw = std::fs::read_to_string(acct_mgr.index_path()).unwrap_or_default();
+    let data: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+    data.get("folders").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+}
+
+fn read_index_files(acct_mgr: &AccountManager, folder_key: &str) -> serde_json::Value {
+    let raw = std::fs::read_to_string(acct_mgr.index_path()).unwrap_or_default();
+    let data: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+    let fmap = data.get("files_by_folder").and_then(|m| m.as_object()).cloned().unwrap_or_default();
+    let entry = fmap.get(folder_key).cloned().unwrap_or_default();
+    entry.get("items").cloned().unwrap_or(serde_json::Value::Array(vec![]))
+}
+
+fn parse_folder_key(key: &str) -> Option<i64> {
+    if key == "home" || key == "null" || key == "me" { None } else { key.parse::<i64>().ok() }
+}
+
+fn rand_u32() -> u32 {
+    use rand::Rng;
+    rand::thread_rng().gen()
+}
+
 pub async fn start_server(
     state: Arc<TelegramState>,
     share_store: Arc<ShareStore>,
+    web_auth: Arc<WebAuthState>,
+    account_manager: Arc<AccountManager>,
+    app_handle: tauri::AppHandle,
     port: u16,
     token: String,
 ) -> std::io::Result<actix_web::dev::Server> {
     let state_data = web::Data::new(state);
     let token_data = web::Data::new(StreamTokenData { token });
     let share_data = web::Data::new(share_store);
+    let web_auth_data = web::Data::new(web_auth);
+    let acct_data = web::Data::new(account_manager);
+    let app_handle_data = web::Data::new(app_handle);
 
-    log::info!("Starting Streaming Server on port {}", port);
+    log::info!("Starting Streaming + Web companion server on port {}", port);
 
     let server = HttpServer::new(move || {
         let cors = Cors::default()
@@ -431,16 +690,29 @@ pub async fn start_server(
             .wrap(cors)
             .wrap(
                 DefaultHeaders::new()
-                    .add(("X-Frame-Options", "DENY"))
+                    .add(("X-Frame-Options", "SAMEORIGIN"))
                     .add(("X-Content-Type-Options", "nosniff"))
-                    .add(("Referrer-Policy", "no-referrer")),
+                    .add(("Referrer-Policy", "same-origin")),
             )
             .app_data(state_data.clone())
             .app_data(token_data.clone())
             .app_data(share_data.clone())
+            .app_data(web_auth_data.clone())
+            .app_data(acct_data.clone())
+            .app_data(app_handle_data.clone())
+            // Streaming
             .service(stream_media)
+            // Share
             .service(share_file)
             .service(authorize_share_file)
+            // Web companion
+            .service(serve_web_app)
+            .service(handle_web_auth)
+            .service(web_api_folders)
+            .service(web_api_files)
+            .service(web_api_thumbnail)
+            .service(web_api_stream)
+            .service(web_api_upload)
     })
     .bind(("0.0.0.0", port))?
     .run();
