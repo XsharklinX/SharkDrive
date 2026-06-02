@@ -3,6 +3,7 @@ pub mod commands;
 pub mod index_store;
 pub mod models;
 pub mod server;
+pub mod sync_log;
 
 use commands::automation::AutomationState;
 use commands::backup::{start_watching, BackupState};
@@ -12,6 +13,7 @@ use commands::share::ShareStore;
 use commands::streaming::StreamToken;
 use commands::TelegramState;
 use index_store::PersistentIndexState;
+use sync_log::SyncLog;
 use rand::Rng;
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -117,6 +119,8 @@ pub fn run() {
             app.manage(PersistentIndexState::new(
                 app_data_dir.join("persistent_index.json"),
             ));
+            let sync_log = Arc::new(SyncLog::new(app_data_dir.join("sync_log.json")));
+            app.manage(sync_log);
 
             if let Some(window) = app.get_webview_window("main") {
                 if let Some(icon) = app.default_window_icon() {
@@ -294,6 +298,14 @@ pub fn run() {
             commands::cmd_get_cached_files,
             commands::cmd_get_cached_folders,
             commands::cmd_get_files_paged,
+            commands::cmd_extract_zip,
+            commands::cmd_compress_image,
+            // v3.2 — Historial & Versiones
+            commands::cmd_restore_version,
+            commands::cmd_record_sync_session,
+            commands::cmd_get_sync_history,
+            commands::cmd_find_duplicates,
+            commands::cmd_export_activity_log,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

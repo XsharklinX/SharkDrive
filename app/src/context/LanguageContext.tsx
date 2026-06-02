@@ -150,6 +150,18 @@ const translations = {
         copy: 'Copy',
         bulkDownload: 'Download',
         bulkDelete: 'Delete',
+        // v3.2 — Historial & Versiones
+        versionHistory: 'Version history',
+        current: 'Current',
+        restore: 'Restore',
+        versionHistoryHint: 'Restoring creates a new copy at the top. The original stays in history.',
+        syncHistory: 'Sync History',
+        noSyncHistory: 'No sync history yet',
+        duplicates: 'Duplicates',
+        noDuplicates: 'No duplicates found',
+        rescan: 'Rescan',
+        exportActivity: 'Export activity',
+        extractZip: 'Extract here',
     },
     es: {
         savedMessages: 'Mensajes Guardados',
@@ -289,6 +301,18 @@ const translations = {
         copy: 'Copiar',
         bulkDownload: 'Descargar',
         bulkDelete: 'Eliminar',
+        // v3.2
+        versionHistory: 'Historial de versiones',
+        current: 'Actual',
+        restore: 'Restaurar',
+        versionHistoryHint: 'Restaurar crea una copia nueva al frente. El original permanece en el historial.',
+        syncHistory: 'Historial de Sincronización',
+        noSyncHistory: 'Aún no hay historial de sync',
+        duplicates: 'Duplicados',
+        noDuplicates: 'No se encontraron duplicados',
+        rescan: 'Re-escanear',
+        exportActivity: 'Exportar actividad',
+        extractZip: 'Extraer aquí',
     },
 } as const;
 

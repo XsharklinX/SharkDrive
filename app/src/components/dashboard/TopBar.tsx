@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare } from 'lucide-react';
+import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare, RefreshCw, GitFork } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -25,6 +25,10 @@ interface TopBarProps {
     showFolderSearchScope?: boolean;
     searchCurrentFolderOnly: boolean;
     onSearchCurrentFolderOnlyChange: (enabled: boolean) => void;
+    contentSearchEnabled?: boolean;
+    onToggleContentSearch?: () => void;
+    contentSearchScanning?: boolean;
+    contentSearchMatchCount?: number;
     showFavoritesOnly: boolean;
     onToggleFavoritesFilter: () => void;
     favoriteCount: number;
@@ -33,6 +37,8 @@ interface TopBarProps {
     onFolderUpload: () => void;
     onOpenSettings: () => void;
     onOpenLinks?: () => void;
+    onOpenSyncHistory?: () => void;
+    onOpenDuplicates?: () => void;
     nextSyncIn?: number | null;
     queuedUploadCount: number;
     uploadingCount: number;
@@ -64,6 +70,10 @@ export function TopBar({
     showFolderSearchScope = false,
     searchCurrentFolderOnly,
     onSearchCurrentFolderOnlyChange,
+    contentSearchEnabled = false,
+    onToggleContentSearch,
+    contentSearchScanning = false,
+    contentSearchMatchCount = 0,
     showFavoritesOnly,
     onToggleFavoritesFilter,
     favoriteCount,
@@ -72,6 +82,8 @@ export function TopBar({
     onFolderUpload,
     onOpenSettings,
     onOpenLinks,
+    onOpenSyncHistory,
+    onOpenDuplicates,
     nextSyncIn,
     queuedUploadCount,
     uploadingCount,
@@ -184,6 +196,26 @@ export function TopBar({
                         </button>
                     )}
 
+                    {onOpenSyncHistory && (
+                        <button
+                            onClick={onOpenSyncHistory}
+                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
+                            title={lang === 'es' ? 'Historial de sync' : 'Sync History'}
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                        </button>
+                    )}
+
+                    {onOpenDuplicates && (
+                        <button
+                            onClick={onOpenDuplicates}
+                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
+                            title={lang === 'es' ? 'Duplicados' : 'Find Duplicates'}
+                        >
+                            <GitFork className="h-4 w-4" />
+                        </button>
+                    )}
+
                     <button
                         onClick={onOpenSettings}
                         className="relative rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
@@ -258,6 +290,27 @@ export function TopBar({
                                 className="accent-telegram-primary"
                             />
                             {t('searchOnlyThisFolder')}
+                        </label>
+                    )}
+                    {onToggleContentSearch && (
+                        <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-2 px-1 text-xs text-telegram-subtext transition hover:text-telegram-text">
+                            <input
+                                type="checkbox"
+                                checked={contentSearchEnabled}
+                                onChange={onToggleContentSearch}
+                                className="accent-telegram-primary"
+                            />
+                            <span className="flex items-center gap-1">
+                                {lang === 'es' ? 'Buscar en contenido' : 'Search in content'}
+                                {contentSearchScanning && (
+                                    <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-telegram-primary/40 border-t-telegram-primary" />
+                                )}
+                                {!contentSearchScanning && contentSearchEnabled && contentSearchMatchCount > 0 && (
+                                    <span className="rounded-full bg-telegram-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-telegram-primary">
+                                        {contentSearchMatchCount}
+                                    </span>
+                                )}
+                            </span>
                         </label>
                     )}
                 </div>

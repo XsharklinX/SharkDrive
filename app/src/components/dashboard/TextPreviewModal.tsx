@@ -10,7 +10,7 @@ interface TextPreviewModalProps {
     onClose: () => void;
 }
 
-type TextMode = 'plain' | 'json' | 'csv' | 'md';
+type TextMode = 'plain' | 'json' | 'csv' | 'md' | 'xml' | 'svg';
 
 const MAX_CHARS = 200_000;
 
@@ -19,6 +19,8 @@ function detectMode(name: string): TextMode {
     if (lower.endsWith('.json')) return 'json';
     if (lower.endsWith('.csv')) return 'csv';
     if (lower.endsWith('.md') || lower.endsWith('.markdown')) return 'md';
+    if (lower.endsWith('.svg')) return 'svg';
+    if (lower.endsWith('.xml') || lower.endsWith('.html') || lower.endsWith('.htm')) return 'xml';
     return 'plain';
 }
 
@@ -195,6 +197,23 @@ export function TextPreviewModal({ file, activeFolderId, onClose }: TextPreviewM
                             {mode === 'json' && <JsonView raw={content} />}
                             {mode === 'csv'  && <CsvView  raw={content} />}
                             {mode === 'md'   && <MarkdownView raw={content} />}
+                            {mode === 'svg'  && (
+                                <div className="flex items-center justify-center rounded-lg bg-white/[0.03] p-4">
+                                    <div
+                                        className="max-h-[60vh] max-w-full"
+                                        dangerouslySetInnerHTML={{
+                                            __html: content
+                                                .replace(/<script[\s\S]*?<\/script>/gi, '')
+                                                .replace(/on\w+="[^"]*"/gi, '')
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            {mode === 'xml' && (
+                                <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-emerald-300/90">
+                                    {content}
+                                </pre>
+                            )}
                             {mode === 'plain' && (
                                 <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-telegram-text/90">
                                     {content}

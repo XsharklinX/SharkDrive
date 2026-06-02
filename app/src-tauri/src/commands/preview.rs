@@ -899,6 +899,58 @@ pub async fn cmd_get_book_card_data(
     Ok(data)
 }
 
+/// Resize and compress a local image file.
+/// Returns the path to the compressed file (a temp file the caller must clean up).
+/// `quality` is 1–100 for JPEG; for PNG the image is losslessly resized only.
+/// `max_dimension` caps the largest side in pixels (0 = no resize, only re-encode).
+#[tauri::command]
+pub fn cmd_compress_image(
+    path: String,
+    quality: u8,
+    max_dimension: u32,
+) -> Result<String, String> {
+    let src = std::path::Path::new(&path);
+    let img = image::open(src).map_err(|e| format!("Cannot open image: {}", e))?;
+
+    let img = if max_dimension > 0 {
+        let (w, h) = (img.width(), img.height());
+        if w > max_dimension || h > max_dimension {
+            img.thumbnail(max_dimension, max_dimension)
+        } else {
+            img
+        }
+    } else {
+        img
+    };
+
+    // Determine output format from extension; default to JPEG for compression
+    let lower = path.to_lowercase();
+    let is_png = lower.ends_with(".png");
+    let ext = if is_png { "png" } else { "jpg" };
+
+    let temp_path = std::env::temp_dir().join(format!(
+        "sharkdrive_compressed_{}.{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0),
+        ext
+    ));
+
+    if is_png {
+        img.save_with_format(&temp_path, ImageFormat::Png)
+            .map_err(|e| format!("PNG save failed: {}", e))?;
+    } else {
+        let mut output = std::fs::File::create(&temp_path)
+            .map_err(|e| format!("Cannot create temp file: {}", e))?;
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, quality);
+        img.write_with_encoder(encoder)
+            .map_err(|e| format!("JPEG encode failed: {}", e))?;
+    }
+
+    Ok(temp_path.to_string_lossy().to_string())
+}
+
 fn folder_cache_key(folder_id: Option<i64>) -> String {
     folder_id
         .map(|id| id.to_string())

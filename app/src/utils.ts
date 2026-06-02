@@ -21,7 +21,13 @@ const endsWithAny = (name: string, exts: readonly string[]) => {
     return exts.some(ext => lower.endsWith(ext));
 };
 
-export const isTextPreviewFile = (name: string) => /\.(txt|md|markdown|csv|json)$/i.test(name);
+export const isTextPreviewFile = (name: string) =>
+    /\.(txt|md|markdown|csv|json|log|xml|yaml|yml|toml|ini|env|sh|bat|py|js|ts|html|css|sql|gitignore|editorconfig|htaccess)$/i.test(name)
+    || name.toLowerCase() === 'dockerfile'
+    || name.toLowerCase() === 'makefile'
+    || name.toLowerCase() === 'readme';
+
+export const isSvgFile = (name: string) => /\.svg$/i.test(name);
 export const isMediaFile   = (name: string) => endsWithAny(name, MEDIA_EXTENSIONS);
 export const isVideoFile   = (name: string) => endsWithAny(name, VIDEO_EXTENSIONS);
 export const isAudioFile   = (name: string) => endsWithAny(name, AUDIO_EXTENSIONS);

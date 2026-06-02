@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { AutomationConfig, BandwidthStats, BookCardData, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../types';
+import type { ActivityEntry, AutomationConfig, BandwidthStats, BookCardData, CleanupRule, DuplicateGroup, ShareLinkInfo, SyncSession, TelegramFile, TelegramFolder } from '../types';
 
 type FileRecord = TelegramFile;
 let streamTokenPromise: Promise<string> | null = null;
@@ -158,6 +158,12 @@ export const tauriApi = {
     getCachedFiles(folderId: number | null) {
         return invoke<TelegramFile[]>('cmd_get_cached_files', { folderId });
     },
+    extractZip(messageId: number, folderId: number | null, destDir: string) {
+        return invoke<string[]>('cmd_extract_zip', { messageId, folderId, destDir });
+    },
+    compressImage(path: string, quality: number, maxDimension: number) {
+        return invoke<string>('cmd_compress_image', { path, quality, maxDimension });
+    },
     getFilesPaged(folderId: number | null, offsetId: number, limit: number) {
         return invoke<{ files: TelegramFile[]; next_offset_id: number | null; has_more: boolean }>(
             'cmd_get_files_paged', { folderId, offsetId, limit }
@@ -183,5 +189,44 @@ export const tauriApi = {
     },
     getDueCleanupFiles() {
         return invoke<TelegramFile[]>('cmd_get_due_cleanup_files');
+    },
+
+    // ── v3.2 — Historial & Versiones ────────────────────────────────────────
+    restoreVersion(messageId: number, folderId: number | null) {
+        return invoke<boolean>('cmd_restore_version', { messageId, folderId });
+    },
+    recordSyncSession(input: {
+        folderId: number | null;
+        folderName: string;
+        startedAtMs: number;
+        completedAtMs: number;
+        filesTotal: number;
+        filesAdded: string[];
+        filesRemoved: string[];
+    }) {
+        return invoke<void>('cmd_record_sync_session', {
+            input: {
+                folder_id: input.folderId,
+                folder_name: input.folderName,
+                started_at_ms: input.startedAtMs,
+                completed_at_ms: input.completedAtMs,
+                files_total: input.filesTotal,
+                files_added: input.filesAdded,
+                files_removed: input.filesRemoved,
+            },
+        });
+    },
+    getSyncHistory(limit?: number) {
+        return invoke<SyncSession[]>('cmd_get_sync_history', { limit });
+    },
+    findDuplicates() {
+        return invoke<DuplicateGroup[]>('cmd_find_duplicates');
+    },
+    exportActivityLog(entries: ActivityEntry[], format: 'csv' | 'json', savePath: string) {
+        return invoke<void>('cmd_export_activity_log', {
+            entriesJson: JSON.stringify(entries),
+            format,
+            savePath,
+        });
     },
 };

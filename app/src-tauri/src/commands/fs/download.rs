@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read as _, Write};
 
 use grammers_client::types::Media;
 use tauri::{Emitter, State};
@@ -302,4 +302,67 @@ pub async fn cmd_download_files_zip(
     })?;
 
     Ok(save_path)
+}
+
+/// Download a .zip file from Telegram and extract its contents to `dest_dir`.
+/// Returns the list of extracted file paths.
+#[tauri::command]
+pub async fn cmd_extract_zip(
+    message_id: i32,
+    folder_id: Option<i64>,
+    dest_dir: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, TelegramState>,
+    bw_state: State<'_, BandwidthManager>,
+    enc_state: State<'_, EncryptionState>,
+) -> Result<Vec<String>, String> {
+    // Download the zip to a temp file
+    let temp_dir = std::env::temp_dir();
+    let temp_zip = temp_dir.join(format!("sharkdrive_extract_{}.zip", message_id));
+    let temp_zip_str = temp_zip.to_string_lossy().to_string();
+
+    download_message_to_path(
+        message_id,
+        &temp_zip_str,
+        folder_id,
+        &app_handle,
+        &state,
+        &bw_state,
+        &enc_state,
+        None,
+    )
+    .await?;
+
+    // Extract
+    let dest = std::path::Path::new(&dest_dir);
+    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+
+    let zip_file = std::fs::File::open(&temp_zip).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
+    let mut extracted: Vec<String> = Vec::new();
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+        let entry_name = entry.name().replace('\\', "/");
+        // Skip macOS metadata entries
+        if entry_name.starts_with("__MACOSX") || entry_name.contains("/.") {
+            continue;
+        }
+        let out_path = dest.join(&entry_name);
+        if entry_name.ends_with('/') {
+            std::fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(parent) = out_path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            let mut out_file = std::fs::File::create(&out_path).map_err(|e| e.to_string())?;
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+            out_file.write_all(&buf).map_err(|e| e.to_string())?;
+            extracted.push(out_path.to_string_lossy().to_string());
+        }
+    }
+
+    let _ = std::fs::remove_file(temp_zip);
+    Ok(extracted)
 }

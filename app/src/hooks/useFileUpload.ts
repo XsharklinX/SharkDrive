@@ -260,18 +260,24 @@ export function useFileUpload(
         return { queuedCount: queued.length, skippedCount: skippedNames.length };
     }, [activeFolderId, encryptByDefault, folderNameResolver, onActivity, uploadQueue]);
 
-    const handleManualUpload = async (encryptOverride?: boolean) => {
+    /** Open file dialog and return selected paths without queuing — caller decides what to do. */
+    const selectFilesOnly = async (): Promise<string[]> => {
         try {
             const selected = await open({ multiple: true, directory: false });
-            if (selected) {
-                const paths = Array.isArray(selected) ? selected : [selected];
-                const result = queueUploadCandidates(paths.map((path: string) => ({ path, encrypt: encryptOverride })));
-                if (result.queuedCount > 0) {
-                    toast.info(`Queued ${result.queuedCount} file${result.queuedCount > 1 ? 's' : ''} for upload`);
-                }
-            }
+            if (!selected) return [];
+            return Array.isArray(selected) ? selected : [selected];
         } catch {
             toast.error("Failed to open file dialog");
+            return [];
+        }
+    };
+
+    const handleManualUpload = async (encryptOverride?: boolean) => {
+        const paths = await selectFilesOnly();
+        if (paths.length === 0) return;
+        const result = queueUploadCandidates(paths.map((path: string) => ({ path, encrypt: encryptOverride })));
+        if (result.queuedCount > 0) {
+            toast.info(`Queued ${result.queuedCount} file${result.queuedCount > 1 ? 's' : ''} for upload`);
         }
     };
 
@@ -357,6 +363,7 @@ export function useFileUpload(
     return {
         uploadQueue,
         setUploadQueue,
+        selectFilesOnly,
         handleManualUpload,
         handleFolderUpload,
         handleDroppedFiles,

@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
-import { Check, Folder, FolderOpen, Trash2, Star, Download, Eye, Play, Shield, Info } from 'lucide-react';
+import { Check, Folder, FolderOpen, Trash2, Star, Download, Eye, Play, Shield, Info, StickyNote } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { isImageFile, isVideoFile, resolveFileFolderId } from '../../utils';
@@ -26,6 +26,9 @@ interface FileCardProps {
     onInlineRename?: (id: number, newName: string) => void;
     onInfo?: (file: TelegramFile) => void;
     folderColor?: string;
+    note?: string;
+    onNoteChange?: (note: string) => void;
+    hasContentMatch?: boolean;
 }
 
 function getExtensionLabel(filename: string) {
@@ -59,10 +62,16 @@ export function FileCard({
     onInlineRename,
     onInfo,
     folderColor,
+    note = '',
+    onNoteChange,
+    hasContentMatch = false,
 }: FileCardProps) {
     const isFolder = file.type === 'folder';
     const [isDragOver, setIsDragOver] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
+    const [showNoteEditor, setShowNoteEditor] = useState(false);
+    const [noteDraft, setNoteDraft] = useState(note);
+    const noteRef = useRef<HTMLTextAreaElement>(null);
     const [renameDraft, setRenameDraft] = useState('');
     const renameInputRef = useRef<HTMLInputElement>(null);
     const [thumbnail, setThumbnail] = useState<string | null>(null);
@@ -233,6 +242,11 @@ export function FileCard({
                         Enc
                     </span>
                 )}
+                {hasContentMatch && (
+                    <span className="absolute left-2 top-9 z-10 rounded-md border border-telegram-primary/30 bg-telegram-primary/15 px-1.5 py-0.5 text-[10px] text-telegram-primary">
+                        content
+                    </span>
+                )}
 
                 <div className="absolute inset-0 flex flex-col justify-between p-2">
                     {!thumbnail && !videoReady && (
@@ -354,7 +368,51 @@ export function FileCard({
                             <Info className="h-3.5 w-3.5" />
                         </button>
                     )}
+                    {!isFolder && onNoteChange && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setNoteDraft(note);
+                                setShowNoteEditor(v => !v);
+                                setTimeout(() => noteRef.current?.focus(), 50);
+                            }}
+                            className={`relative rounded-md bg-telegram-bg/90 p-1 transition hover:text-telegram-text ${note ? 'text-telegram-primary' : 'text-telegram-subtext'}`}
+                            title={note ? 'Edit note' : 'Add note'}
+                        >
+                            <StickyNote className="h-3.5 w-3.5" />
+                            {note && <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-telegram-primary" />}
+                        </button>
+                    )}
                 </div>
+
+                {/* Inline note editor */}
+                {showNoteEditor && !isFolder && (
+                    <div
+                        className="absolute bottom-1 left-1 right-1 z-20 rounded-lg border border-telegram-primary/40 bg-telegram-surface/98 p-2 shadow-xl backdrop-blur"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <textarea
+                            ref={noteRef}
+                            value={noteDraft}
+                            onChange={e => setNoteDraft(e.target.value)}
+                            onBlur={() => {
+                                onNoteChange?.(noteDraft.trim());
+                                setShowNoteEditor(false);
+                            }}
+                            onKeyDown={e => {
+                                e.stopPropagation();
+                                if (e.key === 'Escape') { setShowNoteEditor(false); }
+                                if (e.key === 'Enter' && e.ctrlKey) {
+                                    onNoteChange?.(noteDraft.trim());
+                                    setShowNoteEditor(false);
+                                }
+                            }}
+                            placeholder="Add a note… (Ctrl+Enter to save)"
+                            className="w-full resize-none bg-transparent text-[11px] text-telegram-text placeholder:text-telegram-subtext/50 outline-none"
+                            rows={3}
+                        />
+                    </div>
+                )}
             </motion.div>
         </div>
     );

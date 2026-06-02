@@ -697,6 +697,38 @@ pub async fn cmd_export_manifest_json(
     std::fs::write(&save_path, manifest_json).map_err(|e| e.to_string())
 }
 
+/// Export the frontend activity log (passed as JSON) to CSV or JSON on disk.
+#[tauri::command]
+pub async fn cmd_export_activity_log(
+    entries_json: String,
+    format: String,
+    save_path: String,
+) -> Result<(), String> {
+    if format == "json" {
+        return std::fs::write(&save_path, &entries_json).map_err(|e| e.to_string());
+    }
+
+    let entries: Vec<serde_json::Value> =
+        serde_json::from_str(&entries_json).map_err(|e| format!("Invalid entries JSON: {e}"))?;
+
+    let mut csv = "timestamp,type,message,filename,folder_id\n".to_string();
+    for e in &entries {
+        let timestamp = e["timestamp"].as_str().unwrap_or("").replace('"', "'");
+        let etype = e["type"].as_str().unwrap_or("").replace('"', "'");
+        let message = e["message"].as_str().unwrap_or("").replace('"', "\"\"");
+        let filename = e["fileName"].as_str().unwrap_or("").replace('"', "\"\"");
+        let folder_id = e["folderId"]
+            .as_i64()
+            .map(|id| id.to_string())
+            .unwrap_or_default();
+        csv.push_str(&format!(
+            "{},\"{}\",\"{}\",\"{}\",{}\n",
+            timestamp, etype, message, filename, folder_id
+        ));
+    }
+    std::fs::write(&save_path, csv).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn cmd_rename_file(
     message_id: i32,

@@ -23,6 +23,7 @@ interface SettingsModalProps {
     activity: ActivityEntry[];
     shortcuts: KeyboardShortcutMap;
     onShortcutsChange: (shortcuts: KeyboardShortcutMap) => void;
+    onExportActivity?: (format: 'csv' | 'json') => void;
 }
 
 type Tab = 'general' | 'downloads' | 'encryption' | 'backup' | 'sharing' | 'shortcuts' | 'activity';
@@ -63,6 +64,7 @@ export function SettingsModal({
     activity,
     shortcuts,
     onShortcutsChange,
+    onExportActivity,
 }: SettingsModalProps) {
     const [tab, setTab] = useState<Tab>('general');
     const { lang, t } = useLanguage();
@@ -1347,6 +1349,24 @@ export function SettingsModal({
                                         </button>
                                     ))}
                                 </div>
+
+                                {onExportActivity && activity.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-telegram-subtext">{t('exportActivity')}:</span>
+                                        <button
+                                            onClick={() => onExportActivity('csv')}
+                                            className="rounded-lg border border-telegram-border bg-white/[0.04] px-3 py-1 text-xs text-telegram-subtext transition hover:bg-white/[0.08] hover:text-telegram-text"
+                                        >
+                                            CSV
+                                        </button>
+                                        <button
+                                            onClick={() => onExportActivity('json')}
+                                            className="rounded-lg border border-telegram-border bg-white/[0.04] px-3 py-1 text-xs text-telegram-subtext transition hover:bg-white/[0.08] hover:text-telegram-text"
+                                        >
+                                            JSON
+                                        </button>
+                                    </div>
+                                )}
 
                                 {visibleActivity.length === 0 ? (
                                     <p className="py-4 text-center text-xs text-telegram-subtext">No activity recorded yet.</p>

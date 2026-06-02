@@ -4,6 +4,70 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.2.0] - 2026-06-02
+
+### Historial & Versiones
+
+**Historial de versiones**
+- Carpetas con múltiples archivos del mismo nombre ahora muestran "Version history" en el menú contextual
+- `VersionHistoryModal`: vista cronológica de todas las versiones (v1, v2, v3...) con fecha, tamaño y botón de restaurar
+- Restaurar una versión anterior la reenvía al frente del canal (nueva copia en top, original preservado)
+- Versión actual marcada con badge "Current" — sin botón de restaurar
+- Rust: `cmd_restore_version` — forward de mensaje a la misma carpeta vía `forward_messages`
+
+**Historial de sync**
+- `sync_log.rs` — nuevo store que persiste sesiones de sync en `sync_log.json` (max 200 sesiones)
+- Cada refresh de archivos registra automáticamente: folder, timestamp inicio/fin, archivos añadidos/eliminados
+- `SyncHistoryPanel`: lista de sesiones con badges `+N` / `-N`, expandible para ver archivos exactos
+- Accesible desde el botón `RefreshCw` en el TopBar
+- Rust: `cmd_record_sync_session`, `cmd_get_sync_history` con filtro por carpeta
+
+**Comparar duplicados**
+- `cmd_find_duplicates`: escanea el índice local agrupando por `(nombre_lower, tamaño_bytes)` — sin descargar archivos
+- `DuplicatesPanel`: panel con total de bytes desperdiciados, grupos ordenados por mayor desperdicio
+- Cada grupo es expandible — muestra en qué carpeta está cada copia y botón "Delete" para las copias extra
+- La primera copia de cada grupo se marca como "keep" (sin botón eliminar)
+- Accesible desde el botón `GitFork` en el TopBar
+
+**Activity export**
+- `cmd_export_activity_log(entries_json, format, save_path)` — recibe el log del frontend y escribe CSV o JSON
+- En Settings → Activity: botones "CSV" y "JSON" junto a `t('exportActivity')`
+- CSV incluye columnas: timestamp, type, message, filename, folder_id
+- Solo aparece si hay entradas registradas
+
+### Cambios técnicos
+- `sync_log.rs` — nuevo módulo `SyncLog` con `RwLock<SyncLogData>`, persiste como JSON
+- `commands/versions.rs` — `cmd_restore_version`, `cmd_record_sync_session`, `cmd_get_sync_history`
+- `commands/duplicates.rs` — `cmd_find_duplicates` puro (sin red, desde índice local)
+- `commands/fs/files.rs` — `cmd_export_activity_log`
+- `VersionHistoryModal.tsx`, `SyncHistoryPanel.tsx`, `DuplicatesPanel.tsx` — nuevos componentes
+- `ContextMenu.tsx` — prop `onVersionHistory` + icono `History` de lucide-react; `t('extractZip')` para ZIP
+- `FileExplorer.tsx` — prop `onVersionHistory` pasada al ContextMenu
+- `TopBar.tsx` — botones `onOpenSyncHistory` y `onOpenDuplicates`
+- `SettingsModal.tsx` — prop `onExportActivity`, botones CSV/JSON en tab Activity
+- `Dashboard.tsx` — `allFilesRef`/`preSyncInfoRef` para sync recording; `handleVersionHistory`, `handleExportActivity`; renderiza 3 nuevos panels
+- i18n: 11 nuevas claves en EN + ES (`versionHistory`, `current`, `restore`, `versionHistoryHint`, `syncHistory`, `noSyncHistory`, `duplicates`, `noDuplicates`, `rescan`, `exportActivity`, `extractZip`)
+
+---
+
+## [3.1.0] - 2026-05-31
+
+### Archivos & Contenido
+
+- **Preview de tipos adicionales** — `isTextPreviewFile` ahora cubre 20+ extensiones: `.log/.xml/.yaml/.yml/.toml/.ini/.env/.sh/.bat/.py/.js/.ts/.html/.css/.sql` + `Dockerfile` y `Makefile` sin extensión. SVGs se muestran inline con DOMPurify-lite (scripts y event handlers eliminados). XMLs/HTML en verde monoespaciado.
+
+- **Nota rápida inline** — Botón `StickyNote` en el hover overlay de cada FileCard. Click abre un mini `<textarea>` flotante sobre la tarjeta (3 filas). Ctrl+Enter guarda, Escape cancela. Si el archivo tiene nota: el ícono aparece en azul y un punto naranja confirma que hay contenido. Usa `useOrganization.setFileNote` — persiste en el store local.
+
+- **Extracción de ZIP** — `cmd_extract_zip(message_id, folder_id, dest_dir)` en Rust: descarga el ZIP a temp, extrae con `zip::ZipArchive`, crea subdirectorios, ignora entradas `__MACOSX` y archivos ocultos. Retorna lista de rutas extraídas. "Extract here" aparece en el context menu solo para archivos `.zip`. El usuario elige la carpeta destino con un directory picker.
+
+- **Compresión de imágenes** — `cmd_compress_image(path, quality, max_dimension)` en Rust (crate `image`): redimensiona si el lado más largo supera `max_dimension`, re-codifica como JPEG con `JpegEncoder::new_with_quality` o PNG. `ImageCompressDialog`: modal con 3 presets (High 90%, Medium 75%, Low 50%) + sliders manuales de calidad y dimensión máxima. Se muestra automáticamente al subir imágenes. Puede subir el original sin comprimir.
+
+- **Búsqueda en contenido** — Checkbox "Search in content" debajo del campo de búsqueda (visible cuando `searchTerm.length >= 3`). `useContentSearch` hook: fetch paralelo del contenido de hasta 30 archivos de texto visibles vía LAN stream (timeout 5s por archivo, máximo 500 KB por archivo). Files con matches muestran badge "content" en la tarjeta. Contador de matches junto al checkbox. Spinner mientras escanea.
+
+- **Vista de árbol de carpetas** ✅ ya existía — Sidebar renderiza jerarquía con indentación.
+
+---
+
 ## [3.0.0] - 2026-05-31
 
 ### Pulido & Estabilidad

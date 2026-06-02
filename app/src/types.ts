@@ -94,6 +94,27 @@ export interface ActivityEntry {
     folderId?: number | null;
 }
 
+// ── v3.2 types ────────────────────────────────────────────────────────────────
+
+export interface SyncSession {
+    id: string;
+    folder_id: number | null;
+    folder_name: string;
+    started_at_ms: number;
+    completed_at_ms: number;
+    files_total: number;
+    files_added: string[];
+    files_removed: string[];
+}
+
+export interface DuplicateGroup {
+    display_key: string;
+    files: TelegramFile[];
+    wasted_bytes: number;
+}
+
+// ── Share ─────────────────────────────────────────────────────────────────────
+
 export interface ShareLinkInfo {
     token: string;
     file_id: number;

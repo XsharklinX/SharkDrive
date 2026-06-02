@@ -64,6 +64,8 @@ interface FileExplorerProps {
     onDuplicate?: (file: TelegramFile) => void;
     onBatchRename?: (files: TelegramFile[]) => void;
     onInfo?: (file: TelegramFile) => void;
+    onExtractZip?: (file: TelegramFile) => void;
+    onVersionHistory?: (file: TelegramFile) => void;
     availableTags?: string[];
     activeTag?: string | null;
     onTagFilterChange?: (tag: string | null) => void;
@@ -71,6 +73,9 @@ interface FileExplorerProps {
     hasMore?: boolean;
     isLoadingMore?: boolean;
     onLoadMore?: () => void;
+    getFileNote?: (file: TelegramFile) => string;
+    onFileNoteChange?: (file: TelegramFile, note: string) => void;
+    contentMatchIds?: Set<number>;
 }
 
 function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
@@ -120,9 +125,11 @@ export function FileExplorer({
     files, loading, error, viewMode, setViewMode, selectedIds, selectionMode, activeFolderId,
     onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onToggleSelection, onDrop, onDragStart, onDragEnd,
     favoriteIds, onToggleFavorite, onRename, onInlineRename, onShareLink, onCopyToFolder, onOpenFolder, onSelectVisible,
-    onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo,
+    onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo, onExtractZip, onVersionHistory,
     availableTags = [], activeTag = null, onTagFilterChange, getFolderColor,
     hasMore = false, isLoadingMore = false, onLoadMore,
+    getFileNote, onFileNoteChange,
+    contentMatchIds,
 }: FileExplorerProps) {
     const { lang, t } = useLanguage();
     const getFilterLabel = (type: FilterType) => {
@@ -538,6 +545,9 @@ export function FileExplorer({
                                             onInlineRename={onInlineRename ? (_id, name) => onInlineRename(item, name) : undefined}
                                             onInfo={onInfo}
                                             folderColor={item.type === 'folder' ? getFolderColor?.(item.id) : undefined}
+                                            note={getFileNote?.(item) ?? ''}
+                                            onNoteChange={onFileNoteChange ? (n) => onFileNoteChange(item, n) : undefined}
+                                            hasContentMatch={contentMatchIds?.has(item.id) ?? false}
                                         />
                                     );
                                 })}
@@ -633,6 +643,14 @@ export function FileExplorer({
                     } : undefined}
                     onInfo={contextMenu.file.type !== 'folder' && onInfo ? () => {
                         onInfo(contextMenu.file);
+                        setContextMenu(null);
+                    } : undefined}
+                    onExtractZip={contextMenu.file.type !== 'folder' && onExtractZip ? () => {
+                        onExtractZip(contextMenu.file);
+                        setContextMenu(null);
+                    } : undefined}
+                    onVersionHistory={contextMenu.file.type !== 'folder' && onVersionHistory ? () => {
+                        onVersionHistory(contextMenu.file);
                         setContextMenu(null);
                     } : undefined}
                 />

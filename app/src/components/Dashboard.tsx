@@ -6,7 +6,7 @@ import { save, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 
 import { TelegramFile } from '../types';
-import { formatBytes, resolveFileFolderId, isTextPreviewFile } from '../utils';
+import { formatBytes, resolveFileFolderId, isTextPreviewFile, isSvgFile, isImageFile } from '../utils';
 import { tauriApi } from '../api/tauri';
 
 // Components
@@ -33,10 +33,14 @@ import { BackupConflictDialog } from './dashboard/BackupConflictDialog';
 import { TextPreviewModal } from './dashboard/TextPreviewModal';
 import { FileInfoPanel } from './dashboard/FileInfoPanel';
 import { KeyboardShortcutsOverlay } from './dashboard/KeyboardShortcutsOverlay';
+import { ImageCompressDialog } from './dashboard/ImageCompressDialog';
 import { OnboardingWizard } from './dashboard/OnboardingWizard';
 import { ErrorBoundary } from './ErrorBoundary';
 import { VaultLockScreen } from './dashboard/VaultLockScreen';
 import { FolderStatsModal } from './dashboard/FolderStatsModal';
+import { VersionHistoryModal } from './dashboard/VersionHistoryModal';
+import { SyncHistoryPanel } from './dashboard/SyncHistoryPanel';
+import { DuplicatesPanel } from './dashboard/DuplicatesPanel';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -46,6 +50,7 @@ import { useFileDownload } from '../hooks/useFileDownload';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { usePreviewNavigation } from '../hooks/usePreviewNavigation';
 import { useDashboardSearch } from '../hooks/useDashboardSearch';
+import { useContentSearch } from '../hooks/useContentSearch';
 import { usePagedFiles } from '../hooks/usePagedFiles';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecentFiles } from '../hooks/useRecentFiles';
@@ -78,8 +83,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [renameTarget, setRenameTarget] = useState<TelegramFile | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showVault, setShowVault] = useState(false);
+    const [pendingImagePaths, setPendingImagePaths] = useState<string[] | null>(null);
     const [showLinksDashboard, setShowLinksDashboard] = useState(false);
     const [showShortcutsOverlay, setShowShortcutsOverlay] = useState(false);
+    const [showSyncHistory, setShowSyncHistory] = useState(false);
+    const [showDuplicates, setShowDuplicates] = useState(false);
+    const [versionHistoryFile, setVersionHistoryFile] = useState<TelegramFile | null>(null);
     const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('sharkdrive.onboarding.v1') !== 'complete');
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
     const [textPreviewFile, setTextPreviewFile] = useState<TelegramFile | null>(null);
@@ -92,10 +101,15 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [vaultUiLocked, setVaultUiLocked] = useState(false);
     const [activeSmartCollectionId, setActiveSmartCollectionId] = useState<SmartCollectionId | null>(null);
     const [searchCurrentFolderOnly, setSearchCurrentFolderOnly] = useState(false);
+    const [contentSearchEnabled, setContentSearchEnabled] = useState(false);
     const [statsFolderId, setStatsFolderId] = useState<number | null>(null);
     const cleanupReviewedRef = useRef(false);
     const previousSyncingRef = useRef(false);
     const syncFoldersRef = useRef(handleSyncFolders);
+    // Always-current refs used by sync history recording
+    const allFilesRef = useRef<TelegramFile[]>([]);
+    const currentFolderNameRef = useRef<string>('Saved Messages');
+    const preSyncInfoRef = useRef<{ folderId: number | null; names: Set<string>; startMs: number } | null>(null);
     syncFoldersRef.current = handleSyncFolders;
     const handleManualUploadRef = useRef<(encrypted?: boolean) => void>(() => {});
     const renameHistoryRef = useRef<Array<{
@@ -353,6 +367,12 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     // Version counter — increment to trigger a page-1 reload from Telegram
     const [fileVersion, setFileVersion] = useState(0);
     const refreshFiles = useCallback(() => {
+        // Capture pre-refresh state for sync history recording
+        preSyncInfoRef.current = {
+            folderId: activeFolderId,
+            names: new Set(allFilesRef.current.filter(f => f.type !== 'folder').map(f => f.name)),
+            startMs: Date.now(),
+        };
         setFileVersion(v => v + 1);
         queryClient.invalidateQueries({ queryKey: ['cached-files', activeFolderId] });
         queryClient.invalidateQueries({ queryKey: ['all-indexed-files'] });
@@ -366,6 +386,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         fileVersion,
     );
     const allFiles = pagedFiles.files;
+    allFilesRef.current = allFiles;
     const isLoading = pagedFiles.isLoadingFirst && allFiles.length === 0;
     const error = pagedFiles.error ? new Error(pagedFiles.error) : null;
 
@@ -467,6 +488,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         decorateFile: organization.decorateFile,
     });
 
+    const contentSearch = useContentSearch(
+        searchTerm,
+        allFiles,
+        activeFolderId,
+        contentSearchEnabled && searchTerm.length >= 3,
+    );
+
     const displayedFiles = useMemo(() => (
         activeSmartCollectionId
             ? searchedFiles.filter((file) => matchesSmartCollection(file, activeSmartCollectionId))
@@ -514,11 +542,31 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     }, [_handleDeleteBase, removeFromRecent]);
 
     const encryptByDefault = encryptionEnabled || (typeof activeFolderId === 'number' && activeFolderId > 0 && encryptedFolderIds.has(activeFolderId));
-    const { uploadQueue, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, conflictItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity, folderNameResolver, isConnected);
+    const { uploadQueue, selectFilesOnly, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, conflictItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity, folderNameResolver, isConnected);
     const { downloadQueue, queueDownload, queueBulkDownload, clearFinished: clearDownloads, retryDownload, moveDownloadToFront, reorderDownloadQueue, cancelDownloadItem, cancelAll: cancelDownloads } = useFileDownload(store, recordActivity);
     handleDroppedFilesRef.current = handleDroppedFiles;
     queueUploadCandidatesRef.current = queueUploadCandidates;
-    handleManualUploadRef.current = handleManualUpload;
+    // Smart upload: show compression dialog for image files before queuing
+    const handleManualUploadSmart = useCallback(async (encryptOverride?: boolean) => {
+        const COMPRESS_PREF_KEY = 'sharkdrive.askCompress.v1';
+        const askCompress = localStorage.getItem(COMPRESS_PREF_KEY) !== 'false';
+        const paths = await selectFilesOnly();
+        if (paths.length === 0) return;
+        const imagePaths = askCompress
+            ? paths.filter(p => isImageFile(p.split(/[/\\]/).pop() ?? p))
+            : [];
+        if (imagePaths.length > 0) {
+            setPendingImagePaths(imagePaths);
+            // non-image files go through immediately
+            const others = paths.filter(p => !imagePaths.includes(p));
+            if (others.length > 0) queueUploadCandidates(others.map(path => ({ path, encrypt: encryptOverride })));
+        } else {
+            const result = queueUploadCandidates(paths.map(path => ({ path, encrypt: encryptOverride })));
+            if (result.queuedCount > 0) toast.info(`Queued ${result.queuedCount} file${result.queuedCount > 1 ? 's' : ''} for upload`);
+        }
+    }, [selectFilesOnly, queueUploadCandidates]);
+
+    handleManualUploadRef.current = handleManualUploadSmart;
 
     const queuedUploadCount = uploadQueue.filter((item) => item.status === 'pending' || item.status === 'uploading').length;
     const uploadingCount = uploadQueue.filter((item) => item.status === 'uploading').length;
@@ -633,12 +681,45 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     };
 
     const handlePreviewOrText = (file: TelegramFile, orderedFiles?: TelegramFile[]) => {
-        if (isTextPreviewFile(file.name)) {
+        if (isTextPreviewFile(file.name) || isSvgFile(file.name)) {
             setTextPreviewFile(file);
         } else {
             handlePreview(file, orderedFiles);
         }
     };
+
+    const handleExtractZip = async (file: TelegramFile) => {
+        const folderId = resolveFileFolderId(file, activeFolderId);
+        try {
+            const destDir = await openDialog({ directory: true, multiple: false, title: 'Extract ZIP to folder' });
+            if (!destDir) return;
+            toast.info(`Extracting ${file.name}…`);
+            const paths = await tauriApi.extractZip(file.id, folderId, destDir as string);
+            toast.success(`Extracted ${paths.length} file${paths.length !== 1 ? 's' : ''} to ${(destDir as string).split(/[/\\]/).pop()}`);
+        } catch (e) {
+            toast.error(`Extraction failed: ${String(e)}`);
+        }
+    };
+
+    // Collect all files in the current folder with the same filename — these are "versions"
+    const handleVersionHistory = useCallback((file: TelegramFile) => {
+        setVersionHistoryFile(file);
+    }, []);
+
+    const handleExportActivity = useCallback(async (format: 'csv' | 'json') => {
+        const ext = format === 'json' ? 'json' : 'csv';
+        const savePath = await save({
+            defaultPath: `sharkdrive-activity-${new Date().toISOString().slice(0, 10)}.${ext}`,
+            filters: [{ name: format.toUpperCase(), extensions: [ext] }],
+        });
+        if (!savePath) return;
+        try {
+            await tauriApi.exportActivityLog(activity, format, savePath);
+            toast.success(`Activity exported to ${savePath.split(/[/\\]/).pop()}`);
+        } catch (e) {
+            toast.error(`Export failed: ${String(e)}`);
+        }
+    }, [activity]);
 
     const handleDuplicate = async (file: TelegramFile) => {
         const folderId = resolveFileFolderId(file, activeFolderId);
@@ -951,6 +1032,29 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 : folders.find(f => f.id === activeFolderId)?.name || "Folder"
     );
 
+    currentFolderNameRef.current = currentFolderName;
+
+    // Record sync session when a refresh completes — compare before/after file names
+    useEffect(() => {
+        if (pagedFiles.isLoadingFirst || !preSyncInfoRef.current) return;
+        const info = preSyncInfoRef.current;
+        if (info.folderId !== activeFolderId) { preSyncInfoRef.current = null; return; }
+        const currentFileNames = new Set(allFiles.filter(f => f.type !== 'folder').map(f => f.name));
+        const added = allFiles.filter(f => f.type !== 'folder' && !info.names.has(f.name)).map(f => f.name);
+        const removed = [...info.names].filter(n => !currentFileNames.has(n));
+        preSyncInfoRef.current = null;
+        tauriApi.recordSyncSession({
+            folderId: activeFolderId,
+            folderName: currentFolderNameRef.current,
+            startedAtMs: info.startMs,
+            completedAtMs: Date.now(),
+            filesTotal: allFiles.filter(f => f.type !== 'folder').length,
+            filesAdded: added,
+            filesRemoved: removed,
+        }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pagedFiles.isLoadingFirst]);
+
     const folderPath = useMemo(() => {
         if (activeSmartCollection) {
             return [{ id: null, name: activeSmartCollection.label }];
@@ -1035,6 +1139,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         activity={activity}
                         shortcuts={organization.shortcuts}
                         onShortcutsChange={organization.setShortcuts}
+                        onExportActivity={handleExportActivity}
                     />
                 )}
                 {showLinksDashboard && (
@@ -1043,11 +1148,65 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         onClose={() => setShowLinksDashboard(false)}
                     />
                 )}
+                {showSyncHistory && (
+                    <SyncHistoryPanel
+                        key="sync-history-panel"
+                        onClose={() => setShowSyncHistory(false)}
+                    />
+                )}
+                {showDuplicates && (
+                    <DuplicatesPanel
+                        key="duplicates-panel"
+                        folders={folders.map(f => ({ id: f.id, name: f.name }))}
+                        onClose={() => setShowDuplicates(false)}
+                        onDeleted={refreshFiles}
+                    />
+                )}
+                {versionHistoryFile && (
+                    <VersionHistoryModal
+                        key="version-history-modal"
+                        filename={versionHistoryFile.name}
+                        folderId={resolveFileFolderId(versionHistoryFile, activeFolderId)}
+                        versions={allFiles
+                            .filter(f => f.type !== 'folder' && f.name.toLowerCase() === versionHistoryFile.name.toLowerCase())
+                            .sort((a, b) => (b.id as number) - (a.id as number))}
+                        onClose={() => setVersionHistoryFile(null)}
+                        onRestored={refreshFiles}
+                    />
+                )}
                 {showShortcutsOverlay && (
                     <KeyboardShortcutsOverlay
                         key="shortcuts-overlay"
                         shortcuts={organization.shortcuts}
                         onClose={() => setShowShortcutsOverlay(false)}
+                    />
+                )}
+                {pendingImagePaths && (
+                    <ImageCompressDialog
+                        key="compress-dialog"
+                        files={pendingImagePaths.map(p => ({ path: p, name: p.split(/[/\\]/).pop() ?? p, size: 0 }))}
+                        onClose={() => setPendingImagePaths(null)}
+                        onSkip={() => {
+                            queueUploadCandidates(pendingImagePaths.map(path => ({ path })));
+                            setPendingImagePaths(null);
+                            toast.info(`Queued ${pendingImagePaths.length} image${pendingImagePaths.length !== 1 ? 's' : ''} for upload`);
+                        }}
+                        onConfirm={async (quality, maxDimension) => {
+                            const paths = pendingImagePaths;
+                            setPendingImagePaths(null);
+                            toast.info('Compressing images…');
+                            const results: string[] = [];
+                            for (const p of paths) {
+                                try {
+                                    const compressed = await tauriApi.compressImage(p, quality, maxDimension);
+                                    results.push(compressed);
+                                } catch {
+                                    results.push(p); // fallback to original
+                                }
+                            }
+                            queueUploadCandidates(results.map(path => ({ path })));
+                            toast.info(`Queued ${results.length} compressed image${results.length !== 1 ? 's' : ''}`);
+                        }}
                     />
                 )}
                 {showOnboarding && (
@@ -1263,11 +1422,17 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     showFavoritesOnly={showFavoritesOnly}
                     onToggleFavoritesFilter={() => setShowFavoritesOnly(v => !v)}
                     favoriteCount={favoriteIds.size}
+                    contentSearchEnabled={contentSearchEnabled}
+                    onToggleContentSearch={() => setContentSearchEnabled(v => !v)}
+                    contentSearchScanning={contentSearch.scanning}
+                    contentSearchMatchCount={contentSearch.matchingIds.size}
                     onFileUpload={handleManualUpload}
                     onEncryptedFileUpload={() => handleManualUpload(true)}
                     onFolderUpload={handleFolderUpload}
                     onOpenSettings={() => setShowSettings(true)}
                     onOpenLinks={() => setShowLinksDashboard(true)}
+                    onOpenSyncHistory={() => setShowSyncHistory(true)}
+                    onOpenDuplicates={() => setShowDuplicates(true)}
                     nextSyncIn={autoSyncInterval > 0 ? nextSyncIn : null}
                     queuedUploadCount={queuedUploadCount}
                     uploadingCount={uploadingCount}
@@ -1326,12 +1491,17 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onSelectVisible={handleSelectAll}
                     onSelectRange={handleSelectRange}
                     onDuplicate={handleDuplicate}
+                    onExtractZip={handleExtractZip}
+                    onVersionHistory={handleVersionHistory}
                     onBatchRename={(files) => setBatchRenameFiles(files)}
                     onInfo={(file) => setInfoFile(file)}
                     availableTags={organization.allTags}
                     activeTag={activeTagFilter}
                     onTagFilterChange={setActiveTagFilter}
                     getFolderColor={organization.getFolderColor}
+                    getFileNote={(file) => organization.getFileNote(file, resolveFileFolderId(file, activeFolderId))}
+                    onFileNoteChange={(file, note) => organization.setFileNote(file, resolveFileFolderId(file, activeFolderId), note)}
+                    contentMatchIds={contentSearchEnabled ? contentSearch.matchingIds : undefined}
                     hasMore={pagedFiles.hasMore}
                     isLoadingMore={pagedFiles.isLoadingMore}
                     onLoadMore={pagedFiles.loadMore}
