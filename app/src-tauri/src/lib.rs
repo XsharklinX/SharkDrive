@@ -293,6 +293,7 @@ pub fn run() {
             commands::cmd_batch_rename,
             commands::cmd_get_cached_files,
             commands::cmd_get_cached_folders,
+            commands::cmd_get_files_paged,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

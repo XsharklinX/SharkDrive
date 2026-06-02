@@ -26,7 +26,7 @@ export function VaultLockScreen({ onUnlock }: VaultLockScreenProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#07111b]/95 px-4 backdrop-blur-xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-telegram-bg/95 px-4 backdrop-blur-xl">
             <div className="w-full max-w-sm rounded-2xl border border-telegram-border bg-telegram-surface p-6 shadow-2xl">
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl border border-telegram-border bg-white/[0.04] text-telegram-primary">
                     <Lock className="h-5 w-5" />

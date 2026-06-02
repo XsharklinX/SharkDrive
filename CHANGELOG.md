@@ -4,6 +4,24 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.0.0] - 2026-05-31
+
+### Pulido & Estabilidad
+
+- **Light mode completo** — Fijados los últimos componentes con colores hardcodeados: `VaultLockScreen` (`bg-[#07111b]` → `bg-telegram-bg/95`), `GalleryView` (hover overlay y texto de nombre ahora usan `drop-shadow` para ser legibles sobre cualquier foto), `MediaPlayer` fondo (ahora usa `bg-telegram-bg/85` + CSS variable radial para el player de audio).
+
+- **i18n cobertura completa** — `ContextMenu` ahora usa `t()` para todos sus textos: preview/playMedia/openPDF/openFolder, download, copyToFolder, duplicate, rename, shareFile/shareFolder, fileInfo, delete. Junto con TopBar, FileExplorer, EmptyState, y Sidebar, el 100% de la UI visible está traducido en EN/ES.
+
+- **Formateo de errores amigable** — Nueva función `formatError(raw)` en `utils.ts`. Convierte errores técnicos de Rust en mensajes comprensibles: `FLOOD_WAIT_60` → "Telegram rate limit — wait 60s", "not connected" → "Not connected to Telegram. Check your internet connection.", `AUTH_KEY_UNREGISTERED` → "Your Telegram session expired.", etc. Aplicado en `useFileUpload` y `useFileDownload`.
+
+- **Keyboard shortcuts** ✅ ya implementado — Panel en Settings > Shortcuts con rebinding visual.
+
+- **Reconexión automática** ✅ ya implementada — `useTelegramConnection` escucha eventos de red y reconecta automáticamente.
+
+- **Paginación desde Telegram** — `cmd_get_files_paged(folder_id, offset_id, limit)` en Rust: usa `iter_messages().offset_id(n).limit(50)` para cargar páginas de 50 archivos en lugar de todos a la vez. Hook `usePagedFiles` gestiona la acumulación de páginas, muestra los archivos del índice instantáneamente, y carga el primer chunk de Telegram en background. Botón "Load more files" aparece cuando `has_more = true`. `PersistentIndexState::upsert_file()` actualiza el índice incrementalmente por cada mensaje recibido. Las mutaciones (upload/delete/rename) incrementan un `fileVersion` counter que dispara un reload desde página 1.
+
+---
+
 ## [2.9.0] - 2026-05-30
 
 ### Polish and Completeness

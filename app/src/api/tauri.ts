@@ -158,6 +158,11 @@ export const tauriApi = {
     getCachedFiles(folderId: number | null) {
         return invoke<TelegramFile[]>('cmd_get_cached_files', { folderId });
     },
+    getFilesPaged(folderId: number | null, offsetId: number, limit: number) {
+        return invoke<{ files: TelegramFile[]; next_offset_id: number | null; has_more: boolean }>(
+            'cmd_get_files_paged', { folderId, offsetId, limit }
+        );
+    },
     getCachedFolders() {
         return invoke<TelegramFolder[]>('cmd_get_cached_folders');
     },

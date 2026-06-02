@@ -157,7 +157,7 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
 
     return (
         <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-[linear-gradient(180deg,rgba(4,10,17,0.8),rgba(2,7,13,0.94))] p-4 backdrop-blur-lg animate-in fade-in duration-200"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-telegram-bg/85 p-4 backdrop-blur-lg animate-in fade-in duration-200"
             onClick={onClose}
         >
             <div className="relative flex w-full max-w-6xl flex-col gap-4" onClick={(e) => e.stopPropagation()}>
@@ -232,7 +232,7 @@ export function MediaPlayer({ file, onClose, onNext, onPrev, currentIndex, total
                             className="h-full w-full rounded-[1.4rem] bg-black object-contain"
                         />
                     ) : isAudio ? (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-8 rounded-[1.4rem] bg-[radial-gradient(circle_at_top,rgba(105,199,255,0.14),transparent_28%),linear-gradient(180deg,rgba(10,18,28,0.95),rgba(6,11,18,1))] px-8">
+                        <div className="flex h-full w-full flex-col items-center justify-center gap-8 rounded-[1.4rem] bg-telegram-surface px-8" style={{ background: 'radial-gradient(circle at top, color-mix(in srgb, var(--color-telegram-primary) 8%, transparent), transparent 28%), var(--color-telegram-surface)' }}>
                             {/* Hidden audio element */}
                             <audio
                                 ref={audioRef}

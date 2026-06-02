@@ -102,6 +102,23 @@ impl PersistentIndexState {
             .unwrap_or_default()
     }
 
+    /// Insert or update a single file in the index (used by paginated fetch).
+    pub fn upsert_file(&self, file: FileMetadata) {
+        let key = Self::folder_key(file.folder_id);
+        if let Ok(mut inner) = self.inner.write() {
+            let entry = inner.files_by_folder.entry(key).or_insert_with(|| IndexedFolderFiles {
+                items: Vec::new(),
+                synced_at_ms: now_ms(),
+            });
+            if let Some(existing) = entry.items.iter_mut().find(|f| f.id == file.id) {
+                *existing = file;
+            } else {
+                entry.items.push(file);
+            }
+            self.persist_locked(&inner);
+        }
+    }
+
     pub fn set_files(&self, folder_id: Option<i64>, files: Vec<FileMetadata>) {
         let key = Self::folder_key(folder_id);
         if let Ok(mut inner) = self.inner.write() {

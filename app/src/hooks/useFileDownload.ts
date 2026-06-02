@@ -7,7 +7,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from '@tauri
 import { ActivityEntry, DownloadItem, TelegramFile } from '../types';
 import type { Store } from '@tauri-apps/plugin-store';
 import { tauriApi } from '../api/tauri';
-import { buildRemoteFileKey, isAudioFile, isImageFile, isPdfFile, isVideoFile, resolveFileFolderId } from '../utils';
+import { buildRemoteFileKey, formatError, isAudioFile, isImageFile, isPdfFile, isVideoFile, resolveFileFolderId } from '../utils';
 
 async function showNativeNotification(title: string, body: string) {
     try {
@@ -135,9 +135,10 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
             }
         } catch (e) {
             if (!cancelledRef.current.has(item.id)) {
-                setDownloadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'error', error: String(e) } : i));
-                toast.error(`Download failed: ${item.filename}`);
-                onActivity?.(buildActivity('download', `Download failed for ${item.filename}: ${String(e)}`, item.filename, item.folderId));
+                const errMsg = formatError(e);
+                setDownloadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'error', error: errMsg } : i));
+                toast.error(`${item.filename}: ${errMsg}`);
+                onActivity?.(buildActivity('download', `Download failed for ${item.filename}: ${errMsg}`, item.filename, item.folderId));
             } else {
                 cancelledRef.current.delete(item.id);
             }

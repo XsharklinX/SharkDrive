@@ -231,3 +231,44 @@ export const matchesAdvancedSearch = (
 
     return true;
 };
+
+/**
+ * Converts raw Rust error strings into human-readable messages.
+ * Handles FLOOD_WAIT_N, "not connected", network errors, etc.
+ */
+export function formatError(raw: unknown): string {
+    const msg = String(raw);
+
+    // FLOOD_WAIT_60 → "Telegram rate limit — wait 60 seconds"
+    const floodMatch = msg.match(/FLOOD_WAIT_(\d+)/);
+    if (floodMatch) {
+        const secs = parseInt(floodMatch[1], 10);
+        if (secs >= 3600) return `Telegram rate limit — wait ${Math.ceil(secs / 3600)}h`;
+        if (secs >= 60)   return `Telegram rate limit — wait ${Math.ceil(secs / 60)} min`;
+        return `Telegram rate limit — wait ${secs}s`;
+    }
+
+    if (msg.includes('not connected') || msg.includes('client not connected'))
+        return 'Not connected to Telegram. Check your internet connection.';
+
+    if (msg.includes('timeout') || msg.includes('timed out'))
+        return 'Connection timed out. Try again.';
+
+    if (msg.includes('File too large') || msg.includes('too large'))
+        return msg; // already formatted
+
+    if (msg.includes('Bandwidth limit'))
+        return 'Daily bandwidth limit reached (250 GB). Try again tomorrow.';
+
+    if (msg.includes('Encryption key not loaded') || msg.includes('encryption password'))
+        return 'Load your encryption password in Settings before downloading this file.';
+
+    if (msg.includes('PEER_ID_INVALID') || msg.includes('not found'))
+        return 'File or folder not found. It may have been deleted from Telegram.';
+
+    if (msg.includes('AUTH_KEY_UNREGISTERED') || msg.includes('session'))
+        return 'Your Telegram session expired. Please sign in again.';
+
+    // Trim very long technical strings
+    return msg.length > 120 ? msg.slice(0, 117) + '…' : msg;
+}

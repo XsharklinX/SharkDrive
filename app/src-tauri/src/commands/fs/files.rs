@@ -426,6 +426,71 @@ pub async fn cmd_get_files(
     Err(last_err)
 }
 
+#[derive(serde::Serialize)]
+pub struct PagedFiles {
+    pub files: Vec<FileMetadata>,
+    /// Message ID of the oldest message in this page; pass as `offset_id` for the next page.
+    pub next_offset_id: Option<i32>,
+    pub has_more: bool,
+}
+
+/// Fetch up to `limit` files from a folder starting before `offset_id` (0 = newest).
+/// Returns a page of files plus a cursor for the next page.
+#[tauri::command]
+pub async fn cmd_get_files_paged(
+    folder_id: Option<i64>,
+    offset_id: i32,
+    limit: i32,
+    state: State<'_, TelegramState>,
+    index_state: State<'_, PersistentIndexState>,
+) -> Result<PagedFiles, String> {
+    let client_opt = { state.client.lock().await.clone() };
+    let client = client_opt.ok_or("Telegram client not connected".to_string())?;
+    let peer = resolve_peer(&client, folder_id, &state).await?;
+
+    let effective_limit = limit.clamp(10, 200) as usize;
+
+    let mut iter = client.iter_messages(&peer);
+    if offset_id > 0 {
+        iter = iter.offset_id(offset_id);
+    }
+
+    let mut files: Vec<FileMetadata> = Vec::new();
+    let mut fetched = 0usize;
+    let mut last_msg_id: Option<i32> = None;
+
+    loop {
+        match iter.next().await {
+            Ok(Some(msg)) => {
+                fetched += 1;
+                last_msg_id = Some(msg.id());
+                if let Some(file) = message_to_file_metadata(&msg, folder_id) {
+                    files.push(file.clone());
+                    // Update index incrementally so cached-files stays current
+                    index_state.upsert_file(file);
+                }
+                if fetched >= effective_limit + 1 {
+                    // Fetched one extra to know whether there are more
+                    break;
+                }
+            }
+            Ok(None) => break,
+            Err(e) => return Err(map_error(e)),
+        }
+    }
+
+    let has_more = fetched > effective_limit;
+    if has_more {
+        files.pop(); // remove the extra look-ahead file
+    }
+
+    Ok(PagedFiles {
+        next_offset_id: if has_more { last_msg_id } else { None },
+        has_more,
+        files,
+    })
+}
+
 #[tauri::command]
 pub async fn cmd_search_global(
     query: String,

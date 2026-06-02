@@ -60,16 +60,17 @@ function GalleryItem({ file, activeFolderId, isFavorite, isSelected, isFocused, 
                 </div>
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+            {/* Hover overlay — kept dark so text is always readable over photos */}
+            <div className="gallery-hover-overlay absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
             <div className="absolute bottom-0 left-0 right-0 translate-y-1 px-3 py-3 opacity-0 transition-all group-hover:translate-y-0 group-hover:opacity-100">
-                <p className="truncate text-xs font-semibold text-white">{file.name}</p>
-                <p className="text-[10px] text-white/65">{file.sizeStr}</p>
+                <p className="truncate text-xs font-semibold text-white drop-shadow">{file.name}</p>
+                <p className="text-[10px] text-white/70 drop-shadow">{file.sizeStr}</p>
             </div>
 
             <button
                 onClick={(e) => { e.stopPropagation(); onToggleFavorite(file.id); }}
-                className={`absolute top-2 right-2 rounded-full p-2 transition-all ${isFavorite ? 'opacity-100 text-yellow-400 bg-black/60' : 'opacity-0 group-hover:opacity-100 text-white bg-black/45 hover:text-yellow-400'}`}
+                className={`absolute top-2 right-2 rounded-full p-2 transition-all ${isFavorite ? 'opacity-100 text-yellow-400 bg-black/50' : 'opacity-0 group-hover:opacity-100 text-white bg-black/40 hover:text-yellow-400'}`}
                 title={isFavorite ? 'Remove from Starred' : 'Add to Starred'}
             >
                 <Star className={`w-3.5 h-3.5 ${isFavorite ? 'fill-yellow-400' : ''}`} />
@@ -77,7 +78,7 @@ function GalleryItem({ file, activeFolderId, isFavorite, isSelected, isFocused, 
 
             <button
                 onClick={(e) => { e.stopPropagation(); onToggleSelection?.(file.id); }}
-                className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border transition ${isSelected ? 'border-telegram-primary bg-telegram-primary text-black opacity-100' : 'border-white/60 bg-black/50 text-white'} ${selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+                className={`absolute left-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border transition ${isSelected ? 'border-telegram-primary bg-telegram-primary text-black opacity-100' : 'border-white/50 bg-black/40 text-white'} ${selectionMode ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                 title={isSelected ? 'Deselect' : 'Select'}
             >
                 {isSelected ? <Check className="h-3.5 w-3.5" /> : <div className="h-2 w-2 rounded-full border border-current/60" />}

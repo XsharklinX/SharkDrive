@@ -68,6 +68,9 @@ interface FileExplorerProps {
     activeTag?: string | null;
     onTagFilterChange?: (tag: string | null) => void;
     getFolderColor?: (folderId: number) => string | undefined;
+    hasMore?: boolean;
+    isLoadingMore?: boolean;
+    onLoadMore?: () => void;
 }
 
 function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
@@ -119,6 +122,7 @@ export function FileExplorer({
     favoriteIds, onToggleFavorite, onRename, onInlineRename, onShareLink, onCopyToFolder, onOpenFolder, onSelectVisible,
     onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo,
     availableTags = [], activeTag = null, onTagFilterChange, getFolderColor,
+    hasMore = false, isLoadingMore = false, onLoadMore,
 }: FileExplorerProps) {
     const { lang, t } = useLanguage();
     const getFilterLabel = (type: FilterType) => {
@@ -632,6 +636,22 @@ export function FileExplorer({
                         setContextMenu(null);
                     } : undefined}
                 />
+            )}
+
+            {/* Load-more sentinel — shown when there are more pages to fetch */}
+            {hasMore && (
+                <div className="flex items-center justify-center py-4">
+                    <button
+                        onClick={onLoadMore}
+                        disabled={isLoadingMore}
+                        className="flex items-center gap-2 rounded-lg border border-telegram-border bg-white/[0.03] px-4 py-2 text-sm text-telegram-subtext transition hover:bg-white/[0.06] hover:text-telegram-text disabled:opacity-50"
+                    >
+                        {isLoadingMore ? (
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-telegram-primary/30 border-t-telegram-primary" />
+                        ) : null}
+                        {isLoadingMore ? 'Loading…' : 'Load more files'}
+                    </button>
+                </div>
             )}
         </div>
     );

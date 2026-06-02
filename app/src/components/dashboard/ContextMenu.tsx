@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText, Link, CopyPlus, Info } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { isMediaFile, isPdfFile } from '../../utils';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ContextMenuProps {
     x: number;
@@ -73,6 +74,7 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
         };
     }, [onClose]);
 
+    const { t } = useLanguage();
     const buttonClass = 'flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-white/[0.05]';
 
     return (
@@ -88,17 +90,17 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
                     {isMediaFile(file.name) ? (
                         <>
                             <Play className="w-4 h-4 text-telegram-secondary" />
-                            Play Media
+                            {t('playMedia')}
                         </>
                     ) : isPdfFile(file.name) ? (
                         <>
                             <FileText className="w-4 h-4 text-red-300" />
-                            Open PDF
+                            {t('openPDF')}
                         </>
                     ) : (
                         <>
                             <Eye className="w-4 h-4 text-telegram-primary" />
-                            Preview
+                            {t('preview')}
                         </>
                     )}
                 </button>
@@ -107,45 +109,45 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
             {file.type === 'folder' && (
                 <button onClick={onPreview} className={`${buttonClass} text-telegram-text`}>
                     <FolderOpen className="w-4 h-4 text-yellow-300" />
-                    Open Folder
+                    {t('openFolder')}
                 </button>
             )}
 
             {file.type !== 'folder' && (
                 <button onClick={onDownload} className={`${buttonClass} text-telegram-text`}>
                     <HardDrive className="w-4 h-4 text-emerald-300" />
-                    Download
+                    {t('download')}
                 </button>
             )}
 
             {file.type !== 'folder' && onCopyToFolder && (
                 <button onClick={onCopyToFolder} className={`${buttonClass} text-telegram-text`}>
                     <Copy className="w-4 h-4 text-telegram-secondary" />
-                    Copy to Folder
+                    {t('copyToFolder')}
                 </button>
             )}
 
             {file.type !== 'folder' && onDuplicate && (
                 <button onClick={onDuplicate} className={`${buttonClass} text-telegram-text`}>
                     <CopyPlus className="w-4 h-4 text-telegram-secondary" />
-                    Duplicate
+                    {t('duplicate')}
                 </button>
             )}
 
             <button onClick={onRename} className={`${buttonClass} text-telegram-text`}>
                 <Pencil className="w-4 h-4 text-telegram-primary" />
-                Rename
+                {t('rename')}
             </button>
 
             <button onClick={onShareLink} className={`${buttonClass} text-telegram-text`}>
                 <Link className="w-4 h-4 text-emerald-300" />
-                {file.type === 'folder' ? 'Share Folder' : 'Share File'}
+                {file.type === 'folder' ? t('shareFolder') : t('shareFile')}
             </button>
 
             {file.type !== 'folder' && onInfo && (
                 <button onClick={onInfo} className={`${buttonClass} text-telegram-text`}>
                     <Info className="w-4 h-4 text-telegram-subtext" />
-                    File Info
+                    {t('fileInfo')}
                 </button>
             )}
 
@@ -153,7 +155,7 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
 
             <button onClick={onDelete} className={`${buttonClass} text-red-300 hover:bg-red-500/10`}>
                 <Trash2 className="w-4 h-4" />
-                Delete
+                {t('delete')}
             </button>
         </div>
     );

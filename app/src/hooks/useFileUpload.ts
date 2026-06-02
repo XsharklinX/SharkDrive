@@ -21,7 +21,7 @@ async function showNativeNotification(title: string, body: string) {
     }
 }
 import type { Store } from '@tauri-apps/plugin-store';
-import { applyUploadNamingPattern, buildQueuedUploadKey, UPLOAD_NAMING_PATTERN_KEY } from '../utils';
+import { applyUploadNamingPattern, buildQueuedUploadKey, formatError, UPLOAD_NAMING_PATTERN_KEY } from '../utils';
 
 interface ProgressPayload {
     id: string;
@@ -189,15 +189,15 @@ export function useFileUpload(
                 setProcessing(false);
                 return;
             } catch (e) {
-                lastError = String(e);
-                if (!isNetworkError(lastError) || attempt === MAX_RETRIES) break;
+                lastError = formatError(e);
+                if (!isNetworkError(String(e)) || attempt === MAX_RETRIES) break;
                 // Network error → will retry after delay
             }
         }
 
         if (!cancelledRef.current.has(item.id)) {
             setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'error', error: lastError } : i));
-            toast.error(`Upload failed: ${item.path.split(/[/\\]/).pop()}`);
+            toast.error(`${item.path.split(/[/\\]/).pop()}: ${lastError}`);
             onActivity?.(buildActivity('upload', `Upload failed for ${item.path.split(/[/\\]/).pop()}: ${lastError}`, item.path.split(/[/\\]/).pop(), item.folderId));
         } else {
             cancelledRef.current.delete(item.id);
