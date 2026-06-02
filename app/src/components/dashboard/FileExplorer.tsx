@@ -66,6 +66,7 @@ interface FileExplorerProps {
     onInfo?: (file: TelegramFile) => void;
     onExtractZip?: (file: TelegramFile) => void;
     onVersionHistory?: (file: TelegramFile) => void;
+    onCopyToOtherAccount?: (file: TelegramFile) => void;
     availableTags?: string[];
     activeTag?: string | null;
     onTagFilterChange?: (tag: string | null) => void;
@@ -125,7 +126,7 @@ export function FileExplorer({
     files, loading, error, viewMode, setViewMode, selectedIds, selectionMode, activeFolderId,
     onDelete, onDownload, onPreview, onManualUpload, onSelectionClear, onToggleSelection, onDrop, onDragStart, onDragEnd,
     favoriteIds, onToggleFavorite, onRename, onInlineRename, onShareLink, onCopyToFolder, onOpenFolder, onSelectVisible,
-    onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo, onExtractZip, onVersionHistory,
+    onSelectRange, emptyVariant = 'folder', searchTerm, onDuplicate, onBatchRename, onInfo, onExtractZip, onVersionHistory, onCopyToOtherAccount,
     availableTags = [], activeTag = null, onTagFilterChange, getFolderColor,
     hasMore = false, isLoadingMore = false, onLoadMore,
     getFileNote, onFileNoteChange,
@@ -651,6 +652,10 @@ export function FileExplorer({
                     } : undefined}
                     onVersionHistory={contextMenu.file.type !== 'folder' && onVersionHistory ? () => {
                         onVersionHistory(contextMenu.file);
+                        setContextMenu(null);
+                    } : undefined}
+                    onCopyToOtherAccount={contextMenu.file.type !== 'folder' && onCopyToOtherAccount ? () => {
+                        onCopyToOtherAccount(contextMenu.file);
                         setContextMenu(null);
                     } : undefined}
                 />

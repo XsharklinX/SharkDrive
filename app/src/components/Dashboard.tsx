@@ -41,6 +41,7 @@ import { FolderStatsModal } from './dashboard/FolderStatsModal';
 import { VersionHistoryModal } from './dashboard/VersionHistoryModal';
 import { SyncHistoryPanel } from './dashboard/SyncHistoryPanel';
 import { DuplicatesPanel } from './dashboard/DuplicatesPanel';
+import { CrossAccountCopyModal } from './dashboard/CrossAccountCopyModal';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -52,6 +53,7 @@ import { usePreviewNavigation } from '../hooks/usePreviewNavigation';
 import { useDashboardSearch } from '../hooks/useDashboardSearch';
 import { useContentSearch } from '../hooks/useContentSearch';
 import { usePagedFiles } from '../hooks/usePagedFiles';
+import { useAccounts } from '../hooks/useAccounts';
 import { useFavorites } from '../hooks/useFavorites';
 import { useRecentFiles } from '../hooks/useRecentFiles';
 import { useActivityLog } from '../hooks/useActivityLog';
@@ -89,6 +91,9 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [showSyncHistory, setShowSyncHistory] = useState(false);
     const [showDuplicates, setShowDuplicates] = useState(false);
     const [versionHistoryFile, setVersionHistoryFile] = useState<TelegramFile | null>(null);
+    const [crossCopyFiles, setCrossCopyFiles] = useState<TelegramFile[] | null>(null);
+    const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+    const pendingUploadPathsRef = useRef<string[]>([]);
     const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('sharkdrive.onboarding.v1') !== 'complete');
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
     const [textPreviewFile, setTextPreviewFile] = useState<TelegramFile | null>(null);
@@ -120,6 +125,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         newName: string;
     }>>([]);
 
+    const { accounts, activeAccountId, refresh: refreshAccounts } = useAccounts();
     const { favoriteIds, showFavoritesOnly, setShowFavoritesOnly, handleToggleFavorite } = useFavorites(store);
     const { recentFiles, addToRecent, removeFromRecent, pruneStaleRecent } = useRecentFiles(store, activeFolderId);
     const { activity, recordActivity } = useActivityLog(store);
@@ -706,6 +712,53 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         setVersionHistoryFile(file);
     }, []);
 
+    const handleSwitchAccount = useCallback(async (accountId: string) => {
+        if (isSwitchingAccount) return;
+        setIsSwitchingAccount(true);
+        try {
+            await tauriApi.switchAccount(accountId);
+            // Reconnect: get api_id from account meta
+            const meta = accounts.find(a => a.id === accountId);
+            if (meta?.api_id) {
+                await tauriApi.connect(meta.api_id);
+            }
+            refreshFiles();
+            await refreshAccounts();
+        } catch (e) {
+            toast.error(`Account switch failed: ${String(e)}`);
+        } finally {
+            setIsSwitchingAccount(false);
+        }
+    }, [isSwitchingAccount, accounts, refreshAccounts]);
+
+    const handleAddAccount = useCallback(async () => {
+        // Switch to auth screen for a new account slot
+        setIsSwitchingAccount(true);
+        try {
+            await tauriApi.prepareNewAccount();
+            // Trigger logout flow in the UI — the auth screen will appear
+            onLogout();
+        } catch (e) {
+            toast.error(`Failed to prepare new account: ${String(e)}`);
+            setIsSwitchingAccount(false);
+        }
+    }, [onLogout]);
+
+    const handleCrossCopyAndSwitch = useCallback(async (tempPaths: string[], targetAccountId: string) => {
+        setCrossCopyFiles(null);
+        pendingUploadPathsRef.current = tempPaths;
+        await handleSwitchAccount(targetAccountId);
+        // After switch, queue the temp files for upload
+        if (pendingUploadPathsRef.current.length > 0) {
+            const paths = pendingUploadPathsRef.current;
+            pendingUploadPathsRef.current = [];
+            const result = queueUploadCandidates(paths.map(path => ({ path })));
+            if (result.queuedCount > 0) {
+                toast.success(`Queued ${result.queuedCount} file(s) for cross-account upload`);
+            }
+        }
+    }, [handleSwitchAccount, queueUploadCandidates]);
+
     const handleExportActivity = useCallback(async (format: 'csv' | 'json') => {
         const ext = format === 'json' ? 'json' : 'csv';
         const savePath = await save({
@@ -1162,6 +1215,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                         onDeleted={refreshFiles}
                     />
                 )}
+                {crossCopyFiles && (
+                    <CrossAccountCopyModal
+                        key="cross-copy-modal"
+                        files={crossCopyFiles}
+                        activeFolderId={activeFolderId}
+                        accounts={accounts}
+                        activeAccountId={activeAccountId}
+                        onClose={() => setCrossCopyFiles(null)}
+                        onSwitchAndUpload={handleCrossCopyAndSwitch}
+                    />
+                )}
+
                 {versionHistoryFile && (
                     <VersionHistoryModal
                         key="version-history-modal"
@@ -1365,6 +1430,11 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     setVaultUiLocked(true);
                     toast.info('Encryption vault locked');
                 }}
+                accounts={accounts}
+                activeAccountId={activeAccountId}
+                onSwitchAccount={handleSwitchAccount}
+                onAddAccount={handleAddAccount}
+                onAccountsChange={refreshAccounts}
             />
             {vaultUiLocked && (
                 <VaultLockScreen
@@ -1493,6 +1563,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onDuplicate={handleDuplicate}
                     onExtractZip={handleExtractZip}
                     onVersionHistory={handleVersionHistory}
+                    onCopyToOtherAccount={accounts.length > 1 ? (file) => setCrossCopyFiles([file]) : undefined}
                     onBatchRename={(files) => setBatchRenameFiles(files)}
                     onInfo={(file) => setInfoFile(file)}
                     availableTags={organization.allTags}

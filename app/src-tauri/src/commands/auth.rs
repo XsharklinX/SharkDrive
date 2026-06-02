@@ -14,6 +14,7 @@ use tauri::State;
 use tokio::sync::oneshot;
 use tokio::time::Duration;
 
+use crate::account_manager::AccountManager;
 use crate::commands::utils::map_error;
 use crate::models::AuthResult;
 use crate::TelegramState;
@@ -57,12 +58,10 @@ fn decrypt_session_bytes(pin: &str, bytes: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "Wrong PIN or corrupted protected session".to_string())
 }
 
-fn session_paths(app_handle: &tauri::AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
-    Ok((app_data_dir.join("telegram.session"), app_data_dir.join("telegram.session.sdenc")))
+fn session_paths(account_manager: &AccountManager) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let session = account_manager.active_session_path().ok_or("No active account")?;
+    let protected = account_manager.active_protected_session_path().ok_or("No active account")?;
+    Ok((session, protected))
 }
 
 /// Ensures the Telegram client is initialized.
@@ -70,8 +69,9 @@ fn session_paths(app_handle: &tauri::AppHandle) -> Result<(std::path::PathBuf, s
 /// IMPORTANT: This function properly manages runner lifecycle to prevent stack overflow.
 /// Before spawning a new runner, it signals the old runner to shutdown.
 pub async fn ensure_client_initialized(
-    app_handle: &tauri::AppHandle,
+    _app_handle: &tauri::AppHandle,
     state: &State<'_, TelegramState>,
+    account_manager: &State<'_, Arc<AccountManager>>,
     api_id: i32,
 ) -> Result<Client, String> {
     let mut client_guard = state.client.lock().await;
@@ -81,7 +81,6 @@ pub async fn ensure_client_initialized(
     }
 
     // CRITICAL: Shutdown existing runner before creating a new one
-    // This prevents runner task accumulation which causes stack overflow
     let did_shutdown_old_runner = {
         let mut guard = state.runner_shutdown.lock().map_err(|e| e.to_string())?;
         if let Some(shutdown_tx) = guard.take() {
@@ -91,36 +90,31 @@ pub async fn ensure_client_initialized(
         } else {
             false
         }
-    }; // MutexGuard dropped here — before the await
+    };
     if did_shutdown_old_runner {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     let runner_num = state.runner_count.fetch_add(1, Ordering::SeqCst) + 1;
-    log::info!(
-        "Initializing Telegram Client #{} with API ID: {}",
-        runner_num,
-        api_id
-    );
 
-    // Resolve session path safely
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    // Get session path from AccountManager
+    let session_path = account_manager
+        .active_session_path()
+        .ok_or("No active account — cannot initialize client")?;
+    let protected_session_path = account_manager
+        .active_protected_session_path()
+        .ok_or("No active account")?;
 
-    if !app_data_dir.exists() {
-        std::fs::create_dir_all(&app_data_dir)
-            .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+    // Ensure parent directory exists
+    if let Some(parent) = session_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
     }
 
-    let session_path = app_data_dir.join("telegram.session");
-    let protected_session_path = app_data_dir.join("telegram.session.sdenc");
     if protected_session_path.exists() && !session_path.exists() {
         return Err("SESSION_LOCKED".to_string());
     }
     let session_path_str = session_path.to_string_lossy().to_string();
-    log::info!("Opening session at: {}", session_path_str);
+    log::info!("Initializing Telegram Client #{} at: {}", runner_num, session_path_str);
 
     // Grammers initialization with corruption recovery
     let session = match SqliteSession::open(&session_path_str).map_err(|e| e.to_string()) {
@@ -164,17 +158,20 @@ pub async fn ensure_client_initialized(
 }
 
 #[tauri::command]
-pub async fn cmd_is_session_protected(app_handle: tauri::AppHandle) -> Result<bool, String> {
-    let (_, protected_path) = session_paths(&app_handle)?;
+pub async fn cmd_is_session_protected(
+    account_manager: State<'_, Arc<AccountManager>>,
+) -> Result<bool, String> {
+    let (_, protected_path) = session_paths(&account_manager)?;
     Ok(protected_path.exists())
 }
 
 #[tauri::command]
-pub async fn cmd_unlock_session_pin(app_handle: tauri::AppHandle, pin: String) -> Result<(), String> {
-    let (session_path, protected_path) = session_paths(&app_handle)?;
-    if !protected_path.exists() {
-        return Ok(());
-    }
+pub async fn cmd_unlock_session_pin(
+    pin: String,
+    account_manager: State<'_, Arc<AccountManager>>,
+) -> Result<(), String> {
+    let (session_path, protected_path) = session_paths(&account_manager)?;
+    if !protected_path.exists() { return Ok(()); }
     let encrypted = std::fs::read(&protected_path).map_err(|e| e.to_string())?;
     let plain = decrypt_session_bytes(&pin, &encrypted)?;
     std::fs::write(&session_path, plain).map_err(|e| e.to_string())?;
@@ -182,11 +179,12 @@ pub async fn cmd_unlock_session_pin(app_handle: tauri::AppHandle, pin: String) -
 }
 
 #[tauri::command]
-pub async fn cmd_set_session_pin(app_handle: tauri::AppHandle, pin: String) -> Result<(), String> {
-    let (session_path, protected_path) = session_paths(&app_handle)?;
-    if !session_path.exists() {
-        return Err("No Telegram session exists yet".to_string());
-    }
+pub async fn cmd_set_session_pin(
+    pin: String,
+    account_manager: State<'_, Arc<AccountManager>>,
+) -> Result<(), String> {
+    let (session_path, protected_path) = session_paths(&account_manager)?;
+    if !session_path.exists() { return Err("No Telegram session exists yet".to_string()); }
     let plain = std::fs::read(&session_path).map_err(|e| e.to_string())?;
     let encrypted = encrypt_session_bytes(&pin, &plain)?;
     std::fs::write(&protected_path, encrypted).map_err(|e| e.to_string())?;
@@ -197,9 +195,12 @@ pub async fn cmd_set_session_pin(app_handle: tauri::AppHandle, pin: String) -> R
 }
 
 #[tauri::command]
-pub async fn cmd_clear_session_pin(app_handle: tauri::AppHandle, pin: String) -> Result<(), String> {
-    cmd_unlock_session_pin(app_handle.clone(), pin).await?;
-    let (_, protected_path) = session_paths(&app_handle)?;
+pub async fn cmd_clear_session_pin(
+    pin: String,
+    account_manager: State<'_, Arc<AccountManager>>,
+) -> Result<(), String> {
+    cmd_unlock_session_pin(pin, account_manager.clone()).await?;
+    let (_, protected_path) = session_paths(&account_manager)?;
     let _ = std::fs::remove_file(protected_path);
     Ok(())
 }
@@ -208,11 +209,15 @@ pub async fn cmd_clear_session_pin(app_handle: tauri::AppHandle, pin: String) ->
 pub async fn cmd_connect(
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
+    account_manager: State<'_, Arc<AccountManager>>,
     api_id: i32,
 ) -> Result<bool, String> {
-    // Store API ID for auto-reconnect
     *state.api_id.lock().await = Some(api_id);
-    ensure_client_initialized(&app_handle, &state, api_id).await?;
+    // Persist api_id in account meta so cross-account copy can use it
+    if let Some(active_id) = account_manager.get_active_id() {
+        account_manager.update_meta(&active_id, |meta| { if meta.api_id == 0 { meta.api_id = api_id; } });
+    }
+    ensure_client_initialized(&app_handle, &state, &account_manager, api_id).await?;
     Ok(true)
 }
 
@@ -220,6 +225,7 @@ pub async fn cmd_connect(
 pub async fn cmd_check_connection(
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
+    account_manager: State<'_, Arc<AccountManager>>,
 ) -> Result<bool, String> {
     // 1. Check if client exists and is responsive
     let client_msg_opt = {
@@ -243,7 +249,7 @@ pub async fn cmd_check_connection(
         // Force re-init: Clear old client first to ensure fresh pool
         *state.client.lock().await = None;
 
-        match ensure_client_initialized(&app_handle, &state, api_id).await {
+        match ensure_client_initialized(&app_handle, &state, &account_manager, api_id).await {
             Ok(c) => {
                 // Double check
                 if c.get_me().await.is_ok() {
@@ -262,44 +268,39 @@ pub async fn cmd_check_connection(
 
 #[tauri::command]
 pub async fn cmd_logout(
-    app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
+    account_manager: State<'_, Arc<AccountManager>>,
 ) -> Result<bool, String> {
-    log::info!("Logging out...");
+    log::info!("Logging out current account...");
 
-    // 1. Shutdown the network runner FIRST to prevent any operations
+    // 1. Shutdown runner
     {
-        let mut shutdown_guard = state.runner_shutdown.lock().map_err(|e| e.to_string())?;
-        if let Some(shutdown_tx) = shutdown_guard.take() {
-            log::info!("Signaling runner shutdown for logout...");
-            let _ = shutdown_tx.send(());
-        }
+        let mut guard = state.runner_shutdown.lock().map_err(|e| e.to_string())?;
+        if let Some(tx) = guard.take() { let _ = tx.send(()); }
     }
 
-    // 2. Try to sign out from Telegram (if connected)
+    // 2. Sign out from Telegram
     let client_opt = { state.client.lock().await.clone() };
-    if let Some(client) = client_opt {
-        // We don't strictly care if this fails (e.g. network down), we just want to clear local state.
-        let _ = client.sign_out().await;
-    }
+    if let Some(client) = client_opt { let _ = client.sign_out().await; }
 
-    // 3. Clear State
+    // 3. Clear state
     *state.client.lock().await = None;
     *state.login_token.lock().await = None;
     *state.password_token.lock().await = None;
     *state.api_id.lock().await = None;
 
-    // 4. Remove Session File
-    let app_data_dir = app_handle.path().app_data_dir().unwrap();
-    let session_path = app_data_dir.join("telegram.session");
-    let _ = std::fs::remove_file(session_path);
-    let _ = std::fs::remove_file(app_data_dir.join("telegram.session-wal"));
-    let _ = std::fs::remove_file(app_data_dir.join("telegram.session-shm"));
+    // 4. Remove session files for the active account
+    if let Some(session_path) = account_manager.active_session_path() {
+        let s = session_path.to_string_lossy().to_string();
+        let _ = std::fs::remove_file(&session_path);
+        let _ = std::fs::remove_file(format!("{}-wal", s));
+        let _ = std::fs::remove_file(format!("{}-shm", s));
+    }
+    if let Some(protected) = account_manager.active_protected_session_path() {
+        let _ = std::fs::remove_file(protected);
+    }
 
-    log::info!(
-        "Logout complete. Runner count: {}",
-        state.runner_count.load(Ordering::SeqCst)
-    );
+    log::info!("Logout complete.");
     Ok(true)
 }
 
@@ -310,6 +311,7 @@ pub async fn cmd_auth_request_code(
     api_id: i32,
     api_hash: String,
     state: State<'_, TelegramState>,
+    account_manager: State<'_, Arc<AccountManager>>,
 ) -> Result<String, String> {
     if api_hash.trim().is_empty() {
         return Err("API Hash cannot be empty.".to_string());
@@ -318,7 +320,7 @@ pub async fn cmd_auth_request_code(
     // Store API ID
     *state.api_id.lock().await = Some(api_id);
 
-    let client_handle = ensure_client_initialized(&app_handle, &state, api_id).await?;
+    let client_handle = ensure_client_initialized(&app_handle, &state, &account_manager, api_id).await?;
 
     log::info!("Requesting code for {}", phone);
 

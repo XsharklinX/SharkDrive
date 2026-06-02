@@ -20,7 +20,7 @@ struct SyncLogData {
 }
 
 pub struct SyncLog {
-    path: PathBuf,
+    path: std::sync::Mutex<PathBuf>,
     inner: RwLock<SyncLogData>,
 }
 
@@ -33,8 +33,21 @@ impl SyncLog {
             .and_then(|raw| serde_json::from_str::<SyncLogData>(&raw).ok())
             .unwrap_or_default();
         Self {
-            path,
+            path: std::sync::Mutex::new(path),
             inner: RwLock::new(inner),
+        }
+    }
+
+    pub fn swap_to_account(&self, new_path: PathBuf) {
+        let new_data = std::fs::read_to_string(&new_path)
+            .ok()
+            .and_then(|raw| serde_json::from_str::<SyncLogData>(&raw).ok())
+            .unwrap_or_default();
+        if let Ok(mut path) = self.path.lock() {
+            *path = new_path;
+        }
+        if let Ok(mut inner) = self.inner.write() {
+            *inner = new_data;
         }
     }
 
@@ -79,11 +92,15 @@ impl SyncLog {
     }
 
     fn persist(&self, data: &SyncLogData) {
-        if let Some(parent) = self.path.parent() {
+        let path = match self.path.lock() {
+            Ok(p) => p.clone(),
+            Err(_) => return,
+        };
+        if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
         if let Ok(raw) = serde_json::to_string(data) {
-            let _ = std::fs::write(&self.path, raw);
+            let _ = std::fs::write(&path, raw);
         }
     }
 }

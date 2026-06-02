@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { ActivityEntry, AutomationConfig, BandwidthStats, BookCardData, CleanupRule, DuplicateGroup, ShareLinkInfo, SyncSession, TelegramFile, TelegramFolder } from '../types';
+import type { AccountMeta, ActivityEntry, AutomationConfig, BandwidthStats, BookCardData, CleanupRule, CrossCopyResult, DuplicateGroup, ShareLinkInfo, SyncSession, TelegramFile, TelegramFolder } from '../types';
 
 type FileRecord = TelegramFile;
 let streamTokenPromise: Promise<string> | null = null;
@@ -228,5 +228,46 @@ export const tauriApi = {
             format,
             savePath,
         });
+    },
+
+    // ── v3.3 — Multi-Cuenta ──────────────────────────────────────────────────
+    listAccounts() {
+        return invoke<AccountMeta[]>('cmd_list_accounts');
+    },
+    getActiveAccountId() {
+        return invoke<string | null>('cmd_get_active_account_id');
+    },
+    switchAccount(accountId: string) {
+        return invoke<void>('cmd_switch_account', { accountId });
+    },
+    prepareNewAccount() {
+        return invoke<string>('cmd_prepare_new_account');
+    },
+    finalizeAccount(alias?: string) {
+        return invoke<AccountMeta>('cmd_finalize_account', { alias });
+    },
+    removeAccount(accountId: string) {
+        return invoke<void>('cmd_remove_account', { accountId });
+    },
+    setAccountAlias(accountId: string, alias: string) {
+        return invoke<void>('cmd_set_account_alias', { accountId, alias });
+    },
+    setAccountColor(accountId: string, color: string | null) {
+        return invoke<void>('cmd_set_account_color', { accountId, color });
+    },
+    fetchAccountAvatar() {
+        return invoke<string | null>('cmd_fetch_account_avatar');
+    },
+    crossAccountDownload(
+        files: { messageId: number; folderId: number | null; filename: string }[],
+        transferId: string,
+    ) {
+        return invoke<CrossCopyResult>('cmd_cross_account_download', {
+            files: files.map(f => ({ message_id: f.messageId, folder_id: f.folderId, filename: f.filename })),
+            transferId,
+        });
+    },
+    crossAccountCleanup(transferId: string) {
+        return invoke<void>('cmd_cross_account_cleanup', { transferId });
     },
 };

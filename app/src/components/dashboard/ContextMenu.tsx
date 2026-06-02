@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText, Link, CopyPlus, Info, FolderArchive, History } from 'lucide-react';
+import { Copy, Eye, HardDrive, Trash2, FolderOpen, Pencil, Play, FileText, Link, CopyPlus, Info, FolderArchive, History, ArrowRight } from 'lucide-react';
 import { TelegramFile } from '../../types';
 import { isMediaFile, isPdfFile } from '../../utils';
 import { useLanguage } from '../../context/LanguageContext';
@@ -19,9 +19,10 @@ interface ContextMenuProps {
     onInfo?: () => void;
     onExtractZip?: () => void;
     onVersionHistory?: () => void;
+    onCopyToOtherAccount?: () => void;
 }
 
-export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPreview, onRename, onShareLink, onCopyToFolder, onDuplicate, onInfo, onExtractZip, onVersionHistory }: ContextMenuProps) {
+export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPreview, onRename, onShareLink, onCopyToFolder, onDuplicate, onInfo, onExtractZip, onVersionHistory, onCopyToOtherAccount }: ContextMenuProps) {
     const [adjustedPos, setAdjustedPos] = useState({ x, y });
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -140,6 +141,13 @@ export function ContextMenu({ x, y, file, onClose, onDownload, onDelete, onPrevi
                 <button onClick={onVersionHistory} className={`${buttonClass} text-telegram-text`}>
                     <History className="w-4 h-4 text-telegram-primary" />
                     {t('versionHistory')}
+                </button>
+            )}
+
+            {file.type !== 'folder' && onCopyToOtherAccount && (
+                <button onClick={onCopyToOtherAccount} className={`${buttonClass} text-telegram-text`}>
+                    <ArrowRight className="w-4 h-4 text-telegram-secondary" />
+                    {t('copyToAccount')}
                 </button>
             )}
 

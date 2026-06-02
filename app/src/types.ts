@@ -94,6 +94,24 @@ export interface ActivityEntry {
     folderId?: number | null;
 }
 
+// ── v3.3 types ────────────────────────────────────────────────────────────────
+
+export interface AccountMeta {
+    id: string;
+    alias: string;
+    phone: string;
+    api_id: number;
+    accent_color?: string | null;
+    added_at_ms: number;
+    avatar_b64?: string | null;
+}
+
+export interface CrossCopyResult {
+    transfer_id: string;
+    temp_paths: [string, string][]; // [filename, absolute_path]
+    failed: string[];
+}
+
 // ── v3.2 types ────────────────────────────────────────────────────────────────
 
 export interface SyncSession {

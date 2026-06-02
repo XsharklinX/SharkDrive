@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
 import { Activity, BarChart2, ChevronDown, Clock, FileText, Folder, HardDrive, Image, Lock, LogOut, Plus, RefreshCw, Sparkles, Star, Tag, Video } from 'lucide-react';
+import { AccountSwitcher } from './AccountSwitcher';
 import { useLanguage } from '../../context/LanguageContext';
 import { SidebarItem } from './SidebarItem';
 import { BandwidthWidget } from './BandwidthWidget';
-import { ActivityEntry, BandwidthStats, TelegramFolder } from '../../types';
+import { AccountMeta, ActivityEntry, BandwidthStats, TelegramFolder } from '../../types';
 import { formatBytes } from '../../utils';
 import type { SmartCollection, SmartCollectionId, SmartCollectionKind } from '../../hooks/useSmartCollections';
 
@@ -55,6 +56,11 @@ interface SidebarProps {
     onSelectSmartCollection?: (collectionId: SmartCollectionId) => void;
     encryptionUnlocked?: boolean;
     onLockVault?: () => void;
+    accounts?: AccountMeta[];
+    activeAccountId?: string | null;
+    onSwitchAccount?: (id: string) => void;
+    onAddAccount?: () => void;
+    onAccountsChange?: () => void;
 }
 
 export function Sidebar({
@@ -93,6 +99,11 @@ export function Sidebar({
     onSelectSmartCollection,
     encryptionUnlocked = false,
     onLockVault,
+    accounts = [],
+    activeAccountId = null,
+    onSwitchAccount,
+    onAddAccount,
+    onAccountsChange,
 }: SidebarProps) {
     const [showNewFolderInput, setShowNewFolderInput] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
@@ -280,6 +291,19 @@ export function Sidebar({
                     </span>
                 </div>
             </div>
+
+            {/* Account switcher — shown when multiple accounts exist or onAddAccount is provided */}
+            {(accounts.length > 0 || onAddAccount) && onSwitchAccount && onAddAccount && (
+                <div className="border-b border-telegram-border/70 px-3 py-2">
+                    <AccountSwitcher
+                        accounts={accounts}
+                        activeAccountId={activeAccountId}
+                        onSwitch={onSwitchAccount}
+                        onAddAccount={onAddAccount}
+                        onAccountsChange={onAccountsChange ?? (() => {})}
+                    />
+                </div>
+            )}
 
             <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4">
                 <SidebarItem

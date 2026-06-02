@@ -1,3 +1,4 @@
+pub mod account_manager;
 pub mod bandwidth;
 pub mod commands;
 pub mod index_store;
@@ -12,6 +13,7 @@ use commands::settings::AppSettings;
 use commands::share::ShareStore;
 use commands::streaming::StreamToken;
 use commands::TelegramState;
+use account_manager::AccountManager;
 use index_store::PersistentIndexState;
 use sync_log::SyncLog;
 use rand::Rng;
@@ -28,6 +30,45 @@ fn generate_stream_token() -> String {
 }
 
 pub struct ActixServerHandle(pub Arc<std::sync::Mutex<Option<actix_web::dev::ServerHandle>>>);
+
+/// Move a single-account installation into the multi-account accounts/ directory.
+fn migrate_legacy_account(app_data_dir: &std::path::Path, manager: &AccountManager) {
+    if !manager.list_accounts().is_empty() { return; }
+
+    let legacy_session = app_data_dir.join("telegram.session");
+    if !legacy_session.exists() { return; }
+
+    let account_id = "acc_default".to_string();
+    let account_dir = manager.data_dir_for(&account_id);
+    let _ = std::fs::create_dir_all(&account_dir);
+
+    // Move session files
+    for suffix in &["", "-wal", "-shm"] {
+        let src = app_data_dir.join(format!("telegram.session{}", suffix));
+        let dst = account_dir.join(format!("telegram.session{}", suffix));
+        if src.exists() { let _ = std::fs::rename(src, dst); }
+    }
+    let src_enc = app_data_dir.join("telegram.session.sdenc");
+    if src_enc.exists() { let _ = std::fs::rename(src_enc, account_dir.join("telegram.session.sdenc")); }
+
+    // Copy index + sync log
+    for filename in &["persistent_index.json", "sync_log.json"] {
+        let src = app_data_dir.join(filename);
+        if src.exists() { let _ = std::fs::copy(&src, account_dir.join(filename)); }
+    }
+
+    manager.add_or_update(account_manager::AccountMeta {
+        id: account_id.clone(),
+        alias: "Account 1".to_string(),
+        phone: String::new(),
+        api_id: 0,
+        accent_color: None,
+        added_at_ms: account_manager::now_ms(),
+        avatar_b64: None,
+    });
+    manager.set_active(&account_id);
+    log::info!("Migrated legacy account to accounts/{}", account_id);
+}
 
 /// Startup arguments (protocol URL or file path) consumed once by the frontend.
 pub struct StartupArgs(pub std::sync::Mutex<Option<String>>);
@@ -116,11 +157,18 @@ pub fn run() {
             ));
             let share_store = Arc::new(ShareStore::new(app_data_dir.join("share_links.json")));
             app.manage(share_store.clone());
-            app.manage(PersistentIndexState::new(
-                app_data_dir.join("persistent_index.json"),
-            ));
-            let sync_log = Arc::new(SyncLog::new(app_data_dir.join("sync_log.json")));
+
+            // ── Multi-account setup ───────────────────────────────────────────
+            let account_manager = Arc::new(AccountManager::new(&app_data_dir));
+
+            // Migrate single-account users: move legacy session + index into accounts/
+            migrate_legacy_account(&app_data_dir, &account_manager);
+
+            // Per-account stores — use the active account's paths
+            app.manage(PersistentIndexState::new(account_manager.index_path()));
+            let sync_log = Arc::new(SyncLog::new(account_manager.sync_log_path()));
             app.manage(sync_log);
+            app.manage(account_manager.clone());
 
             if let Some(window) = app.get_webview_window("main") {
                 if let Some(icon) = app.default_window_icon() {
@@ -306,6 +354,18 @@ pub fn run() {
             commands::cmd_get_sync_history,
             commands::cmd_find_duplicates,
             commands::cmd_export_activity_log,
+            // v3.3 — Multi-Cuenta
+            commands::cmd_list_accounts,
+            commands::cmd_get_active_account_id,
+            commands::cmd_switch_account,
+            commands::cmd_prepare_new_account,
+            commands::cmd_finalize_account,
+            commands::cmd_remove_account,
+            commands::cmd_set_account_alias,
+            commands::cmd_set_account_color,
+            commands::cmd_fetch_account_avatar,
+            commands::cmd_cross_account_download,
+            commands::cmd_cross_account_cleanup,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

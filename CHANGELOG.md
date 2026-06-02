@@ -4,6 +4,58 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.3.0] - 2026-06-02
+
+### Multi-Cuenta
+
+**Account switcher + Stores aislados**
+- `AccountManager` persiste cuentas en `accounts.json` y sessions en `accounts/{id}/`
+- Migración automática al primer arranque: sesión legacy movida a `accounts/acc_default/`
+- `cmd_switch_account`: desconecta client actual, activa nueva cuenta en AccountManager, hace swap de `PersistentIndexState` y `SyncLog`, emite evento `account-switched`
+- `cmd_prepare_new_account`: crea slot temporal, activa, retorna al frontend en modo auth
+- `cmd_finalize_account`: tras login exitoso, fetchea phone/username y actualiza el meta del account
+- `PersistentIndexState.path` y `SyncLog.path` cambiados a `Mutex<PathBuf>` con `swap_to_account()`
+- Todos los comandos de auth ahora usan `account_manager: State<Arc<AccountManager>>` para rutas de sesión
+- Migración limpia: ninguna sesión de usuario existente se pierde
+
+**Account Switcher UI**
+- `AccountSwitcher.tsx`: dropdown compacto en el sidebar con avatar generativo (iniciales + color acento)
+- Soporte para avatar real de Telegram via `cmd_fetch_account_avatar` (GetUserPhotos + GetFile)
+- Botones inline de rename, change color (8 presets), remove account (solo cuentas inactivas)
+- Acciones en hover: sin popups ni modales extra
+- `useAccounts.ts`: hook para listar cuentas + active ID
+- `Sidebar.tsx`: AccountSwitcher aparece justo bajo el header cuando hay >1 cuenta o `onAddAccount` disponible
+
+**Copiar entre cuentas**
+- `cmd_cross_account_download`: descarga archivos desde cuenta activa a `tmp/sharkdrive_xcopy_{id}/`, emite eventos `cross-copy-progress`
+- `cmd_cross_account_cleanup`: limpia directorio temp tras upload
+- `CrossAccountCopyModal.tsx`: flujo en 3 fases:
+  1. Seleccionar cuenta destino
+  2. Descargar archivos con barra de progreso
+  3. Confirmar switch → la app cambia a cuenta destino y encola archivos en upload queue
+- Contexto menu: "Copy to account…" visible solo cuando hay múltiples cuentas
+- `handleCrossCopyAndSwitch()`: cambia cuenta → encola archivos temp → toast de confirmación
+- Los archivos temp se reutilizan con el upload queue existente — sin duplicar lógica
+
+**Alias y avatar**
+- `cmd_set_account_alias(account_id, alias)` — renombra cuenta sin reconectar
+- `cmd_set_account_color(account_id, color)` — color de acento hex
+- `cmd_fetch_account_avatar()` — GetUserPhotos + GetFile → base64 data URL cacheado en AccountMeta
+- Avatar: muestra foto de Telegram si existe, sino iniciales sobre color de acento
+- 13 nuevas claves i18n EN + ES
+
+### Cambios técnicos
+- `account_manager.rs` — nuevo módulo con `AccountManager`, `AccountMeta`, `make_account_id()`, `now_ms()`
+- `commands/accounts.rs` — 11 nuevos comandos Tauri
+- `lib.rs` — `migrate_legacy_account()` en setup, gestiona `Arc<AccountManager>`, usa AccountManager para paths
+- `auth.rs` — `session_paths()` ahora toma `&AccountManager`, todos los comandos de sesión actualizados
+- `index_store.rs` — `path: Mutex<PathBuf>` + `swap_to_account()`
+- `sync_log.rs` — `path: Mutex<PathBuf>` + `swap_to_account()`
+- Frontend: `useAccounts`, `AccountSwitcher`, `CrossAccountCopyModal` (nuevos)
+- `Sidebar.tsx`, `Dashboard.tsx`, `ContextMenu.tsx`, `FileExplorer.tsx` — props nuevas para cuentas
+
+---
+
 ## [3.2.0] - 2026-06-02
 
 ### Historial & Versiones

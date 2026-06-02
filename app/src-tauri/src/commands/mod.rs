@@ -25,6 +25,7 @@ pub struct TelegramState {
     pub runner_count: Arc<std::sync::atomic::AtomicU32>,
 }
 
+pub mod accounts;
 pub mod auth;
 pub mod automation;
 pub mod backup;
@@ -40,6 +41,7 @@ pub mod streaming;
 pub mod utils;
 pub mod versions;
 
+pub use accounts::*;
 pub use auth::*;
 pub use automation::*;
 pub use backup::*;
