@@ -21,6 +21,9 @@ pub struct AutomationConfig {
     pub cleanup_rules: Vec<CleanupRule>,
     #[serde(default)]
     last_scheduled_sync_date: Option<String>,
+    /// When true, auto-sync is skipped unless a non-metered (WiFi/LAN) connection is detected.
+    #[serde(default)]
+    pub wifi_only_sync: bool,
 }
 
 pub struct AutomationState {
@@ -164,6 +167,72 @@ pub fn cmd_get_due_cleanup_files(
             now.signed_duration_since(created_at).num_days() >= i64::from(rule.max_age_days)
         })
         .collect())
+}
+
+/// Set the wifi_only_sync flag.
+#[tauri::command]
+pub fn cmd_set_wifi_only_sync(
+    enabled: bool,
+    state: State<'_, AutomationState>,
+) -> Result<(), String> {
+    let mut config = state.inner.lock().map_err(|e| e.to_string())?;
+    config.wifi_only_sync = enabled;
+    state.persist_locked(&config);
+    Ok(())
+}
+
+/// Detect whether the machine currently has a non-metered (WiFi or Ethernet) connection.
+/// On non-Windows platforms always returns true (assume unmetered).
+#[tauri::command]
+pub async fn cmd_is_wifi_connected() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use tokio::process::Command;
+        // netsh wlan show interfaces — if "State" line contains "connected" → WiFi is up
+        if let Ok(output) = Command::new("netsh")
+            .args(["wlan", "show", "interfaces"])
+            .output()
+            .await
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let wifi_connected = stdout.lines().any(|line| {
+                let lower = line.to_lowercase();
+                lower.contains("state") && lower.contains("connected")
+            });
+            if wifi_connected {
+                return true;
+            }
+        }
+        // Fallback: check if Ethernet is active via netstat
+        if let Ok(output) = Command::new("powershell")
+            .args([
+                "-NoProfile", "-NonInteractive", "-Command",
+                "Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and $_.MediaType -eq '802.3'} | Measure-Object | Select-Object -ExpandProperty Count",
+            ])
+            .output()
+            .await
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let count: u32 = stdout.trim().parse().unwrap_or(0);
+            if count > 0 {
+                return true;
+            }
+        }
+        return false;
+    }
+    #[allow(unreachable_code)]
+    true
+}
+
+/// Manually trigger a cleanup review (same logic the scheduler uses post-sync).
+/// Returns the count of files that would be deleted.
+#[tauri::command]
+pub fn cmd_count_cleanup_candidates(
+    automation_state: State<'_, AutomationState>,
+    index_state: State<'_, PersistentIndexState>,
+) -> Result<u32, String> {
+    let files = cmd_get_due_cleanup_files(automation_state, index_state)?;
+    Ok(files.len() as u32)
 }
 
 #[cfg(test)]

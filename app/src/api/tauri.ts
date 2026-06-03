@@ -271,6 +271,17 @@ export const tauriApi = {
         return invoke<void>('cmd_cross_account_cleanup', { transferId });
     },
 
+    // ── v3.5 — Automatización Avanzada ──────────────────────────────────────
+    setWifiOnlySync(enabled: boolean) {
+        return invoke<void>('cmd_set_wifi_only_sync', { enabled });
+    },
+    isWifiConnected() {
+        return invoke<boolean>('cmd_is_wifi_connected');
+    },
+    countCleanupCandidates() {
+        return invoke<number>('cmd_count_cleanup_candidates');
+    },
+
     // ── v3.4 — Companion Móvil ───────────────────────────────────────────────
     setWebPin(pin: string) {
         return invoke<void>('cmd_set_web_pin', { pin });

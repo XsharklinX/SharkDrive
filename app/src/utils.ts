@@ -79,8 +79,46 @@ export const applyUploadNamingPattern = (
     for (const [token, value] of Object.entries(replacements)) {
         result = result.split(token).join(value);
     }
-    return result.replace(/[<>:"/\\|?*]/g, '_').replace(/\.+$/, '').trim() || localName;
+    result = result.replace(/[<>:"/\\|?*]/g, '_').replace(/\.+$/, '').trim() || localName;
+    // Auto-append original extension if pattern doesn't produce one
+    if (extension && !result.toLowerCase().endsWith('.' + extension.toLowerCase())) {
+        result = `${result}.${extension}`;
+    }
+    return result;
 };
+
+// ── Auto-classification helpers ───────────────────────────────────────────────
+
+export const CLASSIFICATION_RULES_KEY = 'sharkdrive.classificationRules.v1';
+
+const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','bmp','svg','heic','heif','tiff','avif']);
+const VIDEO_EXTS = new Set(['mp4','mkv','avi','mov','webm','m4v','flv','wmv']);
+const AUDIO_EXTS = new Set(['mp3','wav','flac','aac','ogg','m4a','opus','wma']);
+const DOC_EXTS   = new Set(['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','md','csv','rtf','epub','odt']);
+
+/** Returns the generic type of a file based on its extension. */
+export function genericFileType(filename: string): string {
+    const ext = (filename.split('.').pop() ?? '').toLowerCase();
+    if (IMAGE_EXTS.has(ext)) return 'image';
+    if (VIDEO_EXTS.has(ext)) return 'video';
+    if (AUDIO_EXTS.has(ext)) return 'audio';
+    if (DOC_EXTS.has(ext))   return 'doc';
+    return 'other';
+}
+
+/** Check if a file path matches a classification rule's file types. */
+export function matchesClassificationRule(path: string, fileTypes: string[]): boolean {
+    const filename = path.split(/[/\\]/).pop() ?? path;
+    const ext = (filename.split('.').pop() ?? '').toLowerCase();
+    const genericType = genericFileType(filename);
+    return fileTypes.some(ft => {
+        const lower = ft.toLowerCase();
+        // Generic type match
+        if (['image','video','audio','doc','other'].includes(lower)) return genericType === lower;
+        // Specific extension match (with or without leading dot)
+        return ext === lower.replace(/^\./, '');
+    });
+}
 
 type SearchFilters = {
     text: string[];

@@ -381,6 +381,10 @@ pub fn run() {
             commands::cmd_fetch_account_avatar,
             commands::cmd_cross_account_download,
             commands::cmd_cross_account_cleanup,
+            // v3.5 — Automatización Avanzada
+            commands::cmd_set_wifi_only_sync,
+            commands::cmd_is_wifi_connected,
+            commands::cmd_count_cleanup_candidates,
             // v3.4 — Companion Móvil
             commands::cmd_set_web_pin,
             commands::cmd_clear_web_pin,

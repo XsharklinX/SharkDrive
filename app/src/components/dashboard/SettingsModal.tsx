@@ -5,9 +5,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, Settings, Shield, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, RefreshCw, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { ActivityEntry, BackupFolder, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
+import { ActivityEntry, BackupFolder, ClassificationRule, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
+import { CLASSIFICATION_RULES_KEY } from '../../utils';
 import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
 import { tauriApi } from '../../api/tauri';
 import { applyUploadNamingPattern, UPLOAD_NAMING_PATTERN_KEY } from '../../utils';
@@ -102,6 +103,15 @@ export function SettingsModal({
     const [cleanupDays, setCleanupDays] = useState(30);
     const [uploadNamingPattern, setUploadNamingPattern] = useState('');
     const [loading, setLoading] = useState(false);
+    // v3.5 state
+    const [wifiOnlySync, setWifiOnlySync] = useState(() => localStorage.getItem('sharkdrive.wifiOnlySync.v1') === 'true');
+    const [cleanupCandidates, setCleanupCandidates] = useState<number | null>(null);
+    const [classificationRules, setClassificationRules] = useState<ClassificationRule[]>(() => {
+        try { return JSON.parse(localStorage.getItem('sharkdrive.classificationRules.v1') || '[]'); }
+        catch { return []; }
+    });
+    const [newRuleType, setNewRuleType] = useState<string>('image');
+    const [newRuleFolderId, setNewRuleFolderId] = useState<string>('');
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
     const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
     const [shareLinks, setShareLinks] = useState<ShareLinkInfo[]>([]);
@@ -1214,6 +1224,141 @@ export function SettingsModal({
                                                     onClick={() => void removeCleanupRule(rule.folder_id)}
                                                     className="rounded-md p-1.5 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-300"
                                                     title="Remove cleanup rule"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {cleanupRules.length > 0 && (
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const count = await tauriApi.countCleanupCandidates();
+                                                setCleanupCandidates(count);
+                                                if (count === 0) { toast.info('No files match current cleanup rules'); }
+                                                else { toast.info(`${count} file(s) will be flagged on next sync`); }
+                                            } catch (e) { toast.error(String(e)); }
+                                        }}
+                                        className="self-start rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-1.5 text-xs text-telegram-subtext transition hover:bg-white/[0.06] hover:text-telegram-text"
+                                    >
+                                        {t('runCleanupNow')}
+                                        {cleanupCandidates !== null && (
+                                            <span className="ml-1.5 rounded-full bg-amber-500/20 px-1.5 text-amber-400">{cleanupCandidates}</span>
+                                        )}
+                                    </button>
+                                )}
+                            </SectionCard>
+
+                            {/* WiFi-only sync */}
+                            <SectionCard
+                                title={t('wifiOnlySync')}
+                                icon={<RefreshCw className="w-4 h-4" />}
+                                description={t('wifiOnlySyncDesc')}
+                            >
+                                <label className="flex cursor-pointer items-center gap-3">
+                                    <div
+                                        onClick={() => {
+                                            const next = !wifiOnlySync;
+                                            setWifiOnlySync(next);
+                                            localStorage.setItem('sharkdrive.wifiOnlySync.v1', String(next));
+                                            tauriApi.setWifiOnlySync(next).catch(() => {});
+                                        }}
+                                        className={`relative h-6 w-11 rounded-full transition-colors ${wifiOnlySync ? 'bg-telegram-primary' : 'bg-white/[0.1]'}`}
+                                    >
+                                        <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${wifiOnlySync ? 'translate-x-5' : ''}`} />
+                                    </div>
+                                    <span className="text-sm text-telegram-text">{t('wifiOnlySync')}</span>
+                                </label>
+                            </SectionCard>
+
+                            {/* Auto-classification rules */}
+                            <SectionCard
+                                title={t('autoClassify')}
+                                icon={<FolderOpen className="w-4 h-4" />}
+                                description={t('autoClassifyDesc')}
+                            >
+                                <div className="flex gap-2">
+                                    <select
+                                        value={newRuleType}
+                                        onChange={e => setNewRuleType(e.target.value)}
+                                        className="flex-1 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                    >
+                                        <option value="image">Images</option>
+                                        <option value="video">Videos</option>
+                                        <option value="audio">Audio</option>
+                                        <option value="doc">Documents</option>
+                                        <option value="pdf">PDF only</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                    <select
+                                        value={newRuleFolderId}
+                                        onChange={e => setNewRuleFolderId(e.target.value)}
+                                        className="flex-1 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
+                                    >
+                                        <option value="">— Select folder —</option>
+                                        {folders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                    </select>
+                                    <button
+                                        disabled={!newRuleFolderId}
+                                        onClick={() => {
+                                            if (!newRuleFolderId) return;
+                                            const folder = folders.find(f => String(f.id) === newRuleFolderId);
+                                            if (!folder) return;
+                                            const next: ClassificationRule[] = [
+                                                ...classificationRules.filter(r => !r.fileTypes.includes(newRuleType)),
+                                                {
+                                                    id: `${Date.now()}`,
+                                                    name: `${newRuleType} → ${folder.name}`,
+                                                    fileTypes: [newRuleType],
+                                                    folderId: folder.id,
+                                                    folderName: folder.name,
+                                                    enabled: true,
+                                                },
+                                            ];
+                                            setClassificationRules(next);
+                                            localStorage.setItem(CLASSIFICATION_RULES_KEY, JSON.stringify(next));
+                                            setNewRuleFolderId('');
+                                            toast.success(`Rule added: ${newRuleType} → ${folder.name}`);
+                                        }}
+                                        className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black hover:opacity-90 disabled:opacity-40"
+                                    >
+                                        {t('addRule')}
+                                    </button>
+                                </div>
+                                {classificationRules.length === 0 ? (
+                                    <p className="text-xs text-telegram-subtext">{t('noRules')}</p>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {classificationRules.map(rule => (
+                                            <div key={rule.id} className="flex items-center justify-between gap-3 rounded-lg border border-telegram-border bg-black/10 px-3 py-2">
+                                                <div className="flex items-center gap-2">
+                                                    <label className="flex cursor-pointer items-center gap-1.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={rule.enabled}
+                                                            onChange={() => {
+                                                                const next = classificationRules.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r);
+                                                                setClassificationRules(next);
+                                                                localStorage.setItem(CLASSIFICATION_RULES_KEY, JSON.stringify(next));
+                                                            }}
+                                                            className="accent-telegram-primary"
+                                                        />
+                                                    </label>
+                                                    <p className="text-xs text-telegram-text">
+                                                        <span className="font-medium">{rule.fileTypes.join(', ')}</span>
+                                                        <span className="text-telegram-subtext"> → </span>
+                                                        <span className="font-medium">{rule.folderName}</span>
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        const next = classificationRules.filter(r => r.id !== rule.id);
+                                                        setClassificationRules(next);
+                                                        localStorage.setItem(CLASSIFICATION_RULES_KEY, JSON.stringify(next));
+                                                    }}
+                                                    className="rounded-md p-1.5 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-300"
                                                 >
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                 </button>

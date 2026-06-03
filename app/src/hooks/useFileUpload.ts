@@ -21,7 +21,8 @@ async function showNativeNotification(title: string, body: string) {
     }
 }
 import type { Store } from '@tauri-apps/plugin-store';
-import { applyUploadNamingPattern, buildQueuedUploadKey, formatError, UPLOAD_NAMING_PATTERN_KEY } from '../utils';
+import { applyUploadNamingPattern, buildQueuedUploadKey, formatError, UPLOAD_NAMING_PATTERN_KEY, CLASSIFICATION_RULES_KEY, matchesClassificationRule } from '../utils';
+import { ClassificationRule } from '../types';
 
 interface ProgressPayload {
     id: string;
@@ -55,9 +56,12 @@ export function useFileUpload(
 ) {
     const queryClient = useQueryClient();
     const [uploadQueue, setUploadQueue] = useState<QueueItem[]>([]);
-    const [processing, setProcessing] = useState(false);
     const [initialized, setInitialized] = useState(false);
     const cancelledRef = useRef<Set<string>>(new Set());
+    // Tracks active concurrent uploads (ref = no re-render on change)
+    const activeUploadsRef = useRef(0);
+    // Concurrency: 1 for small batches, up to 4 for large batches
+    const getTargetConcurrency = (pendingCount: number) => pendingCount >= 4 ? 4 : 1;
 
     // Listen for progress events from Rust
     useEffect(() => {
@@ -97,13 +101,17 @@ export function useFileUpload(
         store.set('uploadQueue', resumable).then(() => store.save());
     }, [store, uploadQueue, initialized]);
 
+    // Start as many concurrent uploads as the current batch size allows
     useEffect(() => {
-        if (processing || !isConnected) return;
-        const nextItem = uploadQueue.find(i => i.status === 'pending');
-        if (nextItem) {
-            processItem(nextItem);
-        }
-    }, [uploadQueue, processing, isConnected]);
+        if (!isConnected) return;
+        const pending = uploadQueue.filter(i => i.status === 'pending');
+        if (pending.length === 0) return;
+        const target = getTargetConcurrency(pending.length);
+        const slots = target - activeUploadsRef.current;
+        if (slots <= 0) return;
+        pending.slice(0, slots).forEach(item => processItem(item));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [uploadQueue, isConnected]);
 
     const MAX_RETRIES = 2;
     const isNetworkError = (err: string) => {
@@ -112,7 +120,7 @@ export function useFileUpload(
     };
 
     const processItem = async (item: QueueItem) => {
-        setProcessing(true);
+        activeUploadsRef.current += 1;
 
         let fileSize: number | undefined;
         try {
@@ -124,7 +132,7 @@ export function useFileUpload(
                     ...i, status: 'error', error: `File too large (${mb} MB). Maximum is 2 GB.`
                 } : i));
                 toast.error(`Too large to upload: ${item.path.split(/[/\\]/).pop()}`);
-                setProcessing(false);
+                activeUploadsRef.current -= 1;
                 return;
             }
             fileSize = size;
@@ -186,7 +194,7 @@ export function useFileUpload(
                 } else {
                     cancelledRef.current.delete(item.id);
                 }
-                setProcessing(false);
+                activeUploadsRef.current -= 1;
                 return;
             } catch (e) {
                 lastError = formatError(e);
@@ -202,7 +210,7 @@ export function useFileUpload(
         } else {
             cancelledRef.current.delete(item.id);
         }
-        setProcessing(false);
+        activeUploadsRef.current -= 1;
     };
 
     const queueUploadCandidates = useCallback((candidates: QueueUploadCandidate[]) => {
@@ -216,8 +224,22 @@ export function useFileUpload(
         const skippedNames: string[] = [];
         const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+        // Load classification rules once per batch
+        let classificationRules: ClassificationRule[] = [];
+        try {
+            const raw = localStorage.getItem(CLASSIFICATION_RULES_KEY);
+            if (raw) classificationRules = JSON.parse(raw) as ClassificationRule[];
+        } catch { /* ignore */ }
+
         for (const [candidateIndex, candidate] of candidates.entries()) {
-            const folderId = candidate.folderId ?? activeFolderId;
+            // Resolve folder: explicit > auto-classification rule > active folder
+            let folderId = candidate.folderId ?? activeFolderId;
+            if (candidate.folderId === undefined && classificationRules.length > 0) {
+                const rule = classificationRules.find(r =>
+                    r.enabled && matchesClassificationRule(candidate.path, r.fileTypes)
+                );
+                if (rule) folderId = rule.folderId;
+            }
             const key = buildQueuedUploadKey(candidate.path, folderId);
             if (existingKeys.has(key)) {
                 skippedNames.push(candidate.path.split(/[/\\]/).pop() || candidate.path);

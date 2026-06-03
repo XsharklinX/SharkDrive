@@ -4,6 +4,52 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.5.0] - 2026-06-02
+
+### Automatización Avanzada
+
+**Reglas de naming en upload** — Ya estaba funcionando. Fix: `applyUploadNamingPattern` ahora auto-añade la extensión original si el pattern no la incluye (ej. pattern `{date}_{name}` con `foto.jpg` → `2026-06-02_foto.jpg` en vez de `2026-06-02_foto`).
+
+**Auto-cleanup ejecutado** — La lógica ya existía (se dispara post-sync). Añadido:
+- Botón "Run cleanup now" en Settings → Auto Backup → Cleanup Review con badge del número de candidatos
+- Respuesta inmediata mostrando cuántos archivos matchean las reglas actuales
+- Rust: `cmd_count_cleanup_candidates` (reutiliza `cmd_get_due_cleanup_files`)
+
+**Sync condicional (WiFi/LAN only)** — Nueva feature:
+- Settings → Auto Backup: toggle "WiFi / LAN only sync"
+- Persiste en `localStorage['sharkdrive.wifiOnlySync.v1']` y `AutomationConfig.wifi_only_sync`
+- El scheduler emite `scheduled-sync-request` — Dashboard verifica WiFi antes de ejecutar
+- Si está en datos móviles: toast "Scheduled sync skipped — not on WiFi / LAN"
+- Rust: `cmd_is_wifi_connected` usa `netsh wlan show interfaces` (WiFi) + PowerShell `Get-NetAdapter` (Ethernet)
+- `cmd_set_wifi_only_sync` persiste en `automation_config.json`
+
+**Upload batch inteligente** — Refactoring completo del motor de uploads:
+- De 1 upload secuencial a hasta 4 en paralelo cuando hay ≥4 archivos pendientes
+- Eliminado el estado `processing` (boolean) — reemplazado por `activeUploadsRef` (ref sin re-render)
+- El `useEffect` calcula `slots = targetConcurrency - activeUploadsRef.current` y lanza exactamente ese número
+- Para <4 archivos: sigue siendo 1 en paralelo (evita rate limiting de Telegram en uploads pequeños)
+- Sin cambios en la UI — la UploadQueue existente muestra múltiples items en `uploading` simultáneamente
+
+**Reglas de auto-clasificación** — Nueva feature:
+- Configurar en Settings → Auto Backup: tipo de archivo → carpeta destino
+- Tipos soportados: `image`, `video`, `audio`, `doc`, `pdf` (específico), `other`
+- Se aplica en `queueUploadCandidates` antes de encolar: si el archivo no tiene `folderId` explícito, se evalúan las reglas
+- Persiste en `localStorage['sharkdrive.classificationRules.v1']` (sin backend)
+- UI: selector de tipo + selector de carpeta + botón "Add rule"; lista con toggle enable/disable y delete
+- Nuevas utilidades en `utils.ts`: `genericFileType()`, `matchesClassificationRule()`, `CLASSIFICATION_RULES_KEY`
+
+### Cambios técnicos
+- `automation.rs` — `AutomationConfig` +`wifi_only_sync` field; `cmd_set_wifi_only_sync`, `cmd_is_wifi_connected`, `cmd_count_cleanup_candidates`
+- `utils.ts` — Fix `applyUploadNamingPattern` (auto-extension); `genericFileType`, `matchesClassificationRule`, `CLASSIFICATION_RULES_KEY`
+- `types.ts` — `AutomationConfig.wifi_only_sync`, `ClassificationRule` interface
+- `useFileUpload.ts` — parallelism refactor + auto-classification in `queueUploadCandidates`
+- `SettingsModal.tsx` — WiFi toggle, "Run cleanup now" button, classification rules UI; import `RefreshCw`, `ClassificationRule`
+- `Dashboard.tsx` — scheduled sync listener checks WiFi before proceeding
+- `LanguageContext.tsx` — 9 nuevas claves EN+ES
+- `api/tauri.ts` — `setWifiOnlySync`, `isWifiConnected`, `countCleanupCandidates`
+
+---
+
 ## [3.4.0] - 2026-06-02
 
 ### Companion Móvil

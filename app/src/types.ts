@@ -76,6 +76,17 @@ export interface CleanupRule {
 export interface AutomationConfig {
     scheduled_sync_time: string | null;
     cleanup_rules: CleanupRule[];
+    wifi_only_sync: boolean;
+}
+
+export interface ClassificationRule {
+    id: string;
+    name: string;
+    /** 'image' | 'video' | 'audio' | 'doc' | specific extension like 'pdf' */
+    fileTypes: string[];
+    folderId: number;
+    folderName: string;
+    enabled: boolean;
 }
 
 export interface AppConfig {

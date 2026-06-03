@@ -249,9 +249,18 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
     const { nextSyncIn } = useAutoSync(autoSyncInterval, handleSyncFolders);
 
+    // Scheduled sync — respects WiFi-only setting
     useEffect(() => {
         let unlisten: (() => void) | undefined;
-        listen('scheduled-sync-request', () => {
+        listen('scheduled-sync-request', async () => {
+            const wifiOnly = localStorage.getItem('sharkdrive.wifiOnlySync.v1') === 'true';
+            if (wifiOnly) {
+                const isWifi = await tauriApi.isWifiConnected().catch(() => true);
+                if (!isWifi) {
+                    toast.info('Scheduled sync skipped — not on WiFi / LAN');
+                    return;
+                }
+            }
             void syncFoldersRef.current();
         }).then((dispose) => { unlisten = dispose; });
         return () => unlisten?.();
