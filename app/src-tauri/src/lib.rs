@@ -15,6 +15,7 @@ use commands::share::ShareStore;
 use commands::streaming::StreamToken;
 use commands::TelegramState;
 use account_manager::AccountManager;
+use commands::security::{TotpState, WipeState};
 use index_store::PersistentIndexState;
 use sync_log::SyncLog;
 use web_auth::WebAuthState;
@@ -172,6 +173,8 @@ pub fn run() {
             app.manage(sync_log);
             let web_auth = Arc::new(WebAuthState::new(app_data_dir.join("web_auth.json")));
             app.manage(web_auth.clone());
+            app.manage(Arc::new(WipeState::new(app_data_dir.join("wipe_config.json"))));
+            app.manage(Arc::new(TotpState::new(app_data_dir.join("totp_secret.enc"))));
             app.manage(account_manager.clone());
 
             if let Some(window) = app.get_webview_window("main") {
@@ -381,6 +384,22 @@ pub fn run() {
             commands::cmd_fetch_account_avatar,
             commands::cmd_cross_account_download,
             commands::cmd_cross_account_cleanup,
+            // v3.6 — Seguridad Avanzada
+            commands::cmd_verify_file_integrity,
+            commands::cmd_set_wipe_secret,
+            commands::cmd_clear_wipe_secret,
+            commands::cmd_has_wipe_secret,
+            commands::cmd_check_remote_wipe,
+            commands::cmd_execute_wipe,
+            commands::cmd_save_encrypted_activity,
+            commands::cmd_load_encrypted_activity,
+            commands::cmd_is_totp_enabled,
+            commands::cmd_setup_totp,
+            commands::cmd_confirm_totp_setup,
+            commands::cmd_verify_totp,
+            commands::cmd_disable_totp,
+            commands::cmd_export_folder_key,
+            commands::cmd_import_folder_key,
             // v3.5 — Automatización Avanzada
             commands::cmd_set_wifi_only_sync,
             commands::cmd_is_wifi_connected,

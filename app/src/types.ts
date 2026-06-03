@@ -60,6 +60,7 @@ export interface DownloadItem {
     status: 'pending' | 'downloading' | 'success' | 'error' | 'cancelled';
     error?: string;
     progress?: number;
+    sha256?: string; // for integrity verification after download
 }
 
 export interface BackupFolder {
@@ -103,6 +104,14 @@ export interface ActivityEntry {
     timestamp: string;
     fileName?: string;
     folderId?: number | null;
+}
+
+// ── v3.6 types ────────────────────────────────────────────────────────────────
+
+export interface IntegrityResult {
+    ok: boolean;
+    filename: string;
+    expectedSha256?: string;
 }
 
 // ── v3.3 types ────────────────────────────────────────────────────────────────

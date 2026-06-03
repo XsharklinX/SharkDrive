@@ -43,6 +43,9 @@ import { SyncHistoryPanel } from './dashboard/SyncHistoryPanel';
 import { DuplicatesPanel } from './dashboard/DuplicatesPanel';
 import { CrossAccountCopyModal } from './dashboard/CrossAccountCopyModal';
 import { WebAccessModal } from './dashboard/WebAccessModal';
+import { WipeConfirmModal } from './dashboard/WipeConfirmModal';
+import { TotpSetupModal } from './dashboard/TotpSetupModal';
+import { ExportKeyModal } from './dashboard/ExportKeyModal';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -95,6 +98,9 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [crossCopyFiles, setCrossCopyFiles] = useState<TelegramFile[] | null>(null);
     const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
     const [showWebAccess, setShowWebAccess] = useState(false);
+    const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+    const [showTotpSetup, setShowTotpSetup] = useState(false);
+    const [exportKeyTarget, setExportKeyTarget] = useState<{ id: number; name: string } | null>(null);
     const pendingUploadPathsRef = useRef<string[]>([]);
     const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('sharkdrive.onboarding.v1') !== 'complete');
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
@@ -130,8 +136,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const { accounts, activeAccountId, refresh: refreshAccounts } = useAccounts();
     const { favoriteIds, showFavoritesOnly, setShowFavoritesOnly, handleToggleFavorite } = useFavorites(store);
     const { recentFiles, addToRecent, removeFromRecent, pruneStaleRecent } = useRecentFiles(store, activeFolderId);
-    const { activity, recordActivity } = useActivityLog(store);
     const { encryptedFolderIds, encryptionEnabled, setEncryptionEnabled, handleToggleEncryption } = useEncryptedFolders(store);
+    const { activity, recordActivity } = useActivityLog(store, encryptionEnabled);
     const { recentSearches, commitSearchTerm } = useRecentSearches(store);
     const organization = useOrganization(store);
 
@@ -305,6 +311,14 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         }).then(fn => { unlisten = fn; });
         return () => { unlisten?.(); };
     }, []);
+
+    // Remote wipe: check for wipe command in Saved Messages on connect
+    useEffect(() => {
+        if (!isConnected) return;
+        tauriApi.checkRemoteWipe()
+            .then(found => { if (found) setShowWipeConfirm(true); })
+            .catch(() => {});
+    }, [isConnected]);
 
     // Web companion: file uploaded from mobile phone
     useEffect(() => {
@@ -1233,6 +1247,31 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     />
                 )}
 
+                {showWipeConfirm && (
+                    <WipeConfirmModal
+                        key="wipe-confirm-modal"
+                        onCancel={() => setShowWipeConfirm(false)}
+                        onConfirm={async () => { await tauriApi.executeWipe(); }}
+                    />
+                )}
+
+                {showTotpSetup && (
+                    <TotpSetupModal
+                        key="totp-setup-modal"
+                        onClose={() => setShowTotpSetup(false)}
+                        onEnabled={() => setShowTotpSetup(false)}
+                    />
+                )}
+
+                {exportKeyTarget && (
+                    <ExportKeyModal
+                        key="export-key-modal"
+                        folderId={exportKeyTarget.id}
+                        folderName={exportKeyTarget.name}
+                        onClose={() => setExportKeyTarget(null)}
+                    />
+                )}
+
                 {showSyncHistory && (
                     <SyncHistoryPanel
                         key="sync-history-panel"
@@ -1568,7 +1607,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onDownload={(file) => {
                         if (!ensureEncryptionReady(file, 'download it')) return;
                         addToRecent(file);
-                        queueDownload(file.id, file.name, resolveFileFolderId(file, activeFolderId));
+                        queueDownload(file.id, file.name, resolveFileFolderId(file, activeFolderId), undefined, undefined, file.sha256 ?? undefined);
                     }}
                     onPreview={handlePreviewOrText}
                     onManualUpload={handleManualUpload}

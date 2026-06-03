@@ -21,6 +21,8 @@ pub struct EncryptionState {
     password_verifier: Mutex<Option<String>>,
     last_activity_epoch_ms: Mutex<Option<u128>>,
     auto_lock_minutes: Mutex<Option<u64>>,
+    /// Keys imported from other users via cmd_import_folder_key
+    guest_folder_keys: Mutex<std::collections::HashMap<Option<i64>, Vec<u8>>>,
 }
 
 impl EncryptionState {
@@ -31,6 +33,29 @@ impl EncryptionState {
             password_verifier: Mutex::new(None),
             last_activity_epoch_ms: Mutex::new(None),
             auto_lock_minutes: Mutex::new(None),
+            guest_folder_keys: Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+
+    /// Store an imported folder key for a specific folder (from another user).
+    pub fn add_guest_folder_key(&self, folder_id: Option<i64>, key: Vec<u8>) -> Result<(), String> {
+        self.guest_folder_keys.lock().map_err(|e| e.to_string())?.insert(folder_id, key);
+        Ok(())
+    }
+
+    /// Get the effective folder key: guest key if available, otherwise derived from master.
+    pub fn get_folder_key(&self, folder_id: Option<i64>) -> Option<Vec<u8>> {
+        // Check guest keys first (for shared access)
+        if let Ok(guests) = self.guest_folder_keys.lock() {
+            if let Some(key) = guests.get(&folder_id) {
+                return Some(key.clone());
+            }
+        }
+        // Fall back to master-derived key
+        let master = self.key_v2.lock().ok()?.clone()?;
+        match folder_id {
+            Some(id) => Some(crate::commands::encryption::derive_folder_key(&master, id)),
+            None => Some(master),
         }
     }
 

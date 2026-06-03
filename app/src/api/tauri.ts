@@ -271,6 +271,53 @@ export const tauriApi = {
         return invoke<void>('cmd_cross_account_cleanup', { transferId });
     },
 
+    // ── v3.6 — Seguridad Avanzada ────────────────────────────────────────────
+    verifyFileIntegrity(path: string, expectedSha256: string) {
+        return invoke<boolean>('cmd_verify_file_integrity', { path, expectedSha256 });
+    },
+    setWipeSecret(secret: string) {
+        return invoke<void>('cmd_set_wipe_secret', { secret });
+    },
+    clearWipeSecret() {
+        return invoke<void>('cmd_clear_wipe_secret');
+    },
+    hasWipeSecret() {
+        return invoke<boolean>('cmd_has_wipe_secret');
+    },
+    checkRemoteWipe() {
+        return invoke<boolean>('cmd_check_remote_wipe');
+    },
+    executeWipe() {
+        return invoke<void>('cmd_execute_wipe');
+    },
+    saveEncryptedActivity(entriesJson: string) {
+        return invoke<void>('cmd_save_encrypted_activity', { entriesJson });
+    },
+    loadEncryptedActivity() {
+        return invoke<string | null>('cmd_load_encrypted_activity');
+    },
+    isTotpEnabled() {
+        return invoke<boolean>('cmd_is_totp_enabled');
+    },
+    setupTotp() {
+        return invoke<string>('cmd_setup_totp');
+    },
+    confirmTotpSetup(code: string) {
+        return invoke<boolean>('cmd_confirm_totp_setup', { code });
+    },
+    verifyTotp(code: string) {
+        return invoke<boolean>('cmd_verify_totp', { code });
+    },
+    disableTotp(code: string) {
+        return invoke<void>('cmd_disable_totp', { code });
+    },
+    exportFolderKey(folderId: number, sharePassword: string) {
+        return invoke<string>('cmd_export_folder_key', { folderId, sharePassword });
+    },
+    importFolderKey(blob: string, sharePassword: string) {
+        return invoke<number>('cmd_import_folder_key', { blob, sharePassword });
+    },
+
     // ── v3.5 — Automatización Avanzada ──────────────────────────────────────
     setWifiOnlySync(enabled: boolean) {
         return invoke<void>('cmd_set_wifi_only_sync', { enabled });

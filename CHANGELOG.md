@@ -4,6 +4,36 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.6.0] - 2026-06-03
+
+### Seguridad Avanzada
+
+**Verificación de integridad** — Tras cada descarga exitosa, se calcula el SHA-256 del archivo guardado en disco y se compara con `file.sha256` (del caption de Telegram). Si no coincide → toast de error `⚠️ Integrity mismatch`. La función `verifyIntegrity()` es async no-bloqueante — no retrasa la UI si falla. `DownloadItem` ahora tiene campo `sha256?: string`. `queueDownload()` acepta sha256 como parámetro opcional y lo pasa al item.
+
+**Wipe remoto** — El usuario configura un "wipe secret" en Settings → Encryption. Desde otro dispositivo, envía `[SD-WIPE-secret]` a su propio Saved Messages. Al próximo connect de SharkDrive, `cmd_check_remote_wipe` escanea los últimos 10 mensajes, hace SHA-256 del texto y compara con el hash almacenado. Si coincide: borra el mensaje de Telegram (no se re-dispara) y emite `WipeConfirmModal` con countdown de 10 segundos. `cmd_execute_wipe` elimina `app_data_dir/` y `app_cache_dir/` completos y llama a `app_handle.exit(0)`.
+
+**Audit log cifrado** — `useActivityLog` actualizado: cuando `encryptionEnabled=true`, la actividad se persiste en `activity_log.enc` vía `cmd_save_encrypted_activity` (AES-256-GCM, nonce prefijado con magic `SDACT1`). Al vault unlock, `cmd_load_encrypted_activity` desencripta y restaura el historial. Fallback al plugin-store plaintext cuando vault está bloqueado. `useActivityLog` ahora acepta `encryptionEnabled: boolean` como parámetro.
+
+**2FA en VaultLock** — `TotpState`: secreto TOTP (20 bytes random) generado una vez, encriptado con la vault key y persistido en `totp_secret.enc`. `VaultLockScreen` detecta si TOTP está activo (onmount). Si activo: paso 1 = verificar password → paso 2 = verificar código TOTP. El código se verifica con `totp-rs` crate (SHA1, 6 dígitos, período 30s). Setup inline en Settings → Encryption: muestra QR (uri `otpauth://`) + input para confirmar. `TotpSetupModal.tsx` para el flujo desde Dashboard. Disable requiere un código actual válido.
+
+**Compartir carpetas cifradas** — `cmd_export_folder_key(folder_id, share_password)`: deriva la folder key desde la master key, la encripta con `share_password` via PBKDF2+AES-256-GCM (100k iteraciones, salt dedicado), incluye `folder_id` como AAD para prevenir mix-up attacks. Retorna blob base64 `SDKV{folder_id_le}{nonce}{ciphertext}`. `cmd_import_folder_key(blob, share_password)`: invierte el proceso y guarda en `guest_folder_keys` de `EncryptionState`. `ExportKeyModal.tsx`: muestra QR + texto copiable + tab Import para pegar blob del otro usuario.
+
+### Cambios técnicos
+- `Cargo.toml` — `totp-rs = "5"`, `data-encoding = "2"`
+- `commands/security.rs` — nuevo módulo con todos los comandos de v3.6 (15 nuevos comandos)
+- `commands/encryption.rs` — `EncryptionState` +`guest_folder_keys: Mutex<HashMap<Option<i64>, Vec<u8>>>`, método `add_guest_folder_key`, método `get_folder_key`
+- `lib.rs` — gestiona `Arc<WipeState>`, `Arc<TotpState>`, registra 15 nuevos comandos
+- `hooks/useFileDownload.ts` — `verifyIntegrity()` post-download; `DownloadItem.sha256`; `queueDownload()` +sha256
+- `hooks/useActivityLog.ts` — encryptionEnabled param; encrypted vs plaintext storage
+- `components/dashboard/VaultLockScreen.tsx` — 2-step unlock (password → TOTP si activo)
+- `components/dashboard/WipeConfirmModal.tsx` — countdown 10s antes de ejecutar wipe
+- `components/dashboard/TotpSetupModal.tsx` — QR setup + confirmación
+- `components/dashboard/ExportKeyModal.tsx` — export/import de folder keys con QR
+- `components/dashboard/SettingsModal.tsx` — TotpSection + RemoteWipeSection inline; import `QRCode`
+- `Dashboard.tsx` — wipe check on connect; 3 nuevos modales; `useActivityLog(store, encryptionEnabled)`
+
+---
+
 ## [3.5.0] - 2026-06-02
 
 ### Automatización Avanzada

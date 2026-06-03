@@ -5,13 +5,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Ban, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, RefreshCw, Settings, Shield, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, CheckCircle as CheckCircleIcon, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, RefreshCw, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ActivityEntry, BackupFolder, ClassificationRule, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
 import { CLASSIFICATION_RULES_KEY } from '../../utils';
 import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
 import { tauriApi } from '../../api/tauri';
 import { applyUploadNamingPattern, UPLOAD_NAMING_PATTERN_KEY } from '../../utils';
+import QRCode from 'qrcode';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -1093,6 +1094,13 @@ export function SettingsModal({
                                     onChange={setSecureDeleteSetting}
                                 />
                             </SectionCard>
+
+                            {/* v3.6: TOTP 2FA */}
+                            <TotpSection encryptionEnabled={encryptionEnabled} />
+
+                            {/* v3.6: Remote Wipe secret */}
+                            <RemoteWipeSection />
+
                             </>
                         )}
 
@@ -1558,6 +1566,171 @@ export function SettingsModal({
                 </div>
             </motion.div>
         </motion.div>
+    );
+}
+
+// ── v3.6 Security sections ───────────────────────────────────────────────────
+
+function TotpSection({ encryptionEnabled }: { encryptionEnabled: boolean }) {
+    const [enabled, setEnabled] = useState(false);
+    const [disableCode, setDisableCode] = useState('');
+    const [showDisable, setShowDisable] = useState(false);
+    const [showSetup, setShowSetup] = useState(false);
+
+    useEffect(() => { tauriApi.isTotpEnabled().then(setEnabled).catch(() => {}); }, []);
+
+    async function handleDisable() {
+        try {
+            await tauriApi.disableTotp(disableCode);
+            setEnabled(false); setShowDisable(false); setDisableCode('');
+            toast.success('2FA disabled');
+        } catch (e) { toast.error(String(e)); }
+    }
+
+    if (!encryptionEnabled) {
+        return (
+            <SectionCard title="Two-Factor Authentication (TOTP)" icon={<Shield className="w-4 h-4" />} description="Enable encryption first to configure 2FA.">
+                <p className="text-xs text-telegram-subtext">Enable encryption to use 2FA.</p>
+            </SectionCard>
+        );
+    }
+
+    return (
+        <SectionCard title="Two-Factor Authentication (TOTP)" icon={<Shield className="w-4 h-4" />}
+            description="Require a time-based 6-digit code (Google Authenticator) in addition to your vault password.">
+            {showSetup && <TotpSetupInline onEnabled={() => { setEnabled(true); setShowSetup(false); }} onCancel={() => setShowSetup(false)} />}
+            {!showSetup && !enabled && (
+                <button onClick={() => setShowSetup(true)}
+                    className="rounded-lg bg-telegram-primary px-4 py-2 text-xs font-semibold text-black hover:opacity-90">
+                    Enable 2FA
+                </button>
+            )}
+            {!showSetup && enabled && (
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-emerald-400">
+                        <CheckCircleIcon className="h-4 w-4" /> 2FA is active
+                    </div>
+                    {!showDisable ? (
+                        <button onClick={() => setShowDisable(true)}
+                            className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
+                            Disable 2FA
+                        </button>
+                    ) : (
+                        <div className="flex gap-2">
+                            <input
+                                type="text" inputMode="numeric" maxLength={6}
+                                value={disableCode} onChange={e => setDisableCode(e.target.value.replace(/\D/g,'').slice(0,6))}
+                                placeholder="Current code" className="flex-1 rounded-lg border border-telegram-border bg-white/[0.04] px-3 py-1.5 font-mono text-sm text-telegram-text outline-none focus:border-telegram-primary"
+                            />
+                            <button onClick={handleDisable} disabled={disableCode.length !== 6}
+                                className="rounded-lg border border-red-500/30 px-3 py-1.5 text-xs text-red-400 disabled:opacity-40">
+                                Confirm
+                            </button>
+                            <button onClick={() => { setShowDisable(false); setDisableCode(''); }}
+                                className="rounded-lg border border-telegram-border px-3 py-1.5 text-xs text-telegram-subtext">
+                                Cancel
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </SectionCard>
+    );
+}
+
+// Inline TOTP setup (QR + confirm) embedded in Settings
+function TotpSetupInline({ onEnabled, onCancel }: { onEnabled: () => void; onCancel: () => void }) {
+    const [uri, setUri] = useState<string | null>(null);
+    const [code, setCode] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => { tauriApi.setupTotp().then(setUri).catch(e => setError(String(e))); }, []);
+    useEffect(() => {
+        if (!uri || !canvasRef.current) return;
+        QRCode.toCanvas(canvasRef.current, uri, { width: 160, margin: 1, color: { dark: '#e6edf3', light: '#161b22' } }).catch(() => {});
+    }, [uri]);
+
+    async function confirm() {
+        try {
+            const ok = await tauriApi.confirmTotpSetup(code);
+            if (ok) { onEnabled(); toast.success('2FA enabled'); }
+            else { setError('Invalid code'); setCode(''); }
+        } catch (e) { setError(String(e)); }
+    }
+
+    const secretB32 = uri ? new URL(uri).searchParams.get('secret') : null;
+    return (
+        <div className="space-y-3 rounded-xl border border-telegram-border bg-white/[0.02] p-4">
+            {error && <p className="text-xs text-red-400">{error}</p>}
+            {uri ? (
+                <div className="flex items-start gap-4">
+                    <div className="rounded-lg border border-telegram-border bg-[#161b22] p-2 flex-shrink-0">
+                        <canvas ref={canvasRef} />
+                    </div>
+                    <div className="space-y-2 min-w-0">
+                        <p className="text-xs text-telegram-subtext">Scan with your authenticator app, then enter the code:</p>
+                        {secretB32 && <p className="font-mono text-[10px] break-all text-telegram-subtext/70">{secretB32}</p>}
+                    </div>
+                </div>
+            ) : <div className="flex justify-center py-4"><div className="h-5 w-5 animate-spin rounded-full border-2 border-telegram-primary/30 border-t-telegram-primary"/></div>}
+            <div className="flex gap-2">
+                <input type="text" inputMode="numeric" maxLength={6} value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="6-digit code"
+                    className="flex-1 rounded-lg border border-telegram-border bg-white/[0.04] px-3 py-2 font-mono text-center text-lg text-telegram-text outline-none focus:border-telegram-primary"
+                />
+                <button onClick={confirm} disabled={code.length !== 6}
+                    className="rounded-lg bg-telegram-primary px-4 py-2 text-sm font-semibold text-black disabled:opacity-40">Verify</button>
+                <button onClick={onCancel} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext">Cancel</button>
+            </div>
+        </div>
+    );
+}
+
+function RemoteWipeSection() {
+    const [hasSecret, setHasSecret] = useState(false);
+    const [secret, setSecret] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => { tauriApi.hasWipeSecret().then(setHasSecret).catch(() => {}); }, []);
+
+    async function handleSet() {
+        if (!secret.trim()) return;
+        setLoading(true);
+        try {
+            await tauriApi.setWipeSecret(secret);
+            setHasSecret(true); setSecret('');
+            toast.success('Remote wipe secret set. Send [SD-WIPE-yourSecret] to Saved Messages to trigger.');
+        } catch (e) { toast.error(String(e)); }
+        finally { setLoading(false); }
+    }
+
+    return (
+        <SectionCard title="Remote Wipe" icon={<AlertTriangle className="w-4 h-4" />}
+            description="Send a special Telegram message to yourself to wipe all local SharkDrive data remotely.">
+            {hasSecret ? (
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-emerald-400">
+                        <CheckCircleIcon className="h-4 w-4" /> Remote wipe secret is set
+                    </div>
+                    <p className="text-xs text-telegram-subtext">
+                        From any device, send <code className="rounded bg-white/[0.06] px-1">[SD-WIPE-yourSecret]</code> to Saved Messages. SharkDrive will detect it on next connect.
+                    </p>
+                    <button onClick={async () => { await tauriApi.clearWipeSecret(); setHasSecret(false); }} className="rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10">
+                        Clear secret
+                    </button>
+                </div>
+            ) : (
+                <div className="flex gap-2">
+                    <input type="text" value={secret} onChange={e => setSecret(e.target.value)}
+                        placeholder="Set a wipe secret phrase"
+                        className="flex-1 rounded-lg border border-telegram-border bg-white/[0.04] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary"
+                    />
+                    <button onClick={handleSet} disabled={!secret.trim() || loading}
+                        className="rounded-lg bg-telegram-primary px-4 py-2 text-xs font-semibold text-black disabled:opacity-40">Set</button>
+                </div>
+            )}
+        </SectionCard>
     );
 }
 

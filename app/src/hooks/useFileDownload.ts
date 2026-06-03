@@ -5,6 +5,17 @@ import { open as openPath } from '@tauri-apps/plugin-shell';
 import { toast } from 'sonner';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { ActivityEntry, DownloadItem, TelegramFile } from '../types';
+
+// sha256 stored in TelegramFile.sha256 (from caption metadata)
+const verifyIntegrity = async (path: string, expectedSha256: string | undefined, filename: string) => {
+    if (!expectedSha256) return; // no hash to compare — skip
+    try {
+        const ok = await tauriApi.verifyFileIntegrity(path, expectedSha256);
+        if (!ok) {
+            toast.error(`⚠️ Integrity mismatch: ${filename} may be corrupted`);
+        }
+    } catch { /* non-critical — network or hash error */ }
+};
 import type { Store } from '@tauri-apps/plugin-store';
 import { tauriApi } from '../api/tauri';
 import { buildRemoteFileKey, formatError, isAudioFile, isImageFile, isPdfFile, isVideoFile, resolveFileFolderId } from '../utils';
@@ -126,6 +137,8 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
                 cancelledRef.current.delete(item.id);
             } else {
                 setDownloadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'success', progress: 100 } : i));
+                // Integrity check (non-blocking, best-effort)
+                void verifyIntegrity(savePath, item.sha256, item.filename);
                 toast.success(`Downloaded: ${item.filename}`);
                 if (item.openAfter ?? shouldOpenAfterDownload()) {
                     openPath(savePath).catch(() => toast.error(`Could not open: ${item.filename}`));
@@ -147,7 +160,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
         }
     };
 
-    const queueDownload = (messageId: number, filename: string, folderId: number | null, savePath?: string, openAfter?: boolean) => {
+    const queueDownload = (messageId: number, filename: string, folderId: number | null, savePath?: string, openAfter?: boolean, sha256?: string) => {
         const duplicateExists = downloadQueue.some((item) =>
             (item.status === 'pending' || item.status === 'downloading') &&
             item.messageId === messageId &&
@@ -164,6 +177,7 @@ export function useFileDownload(store: Store | null, onActivity?: (entry: Activi
             folderId,
             savePath,
             openAfter,
+            sha256,
             status: 'pending'
         };
         setDownloadQueue(prev => [...prev, newItem]);
