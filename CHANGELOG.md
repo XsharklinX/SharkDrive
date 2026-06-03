@@ -4,6 +4,38 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.7.0] - 2026-06-03
+
+### Export & Interoperabilidad
+
+**Export/Import configuración** — `ConfigExportModal` exporta shortcuts, classification rules, naming pattern, download destinations, WiFi-only sync, webhook config a un archivo `.sdconfig`. Opcionalmente cifrado con contraseña (PBKDF2 + AES-256-GCM). Importar aplica los valores a localStorage y shortcuts del sistema. `cmd_export_config` y `cmd_import_config` manejan el cifrado opcional en Rust. Botón `Package` en TopBar.
+
+**Jump List Windows** — `cmd_update_jump_list` crea shortcuts `.lnk` temporales vía PowerShell `WScript.Shell` para las últimas 8 carpetas con args `sharkdrive://open/{id}`. La actualización es fire-and-forget (no bloquea). Se dispara en Dashboard cuando `folders` cambia y `isConnected=true`. El botón en la taskbar abre directamente la carpeta correspondiente.
+
+**Clipboard enriquecido** — El handler `handlePaste` ahora maneja 3 tipos:
+1. `image/*` (existente) — sube imagen del clipboard
+2. `text/plain` + URL (`https?://…/…\.ext`) → `cmd_download_url_to_temp` descarga el archivo vía `reqwest` y lo encola para upload
+3. `text/plain` texto normal → `cmd_save_temp_text` crea un archivo `.txt` temporal y lo encola. Toast `Text queued as clipboard_XXX.txt`
+
+**Import desde Dropbox** — `CloudImportWizard`: configurar App Key → abrir browser en OAuth2 URL de Dropbox → el servidor actix en `/oauth/dropbox/callback` intercambia el code por access_token → emite `dropbox-auth-success` al frontend → navegar la estructura de archivos por carpetas → seleccionar múltiples archivos → `cmd_dropbox_import_files` descarga a temp → `onFilesReady()` encola al upload queue. `cmd_dropbox_list_folder`, `cmd_dropbox_disconnect`. Botón `Cloud` en TopBar.
+
+**Webhook on upload** — `fireWebhook()` en `useFileUpload.ts`: tras cada upload exitoso, si `webhookEnabled=true` y `webhookUrl` configurado, llama `cmd_call_webhook(url, payload)`. Payload: `{event, filename, folder_id, size, timestamp}`. `reqwest` con timeout de 10s, errores silenciosos. Configuración en Settings → Auto Backup → "Webhook on Upload" con toggle + input URL.
+
+### Cambios técnicos
+- `Cargo.toml` — `reqwest = "0.12"` con rustls-tls (para URL download y Dropbox API)
+- `commands/interop.rs` — `cmd_export_config`, `cmd_import_config`, `cmd_download_url_to_temp`, `cmd_save_temp_text`, `cmd_call_webhook`, `cmd_update_jump_list` (PowerShell)
+- `commands/cloud_import.rs` — `DropboxState`, `cmd_set_dropbox_app_key`, `cmd_get_dropbox_auth_url`, `cmd_set_dropbox_token`, `cmd_get_dropbox_token_status`, `cmd_dropbox_list_folder`, `cmd_dropbox_import_files`, `cmd_dropbox_disconnect`
+- `server.rs` — `GET /oauth/dropbox/callback` exchange code → token → emite evento al frontend
+- `lib.rs` — gestiona `Arc<DropboxState>`, pasa a server, registra 13 nuevos comandos
+- `useFileUpload.ts` — `fireWebhook()` llamada post-upload; importa `tauriApi`
+- `Dashboard.tsx` — clipboard extendido (text + URL); jump list update; 2 nuevos modales
+- `TopBar.tsx` — botones `Cloud` (Dropbox import), `Package` (config export)
+- `SettingsModal.tsx` — webhook section con toggle + URL input
+- `ConfigExportModal.tsx`, `CloudImportWizard.tsx` (nuevos componentes)
+- `LanguageContext.tsx` — 12 nuevas claves EN+ES
+
+---
+
 ## [3.6.0] - 2026-06-03
 
 ### Seguridad Avanzada

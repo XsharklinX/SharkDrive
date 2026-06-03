@@ -46,6 +46,8 @@ import { WebAccessModal } from './dashboard/WebAccessModal';
 import { WipeConfirmModal } from './dashboard/WipeConfirmModal';
 import { TotpSetupModal } from './dashboard/TotpSetupModal';
 import { ExportKeyModal } from './dashboard/ExportKeyModal';
+import { ConfigExportModal } from './dashboard/ConfigExportModal';
+import { CloudImportWizard } from './dashboard/CloudImportWizard';
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -101,6 +103,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const [showWipeConfirm, setShowWipeConfirm] = useState(false);
     const [showTotpSetup, setShowTotpSetup] = useState(false);
     const [exportKeyTarget, setExportKeyTarget] = useState<{ id: number; name: string } | null>(null);
+    const [showConfigModal, setShowConfigModal] = useState(false);
+    const [showCloudImport, setShowCloudImport] = useState(false);
     const pendingUploadPathsRef = useRef<string[]>([]);
     const [showOnboarding, setShowOnboarding] = useState(() => localStorage.getItem('sharkdrive.onboarding.v1') !== 'complete');
     const [batchRenameFiles, setBatchRenameFiles] = useState<TelegramFile[] | null>(null);
@@ -312,6 +316,13 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         return () => { unlisten?.(); };
     }, []);
 
+    // Jump List: update when folder list changes
+    useEffect(() => {
+        if (!isConnected || folders.length === 0) return;
+        const jumpItems = folders.slice(0, 8).map(f => [f.id, f.name] as [number, string]);
+        tauriApi.updateJumpList(jumpItems).catch(() => {});
+    }, [folders, isConnected]);
+
     // Remote wipe: check for wipe command in Saved Messages on connect
     useEffect(() => {
         if (!isConnected) return;
@@ -375,18 +386,46 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             const items = e.clipboardData?.items;
             if (!items) return;
             for (const item of Array.from(items)) {
-                if (!item.type.startsWith('image/')) continue;
-                const blob = item.getAsFile();
-                if (!blob) continue;
-                const ext = item.type.split('/')[1] || 'png';
-                const filename = `clipboard_${Date.now()}.${ext}`;
-                const buffer = await blob.arrayBuffer();
-                const bytes = Array.from(new Uint8Array(buffer));
-                try {
-                    const tmpPath = await tauriApi.saveClipboardImage(bytes, filename);
-                    handleDroppedFilesRef.current([tmpPath]);
-                } catch (err) {
-                    toast.error(`Clipboard paste failed: ${err}`);
+                if (item.type.startsWith('image/')) {
+                    // Existing: upload image from clipboard
+                    const blob = item.getAsFile();
+                    if (!blob) continue;
+                    const ext = item.type.split('/')[1] || 'png';
+                    const filename = `clipboard_${Date.now()}.${ext}`;
+                    const buffer = await blob.arrayBuffer();
+                    const bytes = Array.from(new Uint8Array(buffer));
+                    try {
+                        const tmpPath = await tauriApi.saveClipboardImage(bytes, filename);
+                        handleDroppedFilesRef.current([tmpPath]);
+                    } catch (err) {
+                        toast.error(`Clipboard paste failed: ${err}`);
+                    }
+                } else if (item.type === 'text/plain') {
+                    // New v3.7: text → .txt, or URL → download file
+                    item.getAsString(async (text) => {
+                        const trimmed = text.trim();
+                        if (!trimmed) return;
+                        if (/^https?:\/\/.+\/.+\..+/.test(trimmed)) {
+                            // Looks like a URL to a specific file — download it
+                            toast.info('Downloading linked file…');
+                            try {
+                                const tmpPath = await tauriApi.downloadUrlToTemp(trimmed);
+                                queueUploadCandidatesRef.current([{ path: tmpPath }]);
+                            } catch (err) {
+                                toast.error(`URL download failed: ${err}`);
+                            }
+                        } else if (trimmed.length > 0) {
+                            // Plain text → create a .txt file
+                            const filename = `clipboard_${Date.now()}.txt`;
+                            try {
+                                const tmpPath = await tauriApi.saveTempText(trimmed, filename);
+                                queueUploadCandidatesRef.current([{ path: tmpPath }]);
+                                toast.info(`Text queued as ${filename}`);
+                            } catch (err) {
+                                toast.error(`Text paste failed: ${err}`);
+                            }
+                        }
+                    });
                 }
             }
         };
@@ -1272,6 +1311,33 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     />
                 )}
 
+                {showConfigModal && (
+                    <ConfigExportModal
+                        key="config-modal"
+                        shortcuts={organization.shortcuts}
+                        onImport={(cfg) => {
+                            // Apply imported settings to localStorage
+                            if (cfg.classificationRules) localStorage.setItem('sharkdrive.classificationRules.v1', JSON.stringify(cfg.classificationRules));
+                            if (cfg.uploadNamingPattern !== undefined) localStorage.setItem('sharkdrive.uploadNamingPattern.v1', String(cfg.uploadNamingPattern));
+                            if (cfg.wifiOnlySync !== undefined) localStorage.setItem('sharkdrive.wifiOnlySync.v1', String(cfg.wifiOnlySync));
+                            if (cfg.webhookUrl !== undefined) localStorage.setItem('sharkdrive.webhookUrl.v1', String(cfg.webhookUrl));
+                            if (cfg.webhookEnabled !== undefined) localStorage.setItem('sharkdrive.webhookEnabled.v1', String(cfg.webhookEnabled));
+                            if (cfg.shortcuts && typeof cfg.shortcuts === 'object') organization.setShortcuts(cfg.shortcuts as Record<string, string>);
+                        }}
+                        onClose={() => setShowConfigModal(false)}
+                    />
+                )}
+
+                {showCloudImport && (
+                    <CloudImportWizard
+                        key="cloud-import"
+                        onClose={() => setShowCloudImport(false)}
+                        onFilesReady={(paths) => {
+                            queueUploadCandidatesRef.current(paths.map(path => ({ path })));
+                        }}
+                    />
+                )}
+
                 {showSyncHistory && (
                     <SyncHistoryPanel
                         key="sync-history-panel"
@@ -1575,6 +1641,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onOpenSyncHistory={() => setShowSyncHistory(true)}
                     onOpenDuplicates={() => setShowDuplicates(true)}
                     onOpenWebAccess={() => setShowWebAccess(true)}
+                    onOpenConfigExport={() => setShowConfigModal(true)}
+                    onOpenCloudImport={() => setShowCloudImport(true)}
                     nextSyncIn={autoSyncInterval > 0 ? nextSyncIn : null}
                     queuedUploadCount={queuedUploadCount}
                     uploadingCount={uploadingCount}

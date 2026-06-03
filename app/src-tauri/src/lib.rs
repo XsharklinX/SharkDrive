@@ -15,6 +15,7 @@ use commands::share::ShareStore;
 use commands::streaming::StreamToken;
 use commands::TelegramState;
 use account_manager::AccountManager;
+use commands::cloud_import::DropboxState;
 use commands::security::{TotpState, WipeState};
 use index_store::PersistentIndexState;
 use sync_log::SyncLog;
@@ -175,6 +176,8 @@ pub fn run() {
             app.manage(web_auth.clone());
             app.manage(Arc::new(WipeState::new(app_data_dir.join("wipe_config.json"))));
             app.manage(Arc::new(TotpState::new(app_data_dir.join("totp_secret.enc"))));
+            let dropbox_state = Arc::new(DropboxState::new());
+            app.manage(dropbox_state.clone());
             app.manage(account_manager.clone());
 
             if let Some(window) = app.get_webview_window("main") {
@@ -249,6 +252,7 @@ pub fn run() {
             let handle_for_thread = server_handle_for_setup.clone();
             let web_auth_for_server = web_auth.clone();
             let account_manager_for_server = account_manager.clone();
+            let dropbox_for_server = dropbox_state.clone();
             let app_handle_for_server = app.handle().clone();
             std::thread::spawn(move || {
                 let sys = actix_rt::System::new();
@@ -258,6 +262,7 @@ pub fn run() {
                         share_store,
                         web_auth_for_server,
                         account_manager_for_server,
+                        dropbox_for_server,
                         app_handle_for_server,
                         14200,
                         token_for_server,
@@ -384,6 +389,20 @@ pub fn run() {
             commands::cmd_fetch_account_avatar,
             commands::cmd_cross_account_download,
             commands::cmd_cross_account_cleanup,
+            // v3.7 — Export & Interoperabilidad
+            commands::cmd_export_config,
+            commands::cmd_import_config,
+            commands::cmd_download_url_to_temp,
+            commands::cmd_save_temp_text,
+            commands::cmd_call_webhook,
+            commands::cmd_update_jump_list,
+            commands::cmd_set_dropbox_app_key,
+            commands::cmd_get_dropbox_auth_url,
+            commands::cmd_set_dropbox_token,
+            commands::cmd_get_dropbox_token_status,
+            commands::cmd_dropbox_list_folder,
+            commands::cmd_dropbox_import_files,
+            commands::cmd_dropbox_disconnect,
             // v3.6 — Seguridad Avanzada
             commands::cmd_verify_file_integrity,
             commands::cmd_set_wipe_secret,

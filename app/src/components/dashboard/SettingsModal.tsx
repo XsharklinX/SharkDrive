@@ -113,6 +113,9 @@ export function SettingsModal({
     });
     const [newRuleType, setNewRuleType] = useState<string>('image');
     const [newRuleFolderId, setNewRuleFolderId] = useState<string>('');
+    // v3.7 webhook
+    const [webhookUrl, setWebhookUrl] = useState(() => localStorage.getItem('sharkdrive.webhookUrl.v1') || '');
+    const [webhookEnabled, setWebhookEnabled] = useState(() => localStorage.getItem('sharkdrive.webhookEnabled.v1') === 'true');
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
     const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
     const [shareLinks, setShareLinks] = useState<ShareLinkInfo[]>([]);
@@ -1189,6 +1192,37 @@ export function SettingsModal({
                                     Preview: <span className="font-mono text-telegram-text">{uploadNamingPattern ? applyUploadNamingPattern('quarterly-report.pdf', uploadNamingPattern, 'Documents', 1) : 'quarterly-report.pdf'}</span>
                                 </div>
                             </SectionCard>
+                            {/* v3.7: Webhook */}
+                            <SectionCard
+                                title="Webhook on Upload"
+                                icon={<Link2 className="w-4 h-4" />}
+                                description={t('webhookDesc')}
+                            >
+                                <ToggleRow
+                                    icon={<Link2 className="w-3.5 h-3.5" />}
+                                    title={t('webhookEnabled')}
+                                    description="POST JSON to the URL below when an upload completes."
+                                    checked={webhookEnabled}
+                                    onChange={(v) => {
+                                        setWebhookEnabled(v);
+                                        localStorage.setItem('sharkdrive.webhookEnabled.v1', String(v));
+                                    }}
+                                />
+                                <input
+                                    value={webhookUrl}
+                                    onChange={e => {
+                                        setWebhookUrl(e.target.value);
+                                        localStorage.setItem('sharkdrive.webhookUrl.v1', e.target.value);
+                                    }}
+                                    placeholder="https://your-server.example/webhook"
+                                    disabled={!webhookEnabled}
+                                    className="w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70 disabled:opacity-40"
+                                />
+                                <p className="text-xs text-telegram-subtext">
+                                    Payload: <code className="rounded bg-white/[0.06] px-1">{'{"event":"upload_complete","filename":"...","folder_id":...,"size":...,"timestamp":"..."}'}</code>
+                                </p>
+                            </SectionCard>
+
                             <SectionCard
                                 title="Cleanup Review"
                                 icon={<Trash2 className="w-4 h-4" />}

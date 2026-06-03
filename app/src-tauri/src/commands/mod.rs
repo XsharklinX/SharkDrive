@@ -27,6 +27,8 @@ pub struct TelegramState {
 
 pub mod accounts;
 pub mod auth;
+pub mod cloud_import;
+pub mod interop;
 pub mod security;
 pub mod automation;
 pub mod backup;
@@ -45,6 +47,8 @@ pub mod web;
 
 pub use accounts::*;
 pub use auth::*;
+pub use cloud_import::*;
+pub use interop::*;
 pub use security::*;
 pub use automation::*;
 pub use backup::*;

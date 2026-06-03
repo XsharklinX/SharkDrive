@@ -271,6 +271,49 @@ export const tauriApi = {
         return invoke<void>('cmd_cross_account_cleanup', { transferId });
     },
 
+    // ── v3.7 — Export & Interoperabilidad ───────────────────────────────────
+    exportConfig(configJson: string, password: string | null, savePath: string) {
+        return invoke<void>('cmd_export_config', { configJson, password, savePath });
+    },
+    importConfig(filePath: string, password: string | null) {
+        return invoke<string>('cmd_import_config', { filePath, password });
+    },
+    downloadUrlToTemp(url: string) {
+        return invoke<string>('cmd_download_url_to_temp', { url });
+    },
+    saveTempText(content: string, filename: string) {
+        return invoke<string>('cmd_save_temp_text', { content, filename });
+    },
+    callWebhook(url: string, payloadJson: string) {
+        return invoke<void>('cmd_call_webhook', { url, payloadJson });
+    },
+    updateJumpList(folders: [number, string][]) {
+        return invoke<void>('cmd_update_jump_list', { folders });
+    },
+    setDropboxAppKey(appKey: string) {
+        return invoke<void>('cmd_set_dropbox_app_key', { appKey });
+    },
+    getDropboxAuthUrl() {
+        return invoke<string>('cmd_get_dropbox_auth_url');
+    },
+    setDropboxToken(token: string) {
+        return invoke<void>('cmd_set_dropbox_token', { token });
+    },
+    getDropboxTokenStatus() {
+        return invoke<boolean>('cmd_get_dropbox_token_status');
+    },
+    dropboxListFolder(path: string) {
+        return invoke<{ id: string; name: string; path: string; is_folder: boolean; size: number }[]>(
+            'cmd_dropbox_list_folder', { path }
+        );
+    },
+    dropboxImportFiles(filePaths: string[]) {
+        return invoke<string[]>('cmd_dropbox_import_files', { filePaths });
+    },
+    dropboxDisconnect() {
+        return invoke<void>('cmd_dropbox_disconnect');
+    },
+
     // ── v3.6 — Seguridad Avanzada ────────────────────────────────────────────
     verifyFileIntegrity(path: string, expectedSha256: string) {
         return invoke<boolean>('cmd_verify_file_integrity', { path, expectedSha256 });

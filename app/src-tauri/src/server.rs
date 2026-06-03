@@ -1,4 +1,5 @@
 use crate::account_manager::AccountManager;
+use crate::commands::cloud_import::{exchange_dropbox_code, DropboxState};
 use crate::commands::share::ShareStore;
 use crate::commands::utils::resolve_peer;
 use crate::commands::TelegramState;
@@ -411,6 +412,55 @@ fn mime_type_from_media(media: &Media) -> String {
     }
 }
 
+// ── Dropbox OAuth2 callback ───────────────────────────────────────────────────
+
+#[derive(serde::Deserialize)]
+struct OAuthCallbackQuery {
+    code: Option<String>,
+    error: Option<String>,
+}
+
+#[get("/oauth/dropbox/callback")]
+async fn dropbox_oauth_callback(
+    query: web::Query<OAuthCallbackQuery>,
+    dropbox: web::Data<std::sync::Arc<DropboxState>>,
+    app_handle: web::Data<tauri::AppHandle>,
+) -> HttpResponse {
+    use tauri::Emitter as _;
+
+    if let Some(err) = &query.error {
+        let _ = app_handle.get_ref().emit("dropbox-auth-error", err.as_str());
+        return HttpResponse::Ok()
+            .content_type("text/html; charset=utf-8")
+            .body("<html><body><h2>Dropbox auth cancelled.</h2><script>window.close()</script></body></html>");
+    }
+
+    let code = match &query.code {
+        Some(c) => c.clone(),
+        None => return HttpResponse::BadRequest().body("Missing code"),
+    };
+
+    // Get app key
+    let app_key = dropbox.app_key.lock().ok().map(|k| k.clone()).unwrap_or_default();
+    if app_key.is_empty() {
+        return HttpResponse::ServiceUnavailable().body("App key not configured");
+    }
+
+    match exchange_dropbox_code(&code, &app_key).await {
+        Ok(token) => {
+            if let Ok(mut t) = dropbox.access_token.lock() { *t = Some(token.clone()); }
+            let _ = app_handle.get_ref().emit("dropbox-auth-success", token.as_str());
+            HttpResponse::Ok()
+                .content_type("text/html; charset=utf-8")
+                .body("<html><body><h2>✓ Connected to Dropbox! You can close this tab.</h2><script>window.close()</script></body></html>")
+        }
+        Err(e) => {
+            let _ = app_handle.get_ref().emit("dropbox-auth-error", e.as_str());
+            HttpResponse::InternalServerError().body(format!("Token exchange failed: {e}"))
+        }
+    }
+}
+
 // ── Web companion routes ──────────────────────────────────────────────────────
 
 /// Extract the web token from the X-Web-Token header or `?t=` query param.
@@ -664,6 +714,7 @@ pub async fn start_server(
     share_store: Arc<ShareStore>,
     web_auth: Arc<WebAuthState>,
     account_manager: Arc<AccountManager>,
+    dropbox: Arc<DropboxState>,
     app_handle: tauri::AppHandle,
     port: u16,
     token: String,
@@ -673,6 +724,7 @@ pub async fn start_server(
     let share_data = web::Data::new(share_store);
     let web_auth_data = web::Data::new(web_auth);
     let acct_data = web::Data::new(account_manager);
+    let dropbox_data = web::Data::new(dropbox);
     let app_handle_data = web::Data::new(app_handle);
 
     log::info!("Starting Streaming + Web companion server on port {}", port);
@@ -699,12 +751,15 @@ pub async fn start_server(
             .app_data(share_data.clone())
             .app_data(web_auth_data.clone())
             .app_data(acct_data.clone())
+            .app_data(dropbox_data.clone())
             .app_data(app_handle_data.clone())
             // Streaming
             .service(stream_media)
             // Share
             .service(share_file)
             .service(authorize_share_file)
+            // Dropbox OAuth2 callback
+            .service(dropbox_oauth_callback)
             // Web companion
             .service(serve_web_app)
             .service(handle_web_auth)

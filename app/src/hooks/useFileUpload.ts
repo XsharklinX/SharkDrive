@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { tauriApi } from '../api/tauri';
 import { open } from '@tauri-apps/plugin-dialog';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { useQueryClient } from '@tanstack/react-query';
@@ -23,6 +24,24 @@ async function showNativeNotification(title: string, body: string) {
 import type { Store } from '@tauri-apps/plugin-store';
 import { applyUploadNamingPattern, buildQueuedUploadKey, formatError, UPLOAD_NAMING_PATTERN_KEY, CLASSIFICATION_RULES_KEY, matchesClassificationRule } from '../utils';
 import { ClassificationRule } from '../types';
+
+const WEBHOOK_URL_KEY = 'sharkdrive.webhookUrl.v1';
+const WEBHOOK_ENABLED_KEY = 'sharkdrive.webhookEnabled.v1';
+
+function fireWebhook(item: { path: string; remoteName?: string; folderId: number | null; size?: number }) {
+    const url = localStorage.getItem(WEBHOOK_URL_KEY) || '';
+    const enabled = localStorage.getItem(WEBHOOK_ENABLED_KEY) === 'true';
+    if (!enabled || !url) return;
+    const filename = item.remoteName || item.path.split(/[/\\]/).pop() || 'unknown';
+    const payload = JSON.stringify({
+        event: 'upload_complete',
+        filename,
+        folder_id: item.folderId,
+        size: item.size ?? 0,
+        timestamp: new Date().toISOString(),
+    });
+    tauriApi.callWebhook(url, payload).catch(() => {});
+}
 
 interface ProgressPayload {
     id: string;
@@ -190,6 +209,7 @@ export function useFileUpload(
                         queryClient.invalidateQueries({ queryKey: ['files', item.folderId] });
                         void showNativeNotification('Upload complete', fileName ?? '');
                         onActivity?.(buildActivity('upload', `Uploaded ${fileName}`, fileName, item.folderId));
+                        fireWebhook({ path: item.path, remoteName: item.remoteName, folderId: item.folderId, size: item.size });
                     }
                 } else {
                     cancelledRef.current.delete(item.id);

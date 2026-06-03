@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare, RefreshCw, GitFork, Smartphone } from 'lucide-react';
+import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare, RefreshCw, GitFork, Smartphone, Cloud, Package } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -40,6 +40,8 @@ interface TopBarProps {
     onOpenSyncHistory?: () => void;
     onOpenDuplicates?: () => void;
     onOpenWebAccess?: () => void;
+    onOpenConfigExport?: () => void;
+    onOpenCloudImport?: () => void;
     nextSyncIn?: number | null;
     queuedUploadCount: number;
     uploadingCount: number;
@@ -86,6 +88,8 @@ export function TopBar({
     onOpenSyncHistory,
     onOpenDuplicates,
     onOpenWebAccess,
+    onOpenConfigExport,
+    onOpenCloudImport,
     nextSyncIn,
     queuedUploadCount,
     uploadingCount,
@@ -225,6 +229,26 @@ export function TopBar({
                             title={lang === 'es' ? 'Acceso móvil' : 'Mobile Companion'}
                         >
                             <Smartphone className="h-4 w-4" />
+                        </button>
+                    )}
+
+                    {onOpenCloudImport && (
+                        <button
+                            onClick={onOpenCloudImport}
+                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
+                            title={lang === 'es' ? 'Importar desde nube' : 'Import from Cloud'}
+                        >
+                            <Cloud className="h-4 w-4" />
+                        </button>
+                    )}
+
+                    {onOpenConfigExport && (
+                        <button
+                            onClick={onOpenConfigExport}
+                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
+                            title={lang === 'es' ? 'Configuración' : 'Export/Import Config'}
+                        >
+                            <Package className="h-4 w-4" />
                         </button>
                     )}
 
