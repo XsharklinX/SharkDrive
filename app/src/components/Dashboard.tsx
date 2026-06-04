@@ -339,6 +339,44 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         tauriApi.updateJumpList(jumpItems).catch(() => {});
     }, [folders, isConnected]);
 
+    // Preload all lazy chunks during browser idle time — prevents Suspense from
+    // ever triggering mid-interaction, which would unmount AnimatePresence temporarily
+    useEffect(() => {
+        const preload = () => {
+            // These imports are side-effect-free — they just pre-fetch and cache the chunk
+            void import('./dashboard/SettingsModal');
+            void import('./dashboard/ShareModal');
+            void import('./dashboard/VaultModal');
+            void import('./dashboard/MediaPlayer');
+            void import('./dashboard/PdfViewer');
+            void import('./dashboard/ShareLinksDashboard');
+            void import('./dashboard/BatchRenameModal');
+            void import('./dashboard/TextPreviewModal');
+            void import('./dashboard/FileInfoPanel');
+            void import('./dashboard/KeyboardShortcutsOverlay');
+            void import('./dashboard/ImageCompressDialog');
+            void import('./dashboard/OnboardingWizard');
+            void import('./dashboard/FolderStatsModal');
+            void import('./dashboard/VersionHistoryModal');
+            void import('./dashboard/SyncHistoryPanel');
+            void import('./dashboard/DuplicatesPanel');
+            void import('./dashboard/CrossAccountCopyModal');
+            void import('./dashboard/WebAccessModal');
+            void import('./dashboard/TotpSetupModal');
+            void import('./dashboard/ExportKeyModal');
+            void import('./dashboard/ConfigExportModal');
+            void import('./dashboard/CloudImportWizard');
+            void import('./dashboard/PreviewModal');
+            void import('./dashboard/MoveToFolderModal');
+        };
+        if ('requestIdleCallback' in window) {
+            const id = requestIdleCallback(preload, { timeout: 4000 });
+            return () => cancelIdleCallback(id);
+        }
+        const t = setTimeout(preload, 2000);
+        return () => clearTimeout(t);
+    }, []);
+
     // Remote wipe: check for wipe command in Saved Messages on connect
     useEffect(() => {
         if (!isConnected) return;
@@ -1273,7 +1311,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         <ExternalDropBlocker onUploadClick={handleManualUpload} />
 
-            {/* Single Suspense for all lazy-loaded modals — fallback=null means modals simply don't appear while the chunk loads (<50ms on first open) */}
+            {/* Suspense wraps AnimatePresence so lazy chunks load transparently.
+                Chunks are preloaded on idle (see useEffect below) so suspension is rare. */}
             <Suspense fallback={null}>
             <AnimatePresence>
                 {showSettings && (
@@ -1548,6 +1587,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 {isDragging && !isDraggingInternally && <DragDropOverlay key="drag-drop-overlay" />}
             </AnimatePresence>
             </Suspense>
+            {/* End of lazy-loaded modal region */}
 
             <Sidebar
                 folders={folders}

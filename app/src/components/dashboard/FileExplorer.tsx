@@ -306,6 +306,28 @@ export function FileExplorer({
         onTagFilterChange?.(null);
     };
 
+    // Arrow key navigation within the grid — MUST be before any early returns to preserve hook order
+    const handleGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+        const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+        if (!arrows.includes(e.key)) return;
+        const cards = Array.from(
+            parentRef.current?.querySelectorAll<HTMLElement>('[data-file-card]') ?? []
+        );
+        if (cards.length === 0) return;
+        const focused = document.activeElement as HTMLElement;
+        const idx = cards.indexOf(focused);
+        if (idx < 0) return;
+        e.preventDefault();
+        let next = idx;
+        if (e.key === 'ArrowRight') next = Math.min(idx + 1, cards.length - 1);
+        else if (e.key === 'ArrowLeft') next = Math.max(idx - 1, 0);
+        else if (e.key === 'ArrowDown') next = Math.min(idx + columns, cards.length - 1);
+        else if (e.key === 'ArrowUp') next = Math.max(idx - columns, 0);
+        else if (e.key === 'Home') next = 0;
+        else if (e.key === 'End') next = cards.length - 1;
+        cards[next]?.focus();
+    }, [columns]);
+
     const SortIcon = ({ field }: { field: SortField }) => {
         if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-35" />;
         return sortDirection === 'asc'
@@ -356,28 +378,6 @@ export function FileExplorer({
             </div>
         );
     }
-
-    // Arrow key navigation within the grid
-    const handleGridKeyDown = useCallback((e: React.KeyboardEvent) => {
-        const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
-        if (!arrows.includes(e.key)) return;
-        const cards = Array.from(
-            parentRef.current?.querySelectorAll<HTMLElement>('[data-file-card]') ?? []
-        );
-        if (cards.length === 0) return;
-        const focused = document.activeElement as HTMLElement;
-        const idx = cards.indexOf(focused);
-        if (idx < 0) return;
-        e.preventDefault();
-        let next = idx;
-        if (e.key === 'ArrowRight') next = Math.min(idx + 1, cards.length - 1);
-        else if (e.key === 'ArrowLeft') next = Math.max(idx - 1, 0);
-        else if (e.key === 'ArrowDown') next = Math.min(idx + columns, cards.length - 1);
-        else if (e.key === 'ArrowUp') next = Math.max(idx - columns, 0);
-        else if (e.key === 'Home') next = 0;
-        else if (e.key === 'End') next = cards.length - 1;
-        cards[next]?.focus();
-    }, [columns]);
 
     return (
         <div
