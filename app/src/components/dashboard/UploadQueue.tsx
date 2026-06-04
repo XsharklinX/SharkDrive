@@ -38,7 +38,12 @@ export function UploadQueue({ items, onClearFinished, onCancelAll, onRetry, onCa
     const hiddenCount = Math.max(0, items.length - VISIBLE_LIMIT);
 
     return (
-        <section className="w-[22rem] overflow-hidden rounded-xl border border-telegram-border bg-telegram-surface/95 shadow-2xl">
+        <section
+            className="w-[22rem] overflow-hidden rounded-xl border border-telegram-border bg-telegram-surface/95 shadow-2xl"
+            aria-label="Upload queue"
+            aria-live="polite"
+            aria-relevant="additions text"
+        >
             <div className="flex items-center justify-between border-b border-telegram-border/80 px-4 py-3">
                 <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-telegram-border bg-white/[0.04] text-telegram-primary">
@@ -74,9 +79,17 @@ export function UploadQueue({ items, onClearFinished, onCancelAll, onRetry, onCa
                     </div>
                 )}
                 {latestItems.map((item) => (
-                    <div key={item.id} className="rounded-lg border border-telegram-border bg-white/[0.03] p-3">
+                    <div
+                        key={item.id}
+                        className="rounded-lg border border-telegram-border bg-white/[0.03] p-3"
+                        role="listitem"
+                        aria-label={`${item.remoteName || item.path.split(/[/\\]/).pop()} — ${item.status}`}
+                    >
                         <div className="flex items-start gap-3 text-sm">
-                            <div className={`mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-500'}`} />
+                            <div
+                                className={`mt-1 h-2.5 w-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[item.status] ?? 'bg-gray-500'}`}
+                                aria-hidden="true"
+                            />
                             <div className="min-w-0 flex-1">
                                 <div className="truncate text-xs font-medium text-telegram-text" title={item.path}>
                                     {item.remoteName || item.path.split(/[/\\]/).pop()}
@@ -94,16 +107,21 @@ export function UploadQueue({ items, onClearFinished, onCancelAll, onRetry, onCa
                             </div>
 
                             {item.status === 'uploading' && item.progress !== undefined && (
-                                <span className="flex-shrink-0 text-xs font-mono text-telegram-primary">{item.progress}%</span>
+                                <span
+                                    className="flex-shrink-0 text-xs font-mono text-telegram-primary"
+                                    aria-label={`${item.progress}% uploaded`}
+                                >
+                                    {item.progress}%
+                                </span>
                             )}
 
                             {(item.status === 'pending' || item.status === 'uploading') && onCancelItem && (
                                 <button
                                     onClick={() => onCancelItem(item.id)}
                                     className="flex-shrink-0 rounded-md p-1.5 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-400"
-                                    title="Cancel"
+                                    aria-label={`Cancel upload of ${item.remoteName || item.path.split(/[/\\]/).pop()}`}
                                 >
-                                    <X className="w-3 h-3" />
+                                    <X className="w-3 h-3" aria-hidden="true" />
                                 </button>
                             )}
 

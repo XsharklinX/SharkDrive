@@ -188,8 +188,9 @@ export function TopBar({
                         onClick={toggleTheme}
                         className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
                         title={theme === 'dark' ? (lang === 'es' ? 'Cambiar a modo claro' : 'Switch to Light Mode') : (lang === 'es' ? 'Cambiar a modo oscuro' : 'Switch to Dark Mode')}
+                        aria-label={theme === 'dark' ? (lang === 'es' ? 'Cambiar a modo claro' : 'Switch to Light Mode') : (lang === 'es' ? 'Cambiar a modo oscuro' : 'Switch to Dark Mode')}
                     >
-                        {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                        {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
                     </button>
 
                     {onOpenLinks && (
@@ -256,8 +257,9 @@ export function TopBar({
                         onClick={onOpenSettings}
                         className="relative rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
                         title={t('settings')}
+                        aria-label={t('settings')}
                     >
-                        <Settings className="h-4 w-4" />
+                        <Settings className="h-4 w-4" aria-hidden="true" />
                         {nextSyncIn !== null && nextSyncIn !== undefined && (
                             <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-telegram-primary px-1 text-[9px] font-bold text-black">
                                 {nextSyncIn}

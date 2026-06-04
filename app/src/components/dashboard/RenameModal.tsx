@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Pencil, X, FileText, FolderOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 interface RenameModalProps {
     currentName: string;
@@ -16,6 +17,8 @@ export function RenameModal({ currentName, isFolder, onConfirm, onClose }: Renam
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+    useFocusTrap(containerRef, true);
 
     useEffect(() => {
         inputRef.current?.focus();
@@ -58,6 +61,10 @@ export function RenameModal({ currentName, isFolder, onConfirm, onClose }: Renam
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
+                ref={containerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label={`Rename ${isFolder ? 'folder' : 'file'}`}
                 className="mx-4 w-full max-w-md rounded-lg border border-telegram-border bg-telegram-surface p-5 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
@@ -72,7 +79,7 @@ export function RenameModal({ currentName, isFolder, onConfirm, onClose }: Renam
                             </h2>
                         </div>
                     </div>
-                    <button onClick={onClose} className="rounded-md border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text">
+                    <button onClick={onClose} aria-label="Close" className="rounded-md border border-telegram-border bg-white/[0.03] p-2 text-telegram-subtext transition hover:text-telegram-text">
                         <X className="w-4 h-4" />
                     </button>
                 </div>

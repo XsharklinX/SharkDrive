@@ -150,6 +150,11 @@ const translations = {
         copy: 'Copy',
         bulkDownload: 'Download',
         bulkDelete: 'Delete',
+        // v3.9 — UX & Accesibilidad
+        compactMode: 'Compact mode',
+        compactModeDesc: 'Reduce spacing for a denser layout.',
+        settingsSearch: 'Search settings',
+        skipToContent: 'Skip to content',
         // v3.7 — Export & Interoperabilidad
         exportConfig: 'Export configuration',
         importConfig: 'Import configuration',
@@ -341,6 +346,11 @@ const translations = {
         copy: 'Copiar',
         bulkDownload: 'Descargar',
         bulkDelete: 'Eliminar',
+        // v3.9
+        compactMode: 'Modo compacto',
+        compactModeDesc: 'Reducir el espaciado para un diseño más denso.',
+        settingsSearch: 'Buscar en configuración',
+        skipToContent: 'Ir al contenido',
         // v3.7
         exportConfig: 'Exportar configuración',
         importConfig: 'Importar configuración',

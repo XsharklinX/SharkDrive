@@ -1257,6 +1257,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     return (
         <div
             className="flex h-screen w-full overflow-hidden bg-telegram-bg relative"
+            aria-label="SharkDrive application"
             onClick={(e) => {
                 if (e.target === e.currentTarget) {
                     setSelectedIds([]);
@@ -1267,7 +1268,10 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
             onDragEnter={handleRootDragEnter}
         >
 
-            <ExternalDropBlocker onUploadClick={handleManualUpload} />
+            {/* Skip-to-main for keyboard/screen reader users */}
+        <a href="#main-content" className="skip-to-main">Skip to content</a>
+
+        <ExternalDropBlocker onUploadClick={handleManualUpload} />
 
             {/* Single Suspense for all lazy-loaded modals — fallback=null means modals simply don't appear while the chunk loads (<50ms on first open) */}
             <Suspense fallback={null}>
@@ -1602,7 +1606,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 />
             )}
 
-            <main className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.015] to-transparent" onClick={(e) => {
+            <main id="main-content" className="flex-1 flex flex-col bg-gradient-to-b from-white/[0.015] to-transparent" onClick={(e) => {
                 if (e.target === e.currentTarget) {
                     setSelectedIds([]);
                     setSelectionMode(false);

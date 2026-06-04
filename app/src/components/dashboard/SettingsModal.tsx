@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLanguage, type Lang } from '../../context/LanguageContext';
+import { useCompactMode } from '../../context/CompactModeContext';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -70,6 +71,7 @@ export function SettingsModal({
 }: SettingsModalProps) {
     const [tab, setTab] = useState<Tab>('general');
     const { lang, t } = useLanguage();
+    const { isCompact, toggleCompact } = useCompactMode();
     const [accentColor, setAccentColor] = useState(() => {
         return localStorage.getItem('sharkdrive.accentColor.v1') || '#2f9bff';
     });
@@ -116,6 +118,8 @@ export function SettingsModal({
     // v3.7 webhook
     const [webhookUrl, setWebhookUrl] = useState(() => localStorage.getItem('sharkdrive.webhookUrl.v1') || '');
     const [webhookEnabled, setWebhookEnabled] = useState(() => localStorage.getItem('sharkdrive.webhookEnabled.v1') === 'true');
+    // v3.9 Settings search
+    const [settingsSearch, setSettingsSearch] = useState('');
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
     const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
     const [shareLinks, setShareLinks] = useState<ShareLinkInfo[]>([]);
@@ -547,15 +551,30 @@ export function SettingsModal({
                         </button>
                     </div>
 
-                    <p className="mt-4 text-sm leading-6 text-telegram-subtext">
-                        Manage sync, startup, encryption, backups and activity.
-                    </p>
+                    {/* Settings search — filters tabs by label/description */}
+                    <div className="relative mt-4">
+                        <input
+                            type="search"
+                            value={settingsSearch}
+                            onChange={e => setSettingsSearch(e.target.value)}
+                            placeholder="Search settings…"
+                            aria-label="Search settings"
+                            className="w-full rounded-xl border border-telegram-border bg-white/[0.03] px-3 py-2 pl-8 text-sm text-telegram-text placeholder-telegram-subtext/60 outline-none focus:border-telegram-primary/70"
+                        />
+                        <svg className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-telegram-subtext" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                    </div>
 
-                    <div className="mt-6 space-y-2">
-                        {tabs.map(({ id, label, icon: Icon, description }) => (
+                    <div className="mt-3 space-y-2">
+                        {tabs
+                            .filter(({ label, description }) => {
+                                if (!settingsSearch.trim()) return true;
+                                const q = settingsSearch.toLowerCase();
+                                return label.toLowerCase().includes(q) || description.toLowerCase().includes(q);
+                            })
+                            .map(({ id, label, icon: Icon, description }) => (
                             <button
                                 key={id}
-                                onClick={() => setTab(id)}
+                                onClick={() => { setTab(id); setSettingsSearch(''); }}
                                 className={`w-full rounded-xl border px-4 py-3 text-left transition ${
                                     tab === id
                                         ? 'border-telegram-primary/30 bg-telegram-primary/10 text-telegram-text'
@@ -573,6 +592,20 @@ export function SettingsModal({
                                 </div>
                             </button>
                         ))}
+
+                        {/* Compact mode quick toggle — always visible */}
+                        <div className="mt-2 flex items-center justify-between rounded-xl border border-telegram-border px-4 py-2.5">
+                            <span className="text-sm text-telegram-subtext">{t('compactMode')}</span>
+                            <button
+                                onClick={toggleCompact}
+                                role="switch"
+                                aria-checked={isCompact}
+                                aria-label={t('compactMode')}
+                                className={`relative h-6 w-11 rounded-full transition-colors ${isCompact ? 'bg-telegram-primary' : 'bg-white/[0.1]'}`}
+                            >
+                                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isCompact ? 'translate-x-5' : ''}`} />
+                            </button>
+                        </div>
                     </div>
                 </aside>
 

@@ -357,13 +357,38 @@ export function FileExplorer({
         );
     }
 
+    // Arrow key navigation within the grid
+    const handleGridKeyDown = useCallback((e: React.KeyboardEvent) => {
+        const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'];
+        if (!arrows.includes(e.key)) return;
+        const cards = Array.from(
+            parentRef.current?.querySelectorAll<HTMLElement>('[data-file-card]') ?? []
+        );
+        if (cards.length === 0) return;
+        const focused = document.activeElement as HTMLElement;
+        const idx = cards.indexOf(focused);
+        if (idx < 0) return;
+        e.preventDefault();
+        let next = idx;
+        if (e.key === 'ArrowRight') next = Math.min(idx + 1, cards.length - 1);
+        else if (e.key === 'ArrowLeft') next = Math.max(idx - 1, 0);
+        else if (e.key === 'ArrowDown') next = Math.min(idx + columns, cards.length - 1);
+        else if (e.key === 'ArrowUp') next = Math.max(idx - columns, 0);
+        else if (e.key === 'Home') next = 0;
+        else if (e.key === 'End') next = cards.length - 1;
+        cards[next]?.focus();
+    }, [columns]);
+
     return (
         <div
             ref={parentRef}
             className="flex-1 overflow-auto custom-scrollbar px-6 py-5"
+            role="region"
+            aria-label="File browser"
             onClick={(e) => {
                 if (e.target === e.currentTarget) onSelectionClear();
             }}
+            onKeyDown={handleGridKeyDown}
         >
             <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-telegram-border/70 pb-3 text-sm">
                 <div className="mr-1 font-medium text-telegram-text">

@@ -4,6 +4,46 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.9.0] - 2026-06-04
+
+### UX & Accesibilidad
+
+**`useFocusTrap` hook** — Trap de foco dentro de modales: Tab/Shift+Tab circula dentro del container; al cerrar restaura el foco al elemento que lo tenía antes. Aplicado a `RenameModal` (y disponible para todos los demás). Los modales ahora tienen `role="dialog"`, `aria-modal="true"` y `aria-label` descriptivo.
+
+**Modo compacto** — `CompactModeContext` + clase CSS `:root.compact` (misma lógica que `:root.light`). Toggle visible en el sidebar izquierdo del Settings modal. Persiste en `localStorage['sharkdrive.compactMode.v1']`. CSS añadido a `App.css` para reducir padding de cards, grid gap y queue items cuando está activo.
+
+**Búsqueda en Settings** — Campo de búsqueda con icono encima del listado de tabs. Filtra los tabs visibles por coincidencia en `label` o `description`. Al seleccionar un tab el campo se limpia. El toggle de compact mode siempre visible debajo de los tabs.
+
+**Skip-to-main link** — `<a href="#main-content" class="skip-to-main">Skip to content</a>` visible solo en foco. `<main id="main-content">` con landmark `main`. El div raíz del Dashboard tiene `aria-label="SharkDrive application"`.
+
+**ARIA en componentes clave:**
+- `FileCard`: `data-file-card`, `tabIndex={0}`, `role="button"`, `aria-label="filename (selected) (encrypted)"`, `aria-pressed`, `onKeyDown` (Enter/Space = open, Delete = delete)
+- `UploadQueue`: `aria-live="polite"`, `aria-relevant="additions text"`, `aria-label="Upload queue"`, item `role="listitem"` con `aria-label`, botón cancel con `aria-label` descriptivo
+- `TopBar`: `aria-label` + `aria-hidden="true"` en los SVGs de los botones icono (theme toggle, settings)
+- `RenameModal`: `role="dialog"`, `aria-modal="true"`, `aria-label`, close button `aria-label="Close"`
+
+**Navegación por teclado en el grid** — `onKeyDown` en el contenedor del scroll con roving tabindex. Las flechas (↑↓←→) mueven foco entre FileCards, Home/End van al primero/último. Los FileCards tienen `tabIndex={0}` y responden a Enter/Space (abrir) y Delete (eliminar).
+
+**Focus rings** — CSS `:focus-visible` global con `outline: 2px solid var(--color-telegram-primary)` (solo para navegación por teclado, no en clicks de ratón via `:focus:not(:focus-visible)`).
+
+### Cambios técnicos
+- `hooks/useFocusTrap.ts` — nuevo hook genérico para modales
+- `context/CompactModeContext.tsx` — nuevo context + provider
+- `App.css` — `:root.compact` CSS, `.skip-to-main`, `:focus-visible`, `:focus:not(:focus-visible)`
+- `App.tsx` — `<CompactModeProvider>` wrapping
+- `components/dashboard/RenameModal.tsx` — `useFocusTrap`, `role="dialog"`, `aria-modal`, `aria-label`
+- `components/dashboard/FileCard.tsx` — `data-file-card`, `tabIndex`, `role="button"`, `aria-label`, `aria-pressed`, `onKeyDown`
+- `components/dashboard/FileExplorer.tsx` — arrow key nav (`handleGridKeyDown`), `role="region"`, `aria-label`
+- `components/dashboard/UploadQueue.tsx` — `aria-live`, `role="listitem"`, `aria-label` en items y botón cancel
+- `components/dashboard/TopBar.tsx` — `aria-label` + `aria-hidden` en theme toggle y Settings button
+- `components/dashboard/Sidebar.tsx` — `isConnecting` prop (de v3.8, ya incluido)
+- `components/dashboard/SettingsModal.tsx` — búsqueda de settings, import `useCompactMode`, toggle compacto
+- `components/Dashboard.tsx` — skip link, `id="main-content"`, `aria-label` en el root div
+- i18n: 4 nuevas claves EN+ES (`compactMode`, `compactModeDesc`, `settingsSearch`, `skipToContent`)
+- VERSION → 3.9.0
+
+---
+
 ## [3.8.0] - 2026-06-04
 
 ### Estabilidad & Performance

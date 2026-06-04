@@ -179,6 +179,19 @@ export function FileCard({
             <motion.div
                 layout
                 draggable={!isFolder}
+                data-file-card
+                tabIndex={0}
+                role="button"
+                aria-label={`${file.name}${isSelected ? ' (selected)' : ''}${file.is_encrypted ? ' encrypted' : ''}`}
+                aria-pressed={isSelected}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onClick?.();
+                    } else if (e.key === 'Delete') {
+                        onDelete();
+                    }
+                }}
                 onDragStart={(e: any) => {
                     if (onDragStart) onDragStart(file.id);
                     e.dataTransfer.setData('application/x-telegram-file-id', file.id.toString());
@@ -190,7 +203,8 @@ export function FileCard({
                 whileHover={{ y: -1 }}
                 className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-telegram-bg transition-all
                 ${isSelected ? 'border-telegram-primary/55 ring-1 ring-telegram-primary/25' : 'border-telegram-border/85 hover:border-telegram-primary/25'}
-                ${isDragOver ? 'border-telegram-primary/60 ring-2 ring-telegram-primary/40' : ''}`}
+                ${isDragOver ? 'border-telegram-primary/60 ring-2 ring-telegram-primary/40' : ''}
+                focus-visible:outline-2 focus-visible:outline-telegram-primary focus-visible:outline-offset-1`}
                 style={height ? { height: `${height}px` } : { aspectRatio: '4/3' }}
             >
                 {thumbnail ? (
