@@ -138,11 +138,15 @@ export function useFileUpload(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [uploadQueue, isConnected]);
 
-    const MAX_RETRIES = 2;
+    const MAX_RETRIES = 3;
     const isNetworkError = (err: string) => {
-        const keywords = ['timeout', 'connection', 'network', 'socket', 'disconnected', 'eof', 'refused'];
+        const keywords = ['timeout', 'connection', 'network', 'socket', 'disconnected', 'eof', 'refused', 'overloaded', 'not connected'];
         return keywords.some(k => err.toLowerCase().includes(k));
     };
+
+    /** Exponential backoff: 2s → 4s → 8s + up to 1s jitter */
+    const retryDelay = (attempt: number) =>
+        Math.min(2_000 * Math.pow(2, attempt) + Math.random() * 1_000, 30_000);
 
     const processItem = async (item: QueueItem) => {
         activeUploadsRef.current += 1;
@@ -170,11 +174,15 @@ export function useFileUpload(
         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'uploading', progress: 0, size: fileSize, startedAt: Date.now() } : i));
 
         let lastError = '';
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        let attempt = 0;
+        let floodRetries = 0;
+        const MAX_FLOOD_RETRIES = 3;
+
+        while (attempt <= MAX_RETRIES) {
             if (cancelledRef.current.has(item.id)) break;
 
             if (attempt > 0) {
-                const delay = 3000 * attempt;
+                const delay = retryDelay(attempt - 1);
                 setUploadQueue(q => q.map(i => i.id === item.id
                     ? { ...i, status: 'pending' as const, error: `Retrying (${attempt}/${MAX_RETRIES})…`, progress: undefined }
                     : i));
@@ -225,10 +233,32 @@ export function useFileUpload(
                 activeUploadsRef.current -= 1;
                 return;
             } catch (e) {
+                const errStr = String(e);
+
+                // Detect FLOOD_WAIT and wait the specified seconds before retrying
+                const floodMatch = errStr.match(/FLOOD_WAIT[_\s](\d+)/i);
+                if (floodMatch && floodRetries < MAX_FLOOD_RETRIES) {
+                    floodRetries++;
+                    const waitSecs = parseInt(floodMatch[1], 10) + 2;
+                    toast.warning(`Rate limited by Telegram — pausing ${waitSecs}s…`);
+                    setUploadQueue(q => q.map(i => i.id === item.id
+                        ? { ...i, status: 'pending' as const, error: `Rate limited — waiting ${waitSecs}s…`, progress: undefined }
+                        : i));
+                    await new Promise(r => setTimeout(r, waitSecs * 1_000));
+                    if (!cancelledRef.current.has(item.id)) {
+                        setUploadQueue(q => q.map(i => i.id === item.id
+                            ? { ...i, status: 'uploading', error: undefined, progress: 0 }
+                            : i));
+                    }
+                    continue; // FLOOD_WAIT doesn't count as a retry attempt
+                }
+
                 lastError = formatError(e);
-                if (!isNetworkError(String(e)) || attempt === MAX_RETRIES) break;
-                // Network error → will retry after delay
+                if (!isNetworkError(errStr) || attempt >= MAX_RETRIES) break;
+                attempt++;
             }
+
+            attempt++;
         }
 
         if (!cancelledRef.current.has(item.id)) {

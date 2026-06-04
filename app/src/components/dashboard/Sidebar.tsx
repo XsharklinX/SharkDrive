@@ -34,6 +34,7 @@ interface SidebarProps {
     onSetFolderParent?: (folderId: number, parentId: number | null) => Promise<void>;
     isSyncing: boolean;
     isConnected: boolean;
+    isConnecting?: boolean;
     onSync: () => void;
     onLogout: () => void;
     bandwidth: BandwidthStats | null;
@@ -77,6 +78,7 @@ export function Sidebar({
     onSetFolderParent,
     isSyncing,
     isConnected,
+    isConnecting = false,
     onSync,
     onLogout,
     bandwidth,
@@ -285,9 +287,15 @@ export function Sidebar({
                     )}
                 </div>
                 <div className="mt-4 flex items-center gap-2 text-xs text-telegram-subtext">
-                    <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-emerald-400' : 'bg-red-500 animate-pulse'}`} />
-                    <span className={isConnected ? '' : 'text-red-400 font-semibold'}>
-                        {isConnected ? 'Connected to Telegram' : 'Offline Mode'}
+                    <div className={`h-2 w-2 rounded-full ${
+                        isConnected ? 'bg-emerald-400'
+                        : isConnecting ? 'bg-amber-400 animate-pulse'
+                        : 'bg-red-500 animate-pulse'
+                    }`} />
+                    <span className={
+                        isConnected ? '' : isConnecting ? 'text-amber-400' : 'text-red-400 font-semibold'
+                    }>
+                        {isConnected ? 'Connected to Telegram' : isConnecting ? 'Reconnecting…' : 'Offline Mode'}
                     </span>
                 </div>
             </div>

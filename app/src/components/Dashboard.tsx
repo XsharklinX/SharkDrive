@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
@@ -9,45 +9,49 @@ import { TelegramFile } from '../types';
 import { formatBytes, resolveFileFolderId, isTextPreviewFile, isSvgFile, isImageFile } from '../utils';
 import { tauriApi } from '../api/tauri';
 
-// Components
+// Components — always needed (static imports)
 import { Sidebar, RECENT_FOLDER_ID } from './dashboard/Sidebar';
 import { TopBar } from './dashboard/TopBar';
 import { RenameModal } from './dashboard/RenameModal';
-import { SettingsModal } from './dashboard/SettingsModal';
-import { ShareModal } from './dashboard/ShareModal';
+
+// Components — lazy-loaded (only when first opened, dramatically reduces startup bundle)
+const SettingsModal = lazy(() => import('./dashboard/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const ShareModal = lazy(() => import('./dashboard/ShareModal').then(m => ({ default: m.ShareModal })));
 import { useAutoSync } from '../hooks/useAutoSync';
+// Static — always visible or lightweight
 import { FileExplorer } from './dashboard/FileExplorer';
 import { UploadQueue } from './dashboard/UploadQueue';
 import { DownloadQueue } from './dashboard/DownloadQueue';
-import { MoveToFolderModal } from './dashboard/MoveToFolderModal';
-import { PreviewModal } from './dashboard/PreviewModal';
-import { MediaPlayer } from './dashboard/MediaPlayer';
 import { DragDropOverlay } from './dashboard/DragDropOverlay';
 import { ExternalDropBlocker } from './dashboard/ExternalDropBlocker';
-import { PdfViewer } from './dashboard/PdfViewer';
-import { VaultModal } from './dashboard/VaultModal';
-import { ShareLinksDashboard } from './dashboard/ShareLinksDashboard';
-import { BatchRenameModal } from './dashboard/BatchRenameModal';
 import { DuplicateDialog } from './dashboard/DuplicateDialog';
 import { BackupConflictDialog } from './dashboard/BackupConflictDialog';
-import { TextPreviewModal } from './dashboard/TextPreviewModal';
-import { FileInfoPanel } from './dashboard/FileInfoPanel';
-import { KeyboardShortcutsOverlay } from './dashboard/KeyboardShortcutsOverlay';
-import { ImageCompressDialog } from './dashboard/ImageCompressDialog';
-import { OnboardingWizard } from './dashboard/OnboardingWizard';
 import { ErrorBoundary } from './ErrorBoundary';
 import { VaultLockScreen } from './dashboard/VaultLockScreen';
-import { FolderStatsModal } from './dashboard/FolderStatsModal';
-import { VersionHistoryModal } from './dashboard/VersionHistoryModal';
-import { SyncHistoryPanel } from './dashboard/SyncHistoryPanel';
-import { DuplicatesPanel } from './dashboard/DuplicatesPanel';
-import { CrossAccountCopyModal } from './dashboard/CrossAccountCopyModal';
-import { WebAccessModal } from './dashboard/WebAccessModal';
 import { WipeConfirmModal } from './dashboard/WipeConfirmModal';
-import { TotpSetupModal } from './dashboard/TotpSetupModal';
-import { ExportKeyModal } from './dashboard/ExportKeyModal';
-import { ConfigExportModal } from './dashboard/ConfigExportModal';
-import { CloudImportWizard } from './dashboard/CloudImportWizard';
+// Lazy — loaded on first user interaction
+const MoveToFolderModal = lazy(() => import('./dashboard/MoveToFolderModal').then(m => ({ default: m.MoveToFolderModal })));
+const PreviewModal       = lazy(() => import('./dashboard/PreviewModal').then(m => ({ default: m.PreviewModal })));
+const MediaPlayer        = lazy(() => import('./dashboard/MediaPlayer').then(m => ({ default: m.MediaPlayer })));
+const PdfViewer          = lazy(() => import('./dashboard/PdfViewer').then(m => ({ default: m.PdfViewer })));
+const VaultModal         = lazy(() => import('./dashboard/VaultModal').then(m => ({ default: m.VaultModal })));
+const ShareLinksDashboard= lazy(() => import('./dashboard/ShareLinksDashboard').then(m => ({ default: m.ShareLinksDashboard })));
+const BatchRenameModal   = lazy(() => import('./dashboard/BatchRenameModal').then(m => ({ default: m.BatchRenameModal })));
+const TextPreviewModal   = lazy(() => import('./dashboard/TextPreviewModal').then(m => ({ default: m.TextPreviewModal })));
+const FileInfoPanel      = lazy(() => import('./dashboard/FileInfoPanel').then(m => ({ default: m.FileInfoPanel })));
+const KeyboardShortcutsOverlay = lazy(() => import('./dashboard/KeyboardShortcutsOverlay').then(m => ({ default: m.KeyboardShortcutsOverlay })));
+const ImageCompressDialog= lazy(() => import('./dashboard/ImageCompressDialog').then(m => ({ default: m.ImageCompressDialog })));
+const OnboardingWizard   = lazy(() => import('./dashboard/OnboardingWizard').then(m => ({ default: m.OnboardingWizard })));
+const FolderStatsModal   = lazy(() => import('./dashboard/FolderStatsModal').then(m => ({ default: m.FolderStatsModal })));
+const VersionHistoryModal= lazy(() => import('./dashboard/VersionHistoryModal').then(m => ({ default: m.VersionHistoryModal })));
+const SyncHistoryPanel   = lazy(() => import('./dashboard/SyncHistoryPanel').then(m => ({ default: m.SyncHistoryPanel })));
+const DuplicatesPanel    = lazy(() => import('./dashboard/DuplicatesPanel').then(m => ({ default: m.DuplicatesPanel })));
+const CrossAccountCopyModal = lazy(() => import('./dashboard/CrossAccountCopyModal').then(m => ({ default: m.CrossAccountCopyModal })));
+const WebAccessModal     = lazy(() => import('./dashboard/WebAccessModal').then(m => ({ default: m.WebAccessModal })));
+const TotpSetupModal     = lazy(() => import('./dashboard/TotpSetupModal').then(m => ({ default: m.TotpSetupModal })));
+const ExportKeyModal     = lazy(() => import('./dashboard/ExportKeyModal').then(m => ({ default: m.ExportKeyModal })));
+const ConfigExportModal  = lazy(() => import('./dashboard/ConfigExportModal').then(m => ({ default: m.ConfigExportModal })));
+const CloudImportWizard  = lazy(() => import('./dashboard/CloudImportWizard').then(m => ({ default: m.CloudImportWizard })));
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -67,6 +71,7 @@ import { useEncryptedFolders } from '../hooks/useEncryptedFolders';
 import { useRecentSearches } from '../hooks/useRecentSearches';
 import { useOrganization } from '../hooks/useOrganization';
 import { matchesSmartCollection, useSmartCollections, type SmartCollectionId } from '../hooks/useSmartCollections';
+import { useAutoReconnect } from '../hooks/useAutoReconnect';
 import { useConfirm } from '../context/ConfirmContext';
 
 export function Dashboard({ onLogout }: { onLogout: () => void }) {
@@ -74,9 +79,20 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
     const { confirm } = useConfirm();
 
     const {
-        store, folders, activeFolderId, setActiveFolderId, isSyncing, isConnected,
-        handleLogout, handleSyncFolders, handleCreateFolder, handleFolderDelete, handleRenameFolder, handleSetFolderParent
+        store, folders, activeFolderId, setActiveFolderId, isSyncing, isConnected, isConnecting,
+        attemptReconnect, handleLogout, handleSyncFolders, handleCreateFolder, handleFolderDelete,
+        handleRenameFolder, handleSetFolderParent
     } = useTelegramConnection(onLogout);
+
+    // Silent auto-reconnect with exponential backoff — no blocking confirm dialog
+    useAutoReconnect({
+        isConnected,
+        isConnecting,
+        enabled: !!store,
+        onAttempt: attemptReconnect,
+        onGiveUp: () => toast.error('Could not reconnect to Telegram. Check your connection and try restarting.', { duration: 10_000, id: 'reconnect-failed' }),
+        maxAttempts: 7,
+    });
 
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'gallery'>('grid');
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -1253,6 +1269,8 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
             <ExternalDropBlocker onUploadClick={handleManualUpload} />
 
+            {/* Single Suspense for all lazy-loaded modals — fallback=null means modals simply don't appear while the chunk loads (<50ms on first open) */}
+            <Suspense fallback={null}>
             <AnimatePresence>
                 {showSettings && (
                     <SettingsModal
@@ -1525,6 +1543,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 )}
                 {isDragging && !isDraggingInternally && <DragDropOverlay key="drag-drop-overlay" />}
             </AnimatePresence>
+            </Suspense>
 
             <Sidebar
                 folders={folders}
@@ -1538,6 +1557,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 onSetFolderParent={handleSetFolderParent}
                 isSyncing={isSyncing}
                 isConnected={isConnected}
+                isConnecting={isConnecting}
                 onSync={handleSyncFolders}
                 onLogout={handleLogout}
                 bandwidth={bandwidth || null}

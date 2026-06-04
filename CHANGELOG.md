@@ -4,6 +4,32 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [3.8.0] - 2026-06-04
+
+### Estabilidad & Performance
+
+**Lazy loading de componentes** — `React.lazy()` + `Suspense` para todos los modales pesados de Dashboard. Los componentes que no son necesarios en el arranque se cargan on-demand la primera vez que el usuario los abre: SettingsModal, VaultModal, MediaPlayer, PdfViewer, ShareModal, ShareLinksDashboard, BatchRenameModal, TextPreviewModal, FileInfoPanel, KeyboardShortcutsOverlay, ImageCompressDialog, OnboardingWizard, FolderStatsModal, VersionHistoryModal, SyncHistoryPanel, DuplicatesPanel, CrossAccountCopyModal, WebAccessModal, TotpSetupModal, ExportKeyModal, ConfigExportModal, CloudImportWizard, MoveToFolderModal, PreviewModal (24 componentes). Resultado: el bundle inicial de Dashboard.tsx se reduce significativamente — solo carga lo imprescindible para mostrar la interfaz.
+
+**Exponential backoff en uploads** — `retryDelay(attempt)` = min(2s × 2^n + jitter(0–1s), 30s). Reemplaza el delay lineal `3000 * attempt`. `MAX_RETRIES` subió de 2 a 3. Más palabras clave de error de red: `overloaded`, `not connected`.
+
+**Detección y espera de FLOOD_WAIT** — Si Telegram responde `FLOOD_WAIT_N`, el upload se pausa exactamente N+2 segundos mostrando "Rate limited — pausing Xs…" en la cola. No consume reintentos. Hasta 3 FLOOD_WAITs por item antes de fallar.
+
+**Reconexión silenciosa** — Eliminado el `confirm()` bloqueante que antes preguntaba "retry?" al fallar la conexión inicial. Reemplazado por `useAutoReconnect` hook con backoff exponencial (3s → 6s → 12s → 24s → 48s → 60s). Hasta 7 intentos antes de mostrar un toast no-bloqueante. `isConnecting: boolean` añadido al connection hook y al Sidebar (indicador ámbar "Reconnecting…" cuando está en curso). `attemptReconnect()` expuesto desde `useTelegramConnection`.
+
+**Indicador visual de reconexión** — El dot de estado en el Sidebar muestra 3 estados: verde (connected), ámbar animado (reconnecting), rojo animado (offline). El texto cambia entre "Connected to Telegram" / "Reconnecting…" / "Offline Mode".
+
+**Mejoras de bug (sesión anterior)** — `startingRef` guard en parallel uploads (TS limpio), `encLoadedSessionRef` en useActivityLog para reload correcto al desbloquear vault.
+
+### Cambios técnicos
+- `hooks/useAutoReconnect.ts` — nuevo hook con schedule exponencial y limit de intentos
+- `hooks/useTelegramConnection.ts` — sin blocking confirm; añade `isConnecting`, `attemptReconnect`, `apiIdRef`
+- `hooks/useFileUpload.ts` — `retryDelay()` exponencial, loop while con FLOOD_WAIT handling, `MAX_RETRIES=3`
+- `components/Dashboard.tsx` — 24 lazy imports + Suspense wrapper; usa `useAutoReconnect`; pasa `isConnecting` al Sidebar
+- `components/dashboard/Sidebar.tsx` — 3 estados visuales de conexión (verde/ámbar/rojo); `isConnecting` prop
+- VERSION → 3.8.0
+
+---
+
 ## [3.7.0] - 2026-06-03
 
 ### Export & Interoperabilidad

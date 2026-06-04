@@ -16,7 +16,9 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     const [store, setStore] = useState<Store | null>(null);
     const [isSyncing, setIsSyncing] = useState(false);
     const [isConnected, setIsConnected] = useState(true);
+    const [isConnecting, setIsConnecting] = useState(false);
     const pendingFolderIdsRef = useRef<Set<number>>(new Set());
+    const apiIdRef = useRef<number | null>(null);
 
 
     const networkIsOnline = useNetworkStatus();
@@ -41,27 +43,18 @@ export function useTelegramConnection(onLogoutParent: () => void) {
 
                 const apiIdStr = await _store.get<string>('api_id');
                 if (apiIdStr) {
+                    const apiId = parseInt(apiIdStr as string);
+                    apiIdRef.current = apiId;
+                    setIsConnecting(true);
                     try {
-                        const apiId = parseInt(apiIdStr as string);
                         await tauriApi.connect(apiId);
                         setIsConnected(true);
                         queryClient.invalidateQueries({ queryKey: ['files'] });
                     } catch {
-                        const shouldRetry = await confirm({
-                            title: "Telegram Connection Failed",
-                            message: "SharkDrive couldn't reconnect to Telegram. Retry now?",
-                            confirmText: "Retry",
-                            variant: 'info'
-                        });
-                        if (shouldRetry) {
-                            window.location.reload();
-                        } else {
-                            if (_store) {
-                                await _store.delete('api_id');
-                                await _store.save();
-                            }
-                            onLogoutParent();
-                        }
+                        // Silent failure — useAutoReconnect will retry
+                        setIsConnected(false);
+                    } finally {
+                        setIsConnecting(false);
                     }
                 } else {
                     onLogoutParent();
@@ -75,28 +68,37 @@ export function useTelegramConnection(onLogoutParent: () => void) {
     }, [queryClient, onLogoutParent]);
 
 
+    // Reconnect function — used by useAutoReconnect hook and network-restore handler
+    const attemptReconnect = async () => {
+        const apiId = apiIdRef.current;
+        if (!apiId) return;
+        setIsConnecting(true);
+        try {
+            await tauriApi.connect(apiId);
+            setIsConnected(true);
+            queryClient.invalidateQueries({ queryKey: ['files'] });
+            toast.success('Reconnected to Telegram');
+        } catch {
+            setIsConnected(false);
+            throw new Error('reconnect failed');
+        } finally {
+            setIsConnecting(false);
+        }
+    };
+
     const prevOnlineRef = useRef(true);
     useEffect(() => {
         const wasOffline = !prevOnlineRef.current;
         prevOnlineRef.current = networkIsOnline;
 
-        if (wasOffline && networkIsOnline && store) {
-            // Network restored — attempt to reconnect to Telegram
-            store.get<string>('api_id').then(apiIdStr => {
-                if (!apiIdStr) return;
-                const apiId = parseInt(apiIdStr);
-                tauriApi.connect(apiId)
-                    .then(() => {
-                        setIsConnected(true);
-                        queryClient.invalidateQueries({ queryKey: ['files'] });
-                        toast.success('Reconnected to Telegram');
-                    })
-                    .catch(() => setIsConnected(false));
-            });
-        } else {
-            setIsConnected(networkIsOnline);
+        if (wasOffline && networkIsOnline) {
+            // Network restored — try to reconnect immediately
+            attemptReconnect().catch(() => {});
+        } else if (!networkIsOnline) {
+            setIsConnected(false);
         }
-    }, [networkIsOnline, store, queryClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [networkIsOnline]);
 
 
     const isNetworkError = (error: string): boolean => {
@@ -293,6 +295,8 @@ export function useTelegramConnection(onLogoutParent: () => void) {
         setActiveFolderId: handleSetActiveFolderId,
         isSyncing,
         isConnected,
+        isConnecting,
+        attemptReconnect,
         handleLogout,
         handleSyncFolders,
         handleCreateFolder,
