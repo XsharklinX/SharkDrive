@@ -79,6 +79,8 @@ export function useFileUpload(
     const cancelledRef = useRef<Set<string>>(new Set());
     // Tracks active concurrent uploads (ref = no re-render on change)
     const activeUploadsRef = useRef(0);
+    // Items we've called processItem for but whose state hasn't flipped to 'uploading' yet
+    const startingRef = useRef<Set<string>>(new Set());
     // Concurrency: 1 for small batches, up to 4 for large batches
     const getTargetConcurrency = (pendingCount: number) => pendingCount >= 4 ? 4 : 1;
 
@@ -123,12 +125,16 @@ export function useFileUpload(
     // Start as many concurrent uploads as the current batch size allows
     useEffect(() => {
         if (!isConnected) return;
-        const pending = uploadQueue.filter(i => i.status === 'pending');
+        // Exclude items that are already in-flight (state hasn't flipped yet)
+        const pending = uploadQueue.filter(i => i.status === 'pending' && !startingRef.current.has(i.id));
         if (pending.length === 0) return;
-        const target = getTargetConcurrency(pending.length);
+        const target = getTargetConcurrency(pending.length + activeUploadsRef.current);
         const slots = target - activeUploadsRef.current;
         if (slots <= 0) return;
-        pending.slice(0, slots).forEach(item => processItem(item));
+        pending.slice(0, slots).forEach(item => {
+            startingRef.current.add(item.id);
+            processItem(item);
+        });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [uploadQueue, isConnected]);
 
@@ -140,6 +146,7 @@ export function useFileUpload(
 
     const processItem = async (item: QueueItem) => {
         activeUploadsRef.current += 1;
+        startingRef.current.delete(item.id); // ensure removed from guard even if state already updated
 
         let fileSize: number | undefined;
         try {
@@ -159,6 +166,7 @@ export function useFileUpload(
             // stat failed — proceed without size, let backend handle it
         }
 
+        startingRef.current.delete(item.id); // now officially 'uploading' — remove from guard
         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'uploading', progress: 0, size: fileSize, startedAt: Date.now() } : i));
 
         let lastError = '';

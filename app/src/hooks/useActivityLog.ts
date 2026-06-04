@@ -1,36 +1,41 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Store } from '@tauri-apps/plugin-store';
 import { ActivityEntry } from '../types';
 import { tauriApi } from '../api/tauri';
 
 export function useActivityLog(store: Store | null, encryptionEnabled = false) {
     const [activity, setActivity] = useState<ActivityEntry[]>([]);
-    const [encryptedLoaded, setEncryptedLoaded] = useState(false);
+    // Track whether we've successfully loaded from the encrypted file for THIS unlock session
+    const encLoadedSessionRef = useRef(false);
 
-    // Load activity: encrypted (when vault open) or plaintext store
+    // Load activity when vault unlocks (encryptionEnabled changes true) or on mount
     useEffect(() => {
         if (!store) return;
 
-        if (encryptionEnabled && !encryptedLoaded) {
+        if (encryptionEnabled) {
+            // Vault is open — try encrypted file first
+            if (encLoadedSessionRef.current) return; // already loaded for this session
             tauriApi.loadEncryptedActivity()
                 .then(json => {
                     if (json) {
                         try {
                             const entries = JSON.parse(json) as ActivityEntry[];
                             setActivity(entries);
-                        } catch { /* ignore parse errors */ }
+                            encLoadedSessionRef.current = true;
+                        } catch { /* corrupted — use in-memory */ }
                     } else {
-                        // Encrypted file not found — try loading from plaintext store
+                        // No encrypted file yet — load plaintext as seed then mark ready
                         store.get<ActivityEntry[]>('activityHistory').then(v => { if (v) setActivity(v); });
+                        encLoadedSessionRef.current = true;
                     }
-                    setEncryptedLoaded(true);
                 })
                 .catch(() => {
-                    // Fallback to plaintext
                     store.get<ActivityEntry[]>('activityHistory').then(v => { if (v) setActivity(v); });
-                    setEncryptedLoaded(true);
+                    encLoadedSessionRef.current = true;
                 });
-        } else if (!encryptionEnabled) {
+        } else {
+            // Vault locked or encryption disabled — use plaintext store
+            encLoadedSessionRef.current = false; // reset so next unlock re-loads
             store.get<ActivityEntry[]>('activityHistory').then(v => { if (v) setActivity(v); });
         }
     }, [store, encryptionEnabled]);

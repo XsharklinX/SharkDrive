@@ -3,101 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="SharkDrive convierte tu cuenta de Telegram en una nube privada para organizar, proteger y compartir tus archivos desde Windows."
-    />
+    <meta name="description" content="SharkDrive convierte tu cuenta de Telegram en una nube privada: organiza, cifra y comparte archivos desde Windows. Multi-cuenta, companion móvil y automatización avanzada." />
     <meta name="theme-color" content="#071722" />
     <meta property="og:title" content="SharkDrive | Tu nube privada sobre Telegram" />
-    <meta
-      property="og:description"
-      content="Guarda, organiza, cifra y comparte tus archivos desde una app de escritorio simple y rápida."
-    />
+    <meta property="og:description" content="Drive de escritorio sobre Telegram. Cifrado AES-256, 2FA TOTP, companion móvil, multi-cuenta y automatización. Sin cuotas. Código abierto." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="./logo.svg" />
     <title>SharkDrive | Tu nube privada sobre Telegram</title>
     <link rel="icon" href="./logo.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css" />
     <script src="./app.js" defer></script>
   </head>
   <body>
     <svg class="svg-sprite" aria-hidden="true">
-      <symbol id="icon-arrow" viewBox="0 0 24 24">
-        <path d="M5 12h13m-5-5 5 5-5 5" />
-      </symbol>
-      <symbol id="icon-check" viewBox="0 0 24 24">
-        <path d="m5 12 4 4L19 6" />
-      </symbol>
-      <symbol id="icon-cloud" viewBox="0 0 24 24">
-        <path d="M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.28 9.1 4.5 4.5 0 0 0 7 18Z" />
-      </symbol>
-      <symbol id="icon-code" viewBox="0 0 24 24">
-        <path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2.5-9-3 12" />
-      </symbol>
-      <symbol id="icon-download" viewBox="0 0 24 24">
-        <path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" />
-      </symbol>
-      <symbol id="icon-file" viewBox="0 0 24 24">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-        <path d="M14 2v6h6" />
-      </symbol>
-      <symbol id="icon-folder" viewBox="0 0 24 24">
-        <path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2h7.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z" />
-      </symbol>
-      <symbol id="icon-github" viewBox="0 0 24 24">
-        <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3.3-.4 6.8-1.6 6.8-7.3A5.7 5.7 0 0 0 19.3 3 5.3 5.3 0 0 0 19.1-.9S17.9-1.3 15 1a13.4 13.4 0 0 0-6 0C6.1-1.3 4.9-.9 4.9-.9A5.3 5.3 0 0 0 4.7 3a5.7 5.7 0 0 0-1.5 4.2c0 5.7 3.5 6.9 6.8 7.3a4.8 4.8 0 0 0-1 3.5v4" />
-        <path d="M9 19c-3 .9-4-1.5-4-1.5" />
-      </symbol>
-      <symbol id="icon-image" viewBox="0 0 24 24">
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" />
-        <path d="m21 15-5-5L5 21" />
-      </symbol>
-      <symbol id="icon-lock" viewBox="0 0 24 24">
-        <rect width="18" height="11" x="3" y="11" rx="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4m-5 4v3" />
-      </symbol>
-      <symbol id="icon-menu" viewBox="0 0 24 24">
-        <path d="M4 6h16M4 12h16M4 18h16" />
-      </symbol>
-      <symbol id="icon-play" viewBox="0 0 24 24">
-        <path d="m8 5 11 7-11 7Z" />
-      </symbol>
-      <symbol id="icon-search" viewBox="0 0 24 24">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </symbol>
-      <symbol id="icon-share" viewBox="0 0 24 24">
-        <circle cx="18" cy="5" r="3" />
-        <circle cx="6" cy="12" r="3" />
-        <circle cx="18" cy="19" r="3" />
-        <path d="m8.6 10.5 6.8-4m-6.8 7 6.8 4" />
-      </symbol>
-      <symbol id="icon-shield" viewBox="0 0 24 24">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-        <path d="m9 12 2 2 4-4" />
-      </symbol>
-      <symbol id="icon-spark" viewBox="0 0 24 24">
-        <path d="m12 3-1.5 6.5L4 11l6.5 1.5L12 19l1.5-6.5L20 11l-6.5-1.5Z" />
-      </symbol>
-      <symbol id="icon-telegram" viewBox="0 0 24 24">
-        <path d="m21 4-3 16-6-4-3 3v-5l8-7-10 6-4-2Z" />
-      </symbol>
-      <symbol id="icon-upload" viewBox="0 0 24 24">
-        <path d="M12 21V9m0 0-4 4m4-4 4 4M5 3h14" />
-      </symbol>
+      <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5"/></symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="icon-cloud" viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.28 9.1 4.5 4.5 0 0 0 7 18Z"/></symbol>
+      <symbol id="icon-code" viewBox="0 0 24 24"><path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2.5-9-3 12"/></symbol>
+      <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></symbol>
+      <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4H9l2 2h7.5A2.5 2.5 0 0 1 21 8.5v9a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></symbol>
+      <symbol id="icon-github" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3.3-.4 6.8-1.6 6.8-7.3A5.7 5.7 0 0 0 19.3 3 5.3 5.3 0 0 0 19.1-.9S17.9-1.3 15 1a13.4 13.4 0 0 0-6 0C6.1-1.3 4.9-.9 4.9-.9A5.3 5.3 0 0 0 4.7 3a5.7 5.7 0 0 0-1.5 4.2c0 5.7 3.5 6.9 6.8 7.3a4.8 4.8 0 0 0-1 3.5v4"/><path d="M9 19c-3 .9-4-1.5-4-1.5"/></symbol>
+      <symbol id="icon-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+      <symbol id="icon-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4m-5 4v3"/></symbol>
+      <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+      <symbol id="icon-mobile" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+      <symbol id="icon-multi" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M19 8v6m3-3h-6"/></symbol>
+      <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4m-6.8 7 6.8 4"/></symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="icon-spark" viewBox="0 0 24 24"><path d="m12 3-1.5 6.5L4 11l6.5 1.5L12 19l1.5-6.5L20 11l-6.5-1.5Z"/></symbol>
+      <symbol id="icon-telegram" viewBox="0 0 24 24"><path d="m21 4-3 16-6-4-3 3v-5l8-7-10 6-4-2Z"/></symbol>
+      <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 21V9m0 0-4 4m4-4 4 4M5 3h14"/></symbol>
+      <symbol id="icon-tag" viewBox="0 0 24 24"><path d="m20.59 13.41-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><line x1="7" x2="7.01" y1="7" y2="7"/></symbol>
+      <symbol id="icon-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></symbol>
+      <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
     </svg>
 
     <header class="site-header">
       <div class="container nav-shell">
         <a class="brand" href="#top" aria-label="SharkDrive inicio">
-          <img src="./logo.svg" alt="" width="42" height="42" />
+          <img src="./logo.svg" alt="" width="40" height="40" />
           <span>Shark<span>Drive</span></span>
         </a>
         <button class="mobile-menu-button" type="button" aria-label="Abrir menú" aria-expanded="false">
@@ -106,11 +56,12 @@
         <nav class="main-nav" aria-label="Navegación principal">
           <a href="#product">Producto</a>
           <a href="#features">Funciones</a>
+          <a href="#changelog">Versiones</a>
           <a href="#guide">Cómo empezar</a>
           <a href="#faq">Preguntas</a>
         </nav>
         <div class="nav-actions">
-          <a class="icon-link" href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer" aria-label="Ver SharkDrive en GitHub">
+          <a class="icon-link" href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer" aria-label="GitHub">
             <svg><use href="#icon-github"></use></svg>
           </a>
           <a class="button button-small button-primary" data-download-link href="https://github.com/XsharklinX/SharkDrive/releases">
@@ -121,15 +72,16 @@
     </header>
 
     <main id="top">
+      <!-- ── Hero ─────────────────────────────────────────────────────────── -->
       <section class="hero section">
         <div class="hero-glow"></div>
         <div class="container hero-grid">
           <div class="hero-copy reveal">
-            <div class="eyebrow"><span class="status-dot"></span> Aplicación de escritorio para Windows</div>
+            <div class="eyebrow"><span class="status-dot"></span> Aplicación de escritorio · Windows</div>
             <h1>Tu nube privada.<br /><span>Bajo tu control.</span></h1>
             <p class="hero-text">
-              Convierte tu cuenta de Telegram en un espacio personal para guardar, organizar y proteger tus archivos.
-              Sin cuotas mensuales. Sin una interfaz complicada.
+              Convierte tu cuenta de Telegram en un drive personal: organiza, cifra y comparte archivos
+              sin cuotas ni servidores propios. Accede también desde el móvil en tu red local.
             </p>
             <div class="hero-actions">
               <a class="button button-primary button-large" data-download-link href="https://github.com/XsharklinX/SharkDrive/releases">
@@ -143,7 +95,7 @@
             </div>
             <div class="release-line" aria-live="polite">
               <span class="release-status-icon"></span>
-              <span data-release-status>Consultando la última versión publicada...</span>
+              <span data-release-status>Consultando la última versión publicada…</span>
             </div>
           </div>
 
@@ -157,9 +109,13 @@
               <div class="app-body">
                 <aside class="mock-sidebar">
                   <div class="mock-brand"><img src="./logo.svg" alt="" /><b>SharkDrive</b></div>
+                  <div class="mock-account">
+                    <span class="mock-avatar">D</span>
+                    <div><b>Cuenta personal</b><small>@usuario</small></div>
+                  </div>
                   <small>ARCHIVOS</small>
-                  <a><svg><use href="#icon-cloud"></use></svg> Mi espacio</a>
-                  <a><svg><use href="#icon-folder"></use></svg> Recientes</a>
+                  <a><svg><use href="#icon-cloud"></use></svg> Mensajes guardados</a>
+                  <a><svg><use href="#icon-history"></use></svg> Recientes</a>
                   <small>CARPETAS</small>
                   <a class="selected"><svg><use href="#icon-folder"></use></svg> Proyectos</a>
                   <a><svg><use href="#icon-folder"></use></svg> Fotos</a>
@@ -210,23 +166,29 @@
             </div>
             <div class="floating-card floating-card-security">
               <svg><use href="#icon-shield"></use></svg>
-              <div><b>Cifrado local</b><small>AES-256-GCM</small></div>
+              <div><b>Cifrado + TOTP 2FA</b><small>AES-256-GCM</small></div>
             </div>
             <div class="floating-card floating-card-sync">
               <span class="sync-mark"></span>
               <div><b>Sincronizado</b><small>Hace unos segundos</small></div>
+            </div>
+            <div class="floating-card floating-card-mobile">
+              <svg><use href="#icon-mobile"></use></svg>
+              <div><b>Companion móvil</b><small>LAN · Puerto 14200</small></div>
             </div>
           </div>
         </div>
 
         <div class="container trust-row reveal">
           <div><svg><use href="#icon-telegram"></use></svg><span>Almacenamiento sobre Telegram</span></div>
-          <div><svg><use href="#icon-lock"></use></svg><span>Cifrado local opcional</span></div>
-          <div><svg><use href="#icon-code"></use></svg><span>Código abierto</span></div>
-          <div><svg><use href="#icon-download"></use></svg><span>Instalador para Windows</span></div>
+          <div><svg><use href="#icon-shield"></use></svg><span>Cifrado AES-256 + TOTP 2FA</span></div>
+          <div><svg><use href="#icon-multi"></use></svg><span>Multi-cuenta de Telegram</span></div>
+          <div><svg><use href="#icon-mobile"></use></svg><span>Companion móvil en LAN</span></div>
+          <div><svg><use href="#icon-code"></use></svg><span>Código abierto · Windows</span></div>
         </div>
       </section>
 
+      <!-- ── Producto ────────────────────────────────────────────────────── -->
       <section class="section product-section" id="product">
         <div class="container split-intro">
           <div class="section-heading reveal">
@@ -235,28 +197,30 @@
           </div>
           <div class="intro-copy reveal">
             <p>
-              SharkDrive usa la API oficial MTProto de Telegram. Tus carpetas se guardan como canales privados y tus
-              archivos como mensajes dentro de tu propia cuenta.
+              SharkDrive usa la API oficial MTProto de Telegram. Tus carpetas se guardan como canales privados
+              y tus archivos como mensajes dentro de tu propia cuenta, sin que nadie más tenga acceso.
             </p>
             <p>
-              La app añade la experiencia que esperas de un drive moderno: búsquedas, vistas, previsualizaciones,
-              organización y automatización, sin convertir cada tarea simple en un panel técnico.
+              La app añade la experiencia que esperas de un drive moderno — búsquedas, vistas, previsualizaciones,
+              cifrado enterprise, automatización, companion móvil y mucho más — sin cuotas ni servidores propios.
             </p>
           </div>
         </div>
 
         <div class="container metric-strip reveal">
-          <div><strong>2 GB</strong><span>por archivo según el límite estándar de Telegram</span></div>
-          <div><strong>AES-256</strong><span>cifrado local opcional antes de subir</span></div>
+          <div><strong>2 GB</strong><span>por archivo (límite estándar de Telegram)</span></div>
+          <div><strong>AES-256</strong><span>cifrado local con TOTP 2FA opcional</span></div>
           <div><strong>0</strong><span>suscripciones adicionales para usar SharkDrive</span></div>
+          <div><strong>4×</strong><span>uploads en paralelo para lotes grandes</span></div>
         </div>
       </section>
 
+      <!-- ── Capacidades ─────────────────────────────────────────────────── -->
       <section class="section capabilities-section" id="features">
         <div class="container">
           <div class="section-heading centered reveal">
-            <div class="eyebrow">Más capacidad, menos ruido</div>
-            <h2>Todo lo importante está cerca.<br /><span>Lo avanzado aparece cuando lo necesitas.</span></h2>
+            <div class="eyebrow">Todo lo que necesitas</div>
+            <h2>Completo por dentro.<br /><span>Simple por fuera.</span></h2>
           </div>
 
           <div class="capability-shell reveal">
@@ -277,14 +241,15 @@
             <div class="capability-content">
               <div class="capability-copy">
                 <div class="eyebrow" data-capability-kicker>Explorador de archivos</div>
-                <h3 data-capability-title>Encuentra lo que buscas sin perder tiempo.</h3>
+                <h3 data-capability-title>Navega, busca y revisa tu contenido.</h3>
                 <p data-capability-description>
-                  Navega carpetas anidadas, usa vistas grid o lista y localiza archivos por nombre, tipo, tamaño o fecha.
+                  Carpetas anidadas, vistas grid, lista y galería. Localiza cualquier archivo por nombre,
+                  tipo, tamaño, etiqueta o fecha — y hasta por su contenido de texto.
                 </p>
                 <ul class="check-list" data-capability-list>
-                  <li><svg><use href="#icon-check"></use></svg>Búsqueda global y filtros discretos</li>
-                  <li><svg><use href="#icon-check"></use></svg>Previsualización de imágenes, video, audio y PDF</li>
-                  <li><svg><use href="#icon-check"></use></svg>Selección múltiple para acciones en lote</li>
+                  <li><svg><use href="#icon-check"></use></svg>Búsqueda global, filtros discretos y búsqueda en contenido</li>
+                  <li><svg><use href="#icon-check"></use></svg>Previsualización de imágenes, video, audio, PDF y SVG</li>
+                  <li><svg><use href="#icon-check"></use></svg>Historial de versiones por archivo y detección de duplicados</li>
                 </ul>
               </div>
               <div class="capability-visual" aria-hidden="true">
@@ -296,7 +261,7 @@
                 </div>
                 <div class="visual-result">
                   <div class="visual-icon image"><svg><use href="#icon-image"></use></svg></div>
-                  <div><b data-visual-secondary>Diseño portada.jpg</b><small data-visual-secondary-sub>2.4 MB · Imagen</small></div>
+                  <div><b data-visual-secondary>Diseño portada.jpg</b><small data-visual-secondary-sub>2.4 MB · Imagen · v2</small></div>
                   <em data-visual-badge>Vista previa</em>
                 </div>
                 <div class="visual-footer"><span></span><span></span><span></span><b data-visual-footer>Todo organizado en un solo lugar</b></div>
@@ -306,6 +271,7 @@
         </div>
       </section>
 
+      <!-- ── Feature grid ──────────────────────────────────────────────────── -->
       <section class="section feature-grid-section">
         <div class="container">
           <div class="section-heading reveal">
@@ -316,36 +282,117 @@
             <article class="feature-card feature-card-large reveal">
               <div class="feature-icon"><svg><use href="#icon-upload"></use></svg></div>
               <h3>Sube sin fricción.</h3>
-              <p>Arrastra archivos desde Windows, pega imágenes desde el portapapeles o automatiza carpetas locales.</p>
+              <p>Arrastra archivos, pega del portapapeles (imágenes, texto o URLs), automatiza carpetas locales o importa desde Dropbox.</p>
               <div class="upload-demo">
-                <div><svg><use href="#icon-file"></use></svg><span><b>documentos.zip</b><small>Subiendo a Telegram</small></span><em>74%</em></div>
+                <div><svg><use href="#icon-file"></use></svg><span><b>documentos.zip</b><small>Subiendo a Telegram · 4 en paralelo</small></span><em>74%</em></div>
                 <i><span></span></i>
               </div>
             </article>
+
             <article class="feature-card reveal">
               <div class="feature-icon"><svg><use href="#icon-search"></use></svg></div>
               <h3>Busca de verdad.</h3>
-              <p>Filtra por tipo, extensión, tamaño, carpeta o estado de cifrado.</p>
+              <p>Filtra por tipo, extensión, tamaño, carpeta, etiqueta o contenido de texto dentro de los archivos.</p>
             </article>
+
             <article class="feature-card reveal">
               <div class="feature-icon"><svg><use href="#icon-image"></use></svg></div>
               <h3>Revisa antes de bajar.</h3>
-              <p>Abre previews de imágenes, video, audio y documentos sin interrumpir tu flujo.</p>
+              <p>Abre previews de imágenes, video, audio, PDF, SVG y texto sin salir de la app.</p>
             </article>
+
             <article class="feature-card reveal">
-              <div class="feature-icon"><svg><use href="#icon-folder"></use></svg></div>
+              <div class="feature-icon"><svg><use href="#icon-tag"></use></svg></div>
               <h3>Organiza a tu manera.</h3>
-              <p>Usa carpetas anidadas, colores, etiquetas, fijados y notas rápidas.</p>
+              <p>Carpetas anidadas, colores, etiquetas, fijados, notas rápidas y colecciones inteligentes.</p>
             </article>
+
             <article class="feature-card feature-card-accent reveal">
+              <div class="feature-icon"><svg><use href="#icon-mobile"></use></svg></div>
+              <h3>Companion móvil.</h3>
+              <p>Accede a tu drive desde el teléfono en la misma red. Escanea el QR en la app y navega, descarga o sube archivos desde el browser móvil.</p>
+            </article>
+
+            <article class="feature-card reveal">
+              <div class="feature-icon"><svg><use href="#icon-multi"></use></svg></div>
+              <h3>Múltiples cuentas.</h3>
+              <p>Cambia entre cuentas de Telegram al instante. Cada una con su propio índice, vault y configuración.</p>
+            </article>
+
+            <article class="feature-card reveal">
               <div class="feature-icon"><svg><use href="#icon-share"></use></svg></div>
               <h3>Comparte con control.</h3>
-              <p>Crea enlaces locales con vencimiento, límite de descargas y código QR desde tu propio equipo.</p>
+              <p>Links con expiración, límite de descargas, contraseña y QR. Panel centralizado de links activos.</p>
+            </article>
+
+            <article class="feature-card feature-card-large reveal">
+              <div class="feature-icon"><svg><use href="#icon-shield"></use></svg></div>
+              <h3>Seguridad enterprise.</h3>
+              <p>Cifrado AES-256-GCM local, 2FA TOTP (Google Authenticator), wipe remoto vía Telegram, verificación SHA-256 en cada descarga y audit log cifrado.</p>
+              <div class="security-badges">
+                <span>AES-256-GCM</span>
+                <span>TOTP 2FA</span>
+                <span>Remote Wipe</span>
+                <span>SHA-256</span>
+              </div>
             </article>
           </div>
         </div>
       </section>
 
+      <!-- ── Changelog ─────────────────────────────────────────────────── -->
+      <section class="section changelog-section" id="changelog">
+        <div class="container">
+          <div class="section-heading reveal">
+            <div class="eyebrow">Historial de versiones</div>
+            <h2>Construido de forma continua.<br /><span>Versión a versión.</span></h2>
+          </div>
+          <div class="changelog-grid reveal">
+            <article class="cl-card cl-card-new">
+              <div class="cl-badge">v3.7</div>
+              <h4>Export & Interoperabilidad</h4>
+              <p>Config export/import cifrada, Jump List en taskbar, clipboard inteligente (URL + texto), import desde Dropbox OAuth2, webhooks post-upload.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v3.6</div>
+              <h4>Seguridad Avanzada</h4>
+              <p>TOTP 2FA, wipe remoto vía Telegram, audit log AES cifrado, verificación SHA-256, compartir claves de carpeta cifradas entre usuarios.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v3.5</div>
+              <h4>Automatización Avanzada</h4>
+              <p>4 uploads en paralelo, auto-clasificación por tipo, WiFi-only sync, reglas de cleanup y webhook configurable.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v3.4</div>
+              <h4>Companion Móvil</h4>
+              <p>Servidor web en LAN (puerto 14200), acceso con QR y PIN de 6 dígitos, upload desde el navegador del móvil.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v3.3</div>
+              <h4>Multi-Cuenta</h4>
+              <p>Múltiples cuentas de Telegram, cambio instantáneo, stores aislados por cuenta, copia cruzada entre cuentas.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v3.2</div>
+              <h4>Historial & Versiones</h4>
+              <p>Historial de versiones por archivo, log de sync, detección de duplicados, exportación de actividad CSV/JSON.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v3.1</div>
+              <h4>Archivos & Contenido</h4>
+              <p>Preview de SVG/XML/HTML/YAML, notas rápidas, extracción ZIP, compresión de imágenes, búsqueda en contenido.</p>
+            </article>
+            <article class="cl-card">
+              <div class="cl-badge">v2–v3.0</div>
+              <h4>Base & Rendimiento</h4>
+              <p>Paginación Telegram, cache de thumbnails, modo claro, i18n EN/ES, compartir con QR, backup automático, integración Windows.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Cómo empezar ───────────────────────────────────────────────── -->
       <section class="section guide-section" id="guide">
         <div class="container">
           <div class="section-heading centered reveal">
@@ -358,31 +405,32 @@
               <span>01</span>
               <div class="step-icon"><svg><use href="#icon-download"></use></svg></div>
               <h3>Instala SharkDrive</h3>
-              <p>Descarga el instalador para Windows desde la última release publicada en GitHub.</p>
+              <p>Descarga el instalador para Windows desde la última release en GitHub. La app se auto-actualiza.</p>
             </article>
             <article class="step reveal">
               <span>02</span>
               <div class="step-icon"><svg><use href="#icon-telegram"></use></svg></div>
               <h3>Conecta Telegram</h3>
-              <p>Inicia sesión con tu cuenta y usa Saved Messages o canales privados como carpetas.</p>
+              <p>Inicia sesión con tu número. Tus carpetas son canales privados en tu cuenta, sin acceso de terceros.</p>
             </article>
             <article class="step reveal">
               <span>03</span>
               <div class="step-icon"><svg><use href="#icon-upload"></use></svg></div>
               <h3>Empieza a guardar</h3>
-              <p>Sube archivos, crea carpetas y activa cifrado o backups solo si los necesitas.</p>
+              <p>Sube archivos, crea carpetas y activa cifrado, backup o companion móvil solo cuando los necesites.</p>
             </article>
           </div>
           <div class="guide-note reveal">
             <svg><use href="#icon-lock"></use></svg>
             <div>
               <b>Tu clave de cifrado no se sube a Telegram.</b>
-              <p>Cuando activas cifrado, SharkDrive protege el archivo localmente antes de enviarlo.</p>
+              <p>Cuando activas cifrado, SharkDrive protege el archivo localmente antes de enviarlo. La clave queda solo en tu equipo.</p>
             </div>
           </div>
         </div>
       </section>
 
+      <!-- ── Descarga ───────────────────────────────────────────────────── -->
       <section class="section download-section" id="download">
         <div class="container download-shell reveal">
           <div>
@@ -390,8 +438,13 @@
             <h2>Descarga la app<br />y crea tu espacio.</h2>
             <p>
               El instalador se publica mediante GitHub Releases. Esta página detecta automáticamente la versión más
-              reciente disponible.
+              reciente. La actualización automática está integrada en la app.
             </p>
+            <div class="download-highlights">
+              <div><svg><use href="#icon-check"></use></svg><span>Multi-cuenta incluido</span></div>
+              <div><svg><use href="#icon-check"></use></svg><span>Companion móvil integrado</span></div>
+              <div><svg><use href="#icon-check"></use></svg><span>Actualizaciones automáticas</span></div>
+            </div>
           </div>
           <div class="download-card">
             <div class="download-card-head">
@@ -406,11 +459,13 @@
             <div class="download-links">
               <a href="https://github.com/XsharklinX/SharkDrive/releases" target="_blank" rel="noreferrer">Todas las releases</a>
               <a href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer">Código fuente</a>
+              <a href="https://github.com/XsharklinX/SharkDrive/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">CHANGELOG</a>
             </div>
           </div>
         </div>
       </section>
 
+      <!-- ── FAQ ───────────────────────────────────────────────────────── -->
       <section class="section faq-section" id="faq">
         <div class="container faq-grid">
           <div class="section-heading reveal">
@@ -420,38 +475,35 @@
           <div class="faq-list reveal">
             <details>
               <summary>¿Dónde se guardan mis archivos?<span>+</span></summary>
-              <p>
-                En tu propia cuenta de Telegram. SharkDrive usa Saved Messages y canales privados para ofrecer una
-                experiencia similar a un drive de escritorio.
-              </p>
+              <p>En tu propia cuenta de Telegram. SharkDrive usa Saved Messages y canales privados como carpetas. Nadie más tiene acceso — ni Telegram ni nosotros.</p>
             </details>
             <details>
               <summary>¿SharkDrive tiene un costo mensual?<span>+</span></summary>
-              <p>
-                No. SharkDrive es un proyecto open source. Aplican los límites normales de Telegram, incluido el tamaño
-                máximo permitido por archivo.
-              </p>
+              <p>No. SharkDrive es open source y gratuito. Solo aplican los límites de Telegram: hasta 2 GB por archivo con una cuenta estándar (Premium amplía esto a 4 GB).</p>
+            </details>
+            <details>
+              <summary>¿Puedo usar la app desde el móvil?<span>+</span></summary>
+              <p>Sí, mediante el companion móvil. Con la app de escritorio activa, escanea el QR (botón de teléfono en la barra superior) desde el browser de tu móvil en la misma red WiFi para navegar, descargar y subir archivos.</p>
+            </details>
+            <details>
+              <summary>¿Puedo tener varias cuentas de Telegram?<span>+</span></summary>
+              <p>Sí. El account switcher (dropdown en el sidebar) permite añadir y cambiar entre múltiples cuentas. Cada una tiene su propia sesión, índice de archivos y vault de cifrado completamente aislados.</p>
             </details>
             <details>
               <summary>¿Tengo que cifrar todos mis archivos?<span>+</span></summary>
-              <p>
-                No. El cifrado es opcional. Puedes activarlo para una carpeta o elegirlo cuando necesites proteger
-                contenido sensible.
-              </p>
+              <p>No. El cifrado es opcional. Puedes activarlo por carpeta o por archivo individual. El vault permanece bloqueado hasta que introduzcas tu contraseña, y puede protegerse además con TOTP 2FA.</p>
+            </details>
+            <details>
+              <summary>¿Qué pasa si pierdo mi dispositivo?<span>+</span></summary>
+              <p>Puedes activar el wipe remoto en Settings. Desde cualquier dispositivo, envía el mensaje secreto a tu Saved Messages de Telegram y SharkDrive borrará todos los datos locales la próxima vez que intente conectarse.</p>
             </details>
             <details>
               <summary>¿Puedo usarlo sin conocimientos técnicos?<span>+</span></summary>
-              <p>
-                Sí. La interfaz principal está pensada para subir, encontrar y descargar archivos sin exponer opciones
-                avanzadas hasta que las necesites.
-              </p>
+              <p>Sí. La interfaz está pensada para subir, organizar y descargar archivos sin exponer opciones avanzadas hasta que las necesites. El cifrado, backups y webhooks son opcionales.</p>
             </details>
             <details>
               <summary>¿Dónde puedo reportar un problema?<span>+</span></summary>
-              <p>
-                Puedes abrir un issue en el repositorio público de GitHub para describir el error o proponer una
-                mejora.
-              </p>
+              <p>Abre un issue en el repositorio público de GitHub. También puedes proponer mejoras o nuevas funcionalidades — el proyecto está en desarrollo activo.</p>
             </details>
           </div>
         </div>
@@ -460,12 +512,13 @@
 
     <footer class="site-footer">
       <div class="container footer-shell">
-        <a class="brand" href="#top"><img src="./logo.svg" alt="" width="38" height="38" /><span>Shark<span>Drive</span></span></a>
+        <a class="brand" href="#top"><img src="./logo.svg" alt="" width="36" height="36" /><span>Shark<span>Drive</span></span></a>
         <p>Tu nube privada sobre Telegram.</p>
         <div>
           <a href="https://github.com/XsharklinX/SharkDrive" target="_blank" rel="noreferrer">GitHub</a>
           <a href="https://github.com/XsharklinX/SharkDrive/issues" target="_blank" rel="noreferrer">Issues</a>
-          <span>© <span data-current-year></span></span>
+          <a href="https://github.com/XsharklinX/SharkDrive/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">Changelog</a>
+          <span>© <span data-current-year></span> SharkDrive</span>
         </div>
       </div>
     </footer>
