@@ -289,11 +289,15 @@ pub async fn cmd_delete_file(
     folder_id: Option<i64>,
     secure_delete: Option<bool>,
     state: State<'_, TelegramState>,
+    index_state: State<'_, PersistentIndexState>,
 ) -> Result<bool, String> {
     let client_opt = { state.client.lock().await.clone() };
-    let client = client_opt.ok_or("Telegram client not connected".to_string())?;
+    let client = client_opt.ok_or("Telegram client not connected — connect first")?;
 
-    let peer = resolve_peer(&client, folder_id, &state).await?;
+    let peer = resolve_peer(&client, folder_id, &state)
+        .await
+        .map_err(|e| format!("Could not locate the folder in Telegram: {e}"))?;
+
     if secure_delete.unwrap_or(false) {
         let caption = secure_delete_caption(chrono::Utc::now().timestamp_millis());
         client
@@ -305,10 +309,15 @@ pub async fn cmd_delete_file(
             .await
             .map_err(|e| format!("Secure delete caption update failed: {e}"))?;
     }
+
     client
         .delete_messages(&peer, &[message_id])
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Telegram delete failed: {e}"))?;
+
+    // Remove from the local persistent index so the cached view updates immediately
+    index_state.remove_file(folder_id, message_id as i64);
+
     Ok(true)
 }
 

@@ -565,7 +565,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         } catch (error) {
             toast.error(`Cleanup review failed: ${error}`);
         }
-    }, [confirm, queryClient]);
+    }, [confirm, queryClient, refreshFiles]);
 
     useEffect(() => {
         if (!store) return;
@@ -669,15 +669,20 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
         pruneStaleRecent(keys);
     }, [allIndexedRaw, pruneStaleRecent]);
 
+    // onDeleted: called after files are confirmed deleted — triggers paginated view refresh
+    const handleDeletedCallback = useCallback((ids: number[]) => {
+        // Remove from recent
+        ids.forEach(id => removeFromRecent(id));
+        // Trigger full refresh of paged data from Telegram (removes deleted files)
+        refreshFiles();
+    }, [refreshFiles, removeFromRecent]);
+
     const {
         handleDelete: _handleDeleteBase, handleBulkDelete, handleBulkMove, handleBulkCopy,
-    } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles);
+    } = useFileOperations(activeFolderId, selectedIds, setSelectedIds, displayedFiles, handleDeletedCallback);
 
-    // Wrapper: after delete also purge from recent-files list
-    const handleDelete = useCallback(async (file: TelegramFile) => {
-        await _handleDeleteBase(file);
-        removeFromRecent(file.id);
-    }, [_handleDeleteBase, removeFromRecent]);
+    // handleDelete — removeFromRecent + refreshFiles are handled by handleDeletedCallback
+    const handleDelete = _handleDeleteBase;
 
     const encryptByDefault = encryptionEnabled || (typeof activeFolderId === 'number' && activeFolderId > 0 && encryptedFolderIds.has(activeFolderId));
     const { uploadQueue, selectFilesOnly, handleManualUpload, handleFolderUpload, handleDroppedFiles, queueUploadCandidates, cancelAll: cancelUploads, cancelItem: cancelUploadItem, retryItem: retryUpload, clearFinished: clearUploads, forceUpload, skipDuplicate, duplicateItems, conflictItems, isDragging } = useFileUpload(activeFolderId, store, encryptByDefault, recordActivity, folderNameResolver, isConnected);

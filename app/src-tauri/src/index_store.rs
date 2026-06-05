@@ -116,6 +116,20 @@ impl PersistentIndexState {
             .unwrap_or_default()
     }
 
+    /// Remove a single file from the index by message_id (called after deletion from Telegram).
+    pub fn remove_file(&self, folder_id: Option<i64>, file_id: i64) {
+        let key = Self::folder_key(folder_id);
+        if let Ok(mut inner) = self.inner.write() {
+            if let Some(entry) = inner.files_by_folder.get_mut(&key) {
+                let before = entry.items.len();
+                entry.items.retain(|f| f.id != file_id);
+                if entry.items.len() != before {
+                    self.persist_locked(&inner);
+                }
+            }
+        }
+    }
+
     /// Insert or update a single file in the index (used by paginated fetch).
     pub fn upsert_file(&self, file: FileMetadata) {
         let key = Self::folder_key(file.folder_id);

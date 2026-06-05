@@ -9,51 +9,76 @@ export function useFileOperations(
     activeFolderId: number | null,
     selectedIds: number[],
     setSelectedIds: (ids: number[]) => void,
-    displayedFiles: TelegramFile[]
+    displayedFiles: TelegramFile[],
+    onDeleted?: (deletedIds: number[]) => void,
 ) {
     const queryClient = useQueryClient();
     const { confirm } = useConfirm();
     const secureDelete = localStorage.getItem('sharkdrive.secureDelete.v1') === 'true';
 
+    const invalidateFileQueries = (folderId: number | null) => {
+        // Invalidate both the old key AND the paginated cache keys
+        queryClient.invalidateQueries({ queryKey: ['files'] });
+        queryClient.invalidateQueries({ queryKey: ['cached-files', folderId] });
+        queryClient.invalidateQueries({ queryKey: ['cached-files'] });
+        queryClient.invalidateQueries({ queryKey: ['all-indexed-files'] });
+    };
+
     const handleDelete = async (file: TelegramFile) => {
+        const folderId = resolveFileFolderId(file, activeFolderId);
         const sizeLabel = file.size ? ` (${formatBytes(file.size)})` : '';
-        if (!await confirm({ title: "Delete File", message: `Delete "${file.name}"${sizeLabel}?\n\nThis cannot be undone.`, confirmText: "Delete", variant: 'danger' })) return;
+        if (!await confirm({
+            title: "Eliminar archivo",
+            message: `¿Eliminar "${file.name}"${sizeLabel}?\n\nEsto lo borrará de Telegram de forma permanente.`,
+            confirmText: "Eliminar",
+            variant: 'danger',
+        })) return;
         try {
-            await tauriApi.deleteFile(file.id, resolveFileFolderId(file, activeFolderId), secureDelete);
-            queryClient.invalidateQueries({ queryKey: ['files'] });
-            toast.success("File deleted");
+            await tauriApi.deleteFile(file.id, folderId, secureDelete);
+            invalidateFileQueries(folderId);
+            onDeleted?.([file.id]);
+            toast.success(`"${file.name}" eliminado`);
         } catch (e) {
-            toast.error(`Delete failed: ${e}`);
+            toast.error(`Error al eliminar: ${e}`);
         }
-    }
+    };
 
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
         const selectedFiles = displayedFiles.filter((f) => selectedIds.includes(f.id));
         const totalBytes = selectedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
         const sizeLabel = totalBytes > 0 ? ` · ${formatBytes(totalBytes)}` : '';
-        if (!await confirm({ title: "Delete Files", message: `Delete ${selectedIds.length} file${selectedIds.length !== 1 ? 's' : ''}${sizeLabel}?\n\nThis cannot be undone.`, confirmText: "Delete All", variant: 'danger' })) return;
+        if (!await confirm({
+            title: "Eliminar archivos",
+            message: `¿Eliminar ${selectedIds.length} archivo${selectedIds.length !== 1 ? 's' : ''}${sizeLabel}?\n\nEsto los borrará de Telegram de forma permanente.`,
+            confirmText: `Eliminar ${selectedIds.length}`,
+            variant: 'danger',
+        })) return;
 
         let success = 0;
         const failedNames: string[] = [];
+        const deletedIds: number[] = [];
         for (const id of selectedIds) {
             const file = displayedFiles.find((candidate) => candidate.id === id);
+            const folderId = file ? resolveFileFolderId(file, activeFolderId) : activeFolderId;
             try {
-                await tauriApi.deleteFile(id, file ? resolveFileFolderId(file, activeFolderId) : activeFolderId, secureDelete);
+                await tauriApi.deleteFile(id, folderId, secureDelete);
                 success++;
-            } catch {
+                deletedIds.push(id);
+            } catch (e) {
                 failedNames.push(file?.name ?? `#${id}`);
             }
         }
         setSelectedIds([]);
-        queryClient.invalidateQueries({ queryKey: ['files'] });
-        if (success > 0) toast.success(`Deleted ${success} file${success !== 1 ? 's' : ''}.`);
+        invalidateFileQueries(activeFolderId);
+        if (deletedIds.length > 0) onDeleted?.(deletedIds);
+        if (success > 0) toast.success(`${success} archivo${success !== 1 ? 's' : ''} eliminado${success !== 1 ? 's' : ''} de Telegram.`);
         if (failedNames.length > 0) {
             const preview = failedNames.slice(0, 3).join(', ');
-            const extra = failedNames.length > 3 ? ` and ${failedNames.length - 3} more` : '';
-            toast.error(`Failed to delete: ${preview}${extra}`);
+            const extra = failedNames.length > 3 ? ` y ${failedNames.length - 3} más` : '';
+            toast.error(`Error al eliminar: ${preview}${extra}`);
         }
-    }
+    };
 
     const handleBulkMove = async (targetFolderId: number | null, onSuccess?: () => void) => {
         if (selectedIds.length === 0) return;
