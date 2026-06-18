@@ -13,6 +13,7 @@ import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { LanguageProvider } from "./context/LanguageContext";
 import { DropZoneProvider } from "./contexts/DropZoneContext";
 import { CompactModeProvider } from "./context/CompactModeContext";
+import { SoundProvider } from "./context/SoundContext";
 import { Store } from "@tauri-apps/plugin-store";
 import { invoke } from "@tauri-apps/api/core";
 import { tauriApi } from "./api/tauri";
@@ -155,13 +156,15 @@ function App() {
       <LanguageProvider>
         <ThemeProvider>
           <CompactModeProvider>
-            <QueryClientProvider client={queryClient}>
-              <ConfirmProvider>
-                <DropZoneProvider>
-                  <AppContent />
-                </DropZoneProvider>
-              </ConfirmProvider>
-            </QueryClientProvider>
+            <SoundProvider>
+              <QueryClientProvider client={queryClient}>
+                <ConfirmProvider>
+                  <DropZoneProvider>
+                    <AppContent />
+                  </DropZoneProvider>
+                </ConfirmProvider>
+              </QueryClientProvider>
+            </SoundProvider>
           </CompactModeProvider>
         </ThemeProvider>
       </LanguageProvider>

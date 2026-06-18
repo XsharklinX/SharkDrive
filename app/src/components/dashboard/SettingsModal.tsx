@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useLanguage, type Lang } from '../../context/LanguageContext';
 import { useCompactMode } from '../../context/CompactModeContext';
+import { useSound } from '../../context/SoundContext';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -72,6 +73,7 @@ export function SettingsModal({
     const [tab, setTab] = useState<Tab>('general');
     const { lang, t } = useLanguage();
     const { isCompact, toggleCompact } = useCompactMode();
+    const { soundEnabled, volume, setSoundEnabled, setVolume, play } = useSound();
     const [accentColor, setAccentColor] = useState(() => {
         return localStorage.getItem('sharkdrive.accentColor.v1') || '#2f9bff';
     });
@@ -593,18 +595,40 @@ export function SettingsModal({
                             </button>
                         ))}
 
-                        {/* Compact mode quick toggle — always visible */}
-                        <div className="mt-2 flex items-center justify-between rounded-xl border border-telegram-border px-4 py-2.5">
-                            <span className="text-sm text-telegram-subtext">{t('compactMode')}</span>
-                            <button
-                                onClick={toggleCompact}
-                                role="switch"
-                                aria-checked={isCompact}
-                                aria-label={t('compactMode')}
-                                className={`relative h-6 w-11 rounded-full transition-colors ${isCompact ? 'bg-telegram-primary' : 'bg-white/[0.1]'}`}
-                            >
-                                <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isCompact ? 'translate-x-5' : ''}`} />
-                            </button>
+                        {/* Quick toggles — always visible */}
+                        <div className="mt-2 space-y-2">
+                            {/* Compact mode */}
+                            <div className="flex items-center justify-between rounded-xl border border-telegram-border px-4 py-2.5">
+                                <span className="text-sm text-telegram-subtext">{t('compactMode')}</span>
+                                <button onClick={toggleCompact} role="switch" aria-checked={isCompact} aria-label={t('compactMode')}
+                                    className={`relative h-6 w-11 rounded-full transition-colors ${isCompact ? 'bg-telegram-primary' : 'bg-white/[0.1]'}`}>
+                                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${isCompact ? 'translate-x-5' : ''}`} />
+                                </button>
+                            </div>
+
+                            {/* Sound toggle + volume */}
+                            <div className="rounded-xl border border-telegram-border px-4 py-2.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-telegram-subtext">{t('soundEffects')}</span>
+                                    <button onClick={() => setSoundEnabled(!soundEnabled)} role="switch" aria-checked={soundEnabled} aria-label={t('soundEffects')}
+                                        className={`relative h-6 w-11 rounded-full transition-colors ${soundEnabled ? 'bg-telegram-primary' : 'bg-white/[0.1]'}`}>
+                                        <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${soundEnabled ? 'translate-x-5' : ''}`} />
+                                    </button>
+                                </div>
+                                {soundEnabled && (
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[10px] text-telegram-subtext/70">🔈</span>
+                                        <input
+                                            type="range" min={0} max={1} step={0.05} value={volume}
+                                            onChange={e => setVolume(parseFloat(e.target.value))}
+                                            onMouseUp={() => play('notification')}
+                                            className="flex-1 h-1.5 rounded-full appearance-none bg-white/[0.1] accent-telegram-primary cursor-pointer"
+                                            aria-label={t('volume')}
+                                        />
+                                        <span className="text-[10px] text-telegram-subtext/70">🔊</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </aside>

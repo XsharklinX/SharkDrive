@@ -24,6 +24,7 @@ async function showNativeNotification(title: string, body: string) {
 import type { Store } from '@tauri-apps/plugin-store';
 import { applyUploadNamingPattern, buildQueuedUploadKey, formatError, UPLOAD_NAMING_PATTERN_KEY, CLASSIFICATION_RULES_KEY, matchesClassificationRule } from '../utils';
 import { ClassificationRule } from '../types';
+import { useSound } from '../context/SoundContext';
 
 const WEBHOOK_URL_KEY = 'sharkdrive.webhookUrl.v1';
 const WEBHOOK_ENABLED_KEY = 'sharkdrive.webhookEnabled.v1';
@@ -74,6 +75,7 @@ export function useFileUpload(
     isConnected = true,
 ) {
     const queryClient = useQueryClient();
+    const { play } = useSound();
     const [uploadQueue, setUploadQueue] = useState<QueueItem[]>([]);
     const [initialized, setInitialized] = useState(false);
     const cancelledRef = useRef<Set<string>>(new Set());
@@ -84,13 +86,23 @@ export function useFileUpload(
     // Concurrency: 1 for small batches, up to 4 for large batches
     const getTargetConcurrency = (pendingCount: number) => pendingCount >= 4 ? 4 : 1;
 
-    // Listen for progress events from Rust
+    // Listen for progress events from Rust — also show inline progress toast for large files
     useEffect(() => {
         let unlisten: UnlistenFn | undefined;
         listen<ProgressPayload>('upload-progress', (event) => {
-            setUploadQueue(q => q.map(i =>
-                i.id === event.payload.id ? { ...i, progress: event.payload.percent } : i
-            ));
+            const { id, percent } = event.payload;
+            setUploadQueue(q => {
+                const item = q.find(i => i.id === id);
+                if (item && item.size && item.size > 10 * 1024 * 1024) {
+                    // Show/update inline progress toast for files >10 MB
+                    const name = item.remoteName || item.path.split(/[/\\]/).pop() || 'file';
+                    toast.loading(`${name} · ${percent}%`, { id: `upload-${id}`, duration: Infinity });
+                    if (percent >= 100) {
+                        toast.dismiss(`upload-${id}`);
+                    }
+                }
+                return q.map(i => i.id === id ? { ...i, progress: percent } : i);
+            });
         }).then(fn => { unlisten = fn; });
         return () => { unlisten?.(); };
     }, []);
@@ -223,6 +235,7 @@ export function useFileUpload(
                     } else {
                         setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'success', progress: 100 } : i));
                         queryClient.invalidateQueries({ queryKey: ['files', item.folderId] });
+                        play('success');
                         void showNativeNotification('Upload complete', fileName ?? '');
                         onActivity?.(buildActivity('upload', `Uploaded ${fileName}`, fileName, item.folderId));
                         fireWebhook({ path: item.path, remoteName: item.remoteName, folderId: item.folderId, size: item.size });
@@ -263,6 +276,7 @@ export function useFileUpload(
 
         if (!cancelledRef.current.has(item.id)) {
             setUploadQueue(q => q.map(i => i.id === item.id ? { ...i, status: 'error', error: lastError } : i));
+            play('error');
             toast.error(`${item.path.split(/[/\\]/).pop()}: ${lastError}`);
             onActivity?.(buildActivity('upload', `Upload failed for ${item.path.split(/[/\\]/).pop()}: ${lastError}`, item.path.split(/[/\\]/).pop(), item.folderId));
         } else {

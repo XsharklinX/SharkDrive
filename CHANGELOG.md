@@ -4,6 +4,52 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [4.0.0] - 2026-06-18
+
+### Diseño Sonoro + Micro-interacciones
+
+**Sistema de sonidos Web Audio API** — 5 sonidos sintetizados programáticamente, sin archivos externos:
+- `success`: Chime ascendente C5→E5 (upload completado)
+- `delete`: Tono descendente suave G4→D4 (eliminación confirmada)
+- `error`: Dos buzzes cortos A3→G3 (operación fallida)
+- `notification`: Ping brillante A5 (notificaciones generales)
+- `click`: Tap ultracorto de triángulo 1200Hz (interacciones menores)
+
+Integrado en: upload success/error (useFileUpload), delete success/error (useFileOperations), bulk delete.
+
+**Toggle y control de volumen** — En el sidebar izquierdo de Settings (siempre visible, junto al toggle de compact mode):
+- Switch ON/OFF para activar/desactivar todos los sonidos
+- Slider de volumen (0→1, paso 0.05)
+- Al soltar el slider reproduce un `notification` para previsualizar el volumen
+- Persiste en `localStorage` (`soundEnabled.v1`, `soundVolume.v1`)
+
+**SoundProvider + useSound** — Context provider con `play(type)` que maneja `AudioContext` lazy (se inicializa al primer gesto del usuario, como requiere Chrome). Auto-cleanup en unmount.
+
+**Entrada/salida animada en FileCard** — `initial={{ opacity: 0, scale: 0.96 }}`, `animate={{ opacity: 1, scale: 1 }}`, `exit={{ opacity: 0, x: -16, scale: 0.95, duration: 0.2 }}`. Los archivos aparecen con un fade+scale suave y al eliminarse salen con slide izquierdo + fade.
+
+**Hover mejorado en FileCard** — `whileHover={{ y: -2, scale: 1.01 }}` (era `y: -1` sin scale). Los cards se elevan más perceptiblemente al pasar el cursor.
+
+**Micro-animations en botones (CSS global)** — Añadido a `App.css`:
+- `.bg-telegram-primary:hover` → `scale(1.02)` + `box-shadow 0 4px 12px rgba(47,155,255,.25)`
+- `.bg-telegram-primary:active` → `scale(0.97)` (press feedback)
+- Botones icono con borde → `scale(1.04)` en hover, `scale(0.96)` en active
+- Transiciones de 120ms para sensación de snappiness
+
+**Toast con progreso inline** — Para archivos >10 MB, se muestra un toast persistente `toast.loading(name · percent%)` que se actualiza en cada evento de progreso del backend. Se auto-cierra al llegar a 100%. Archivos pequeños siguen usando el toast estándar de success.
+
+### Cambios técnicos
+- `context/SoundContext.tsx` — SoundProvider, useSound, Web Audio API synth para 5 tipos
+- `App.tsx` — `<SoundProvider>` wrapping
+- `hooks/useFileUpload.ts` — import useSound, play('success'/'error'), progress toast >10MB
+- `hooks/useFileOperations.ts` — import useSound, play('delete'/'error') en handleDelete/handleBulkDelete
+- `components/dashboard/FileCard.tsx` — initial/animate/exit props, whileHover mejorado
+- `components/dashboard/SettingsModal.tsx` — import useSound, toggle+slider en sidebar
+- `App.css` — micro-animations CSS para botones primarios e icono
+- `LanguageContext.tsx` — 2 nuevas claves EN+ES (soundEffects, volume)
+- VERSION → 4.0.0
+
+---
+
 ## [3.9.0] - 2026-06-04
 
 ### UX & Accesibilidad

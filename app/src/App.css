@@ -356,6 +356,33 @@ body {
   margin-bottom: 0.75rem !important;
 }
 
+/* ── Micro-interactions ────────────────────────────────────────────────── */
+
+/* Primary buttons: subtle lift on hover, press feedback */
+.bg-telegram-primary {
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+.bg-telegram-primary:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(47, 155, 255, 0.25);
+}
+.bg-telegram-primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Icon buttons: soft scale on hover */
+button[class*="rounded-lg"][class*="border-telegram-border"]:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+button[class*="rounded-lg"][class*="border-telegram-border"]:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Smooth layout transitions for file grid items */
+[data-file-card] {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
 /* ── Accessibility ─────────────────────────────────────────────────────── */
 
 /* Skip-to-main link — visible only on focus */

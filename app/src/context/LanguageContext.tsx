@@ -150,6 +150,9 @@ const translations = {
         copy: 'Copy',
         bulkDownload: 'Download',
         bulkDelete: 'Delete',
+        // v4.0 — Diseño Sonoro
+        soundEffects: 'Sound effects',
+        volume: 'Volume',
         // v3.9 — UX & Accesibilidad
         compactMode: 'Compact mode',
         compactModeDesc: 'Reduce spacing for a denser layout.',
@@ -346,6 +349,9 @@ const translations = {
         copy: 'Copiar',
         bulkDownload: 'Descargar',
         bulkDelete: 'Eliminar',
+        // v4.0
+        soundEffects: 'Efectos de sonido',
+        volume: 'Volumen',
         // v3.9
         compactMode: 'Modo compacto',
         compactModeDesc: 'Reducir el espaciado para un diseño más denso.',

@@ -178,6 +178,10 @@ export function FileCard({
         >
             <motion.div
                 layout
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, x: -16, scale: 0.95, transition: { duration: 0.2 } }}
+                transition={{ duration: 0.15 }}
                 draggable={!isFolder}
                 data-file-card
                 tabIndex={0}
@@ -200,7 +204,7 @@ export function FileCard({
                 onDragEnd={() => {
                     if (onDragEnd) onDragEnd();
                 }}
-                whileHover={{ y: -1 }}
+                whileHover={{ y: -2, scale: 1.01 }}
                 className={`group relative cursor-pointer overflow-hidden rounded-lg border bg-telegram-bg transition-all
                 ${isSelected ? 'border-telegram-primary/55 ring-1 ring-telegram-primary/25' : 'border-telegram-border/85 hover:border-telegram-primary/25'}
                 ${isDragOver ? 'border-telegram-primary/60 ring-2 ring-telegram-primary/40' : ''}

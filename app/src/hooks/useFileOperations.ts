@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useConfirm } from '../context/ConfirmContext';
+import { useSound } from '../context/SoundContext';
 import { TelegramFile } from '../types';
 import { tauriApi } from '../api/tauri';
 import { formatBytes, resolveFileFolderId } from '../utils';
@@ -14,6 +15,7 @@ export function useFileOperations(
 ) {
     const queryClient = useQueryClient();
     const { confirm } = useConfirm();
+    const { play } = useSound();
     const secureDelete = localStorage.getItem('sharkdrive.secureDelete.v1') === 'true';
 
     const invalidateFileQueries = (folderId: number | null) => {
@@ -37,8 +39,10 @@ export function useFileOperations(
             await tauriApi.deleteFile(file.id, folderId, secureDelete);
             invalidateFileQueries(folderId);
             onDeleted?.([file.id]);
+            play('delete');
             toast.success(`"${file.name}" eliminado`);
         } catch (e) {
+            play('error');
             toast.error(`Error al eliminar: ${e}`);
         }
     };
@@ -71,9 +75,9 @@ export function useFileOperations(
         }
         setSelectedIds([]);
         invalidateFileQueries(activeFolderId);
-        if (deletedIds.length > 0) onDeleted?.(deletedIds);
+        if (deletedIds.length > 0) { onDeleted?.(deletedIds); play('delete'); }
         if (success > 0) toast.success(`${success} archivo${success !== 1 ? 's' : ''} eliminado${success !== 1 ? 's' : ''} de Telegram.`);
-        if (failedNames.length > 0) {
+        if (failedNames.length > 0) { play('error');
             const preview = failedNames.slice(0, 3).join(', ');
             const extra = failedNames.length > 3 ? ` y ${failedNames.length - 3} más` : '';
             toast.error(`Error al eliminar: ${preview}${extra}`);
