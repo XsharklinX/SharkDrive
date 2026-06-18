@@ -10,6 +10,18 @@
   --color-telegram-subtext: #8aa0b4;
   --color-telegram-border: rgba(120, 152, 180, 0.16);
   --color-telegram-hover: rgba(120, 152, 180, 0.08);
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
+  --color-danger-dim: #f87171;
+  --color-danger-muted: #fca5a5;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --shadow-elevation-1: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-elevation-2: 0 8px 28px rgba(0, 0, 0, 0.22);
+  --shadow-elevation-3: 0 24px 64px rgba(0, 0, 0, 0.32);
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
 }
 
 :root.light {
@@ -21,6 +33,13 @@
   --color-telegram-subtext: #60788e;
   --color-telegram-border: rgba(21, 35, 48, 0.12);
   --color-telegram-hover: rgba(10, 119, 213, 0.06);
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-danger-dim: #ef4444;
+  --color-danger-muted: #991b1b;
+  --shadow-elevation-1: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-elevation-2: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --shadow-elevation-3: 0 24px 48px rgba(0, 0, 0, 0.14);
 }
 
 body,
@@ -355,6 +374,43 @@ body {
 :root.compact [data-compact-section] {
   margin-bottom: 0.75rem !important;
 }
+
+/* ── Elevation system (3 levels) ───────────────────────────────────────── */
+
+.elevation-1 { box-shadow: var(--shadow-elevation-1); }
+.elevation-2 { box-shadow: var(--shadow-elevation-2); }
+.elevation-3 { box-shadow: var(--shadow-elevation-3); }
+
+/* Modals: level 3 (highest) */
+.fixed[class*="z-50"], .fixed[class*="z-[100]"], .fixed[class*="z-[200]"] {
+  --tw-shadow: var(--shadow-elevation-3);
+}
+
+/* Floating cards, dropdowns: level 2 */
+.shadow-2xl {
+  box-shadow: var(--shadow-elevation-2) !important;
+}
+
+/* Cards, panels: level 1 */
+.shadow-lg {
+  box-shadow: var(--shadow-elevation-1) !important;
+}
+
+/* ── Standardized danger patterns ────────────────────────────────────── */
+
+.sd-danger-banner {
+  border: 1px solid color-mix(in srgb, var(--color-danger) 20%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
+  color: var(--color-danger-muted);
+}
+
+.sd-danger-button {
+  background: var(--color-danger);
+  color: white;
+  transition: background var(--transition-fast);
+}
+.sd-danger-button:hover { background: var(--color-danger-hover); }
+.sd-danger-button:disabled { opacity: 0.5; }
 
 /* ── Micro-interactions ────────────────────────────────────────────────── */
 

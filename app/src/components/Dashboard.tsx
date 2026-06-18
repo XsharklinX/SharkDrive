@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
-import { AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react'; // Suspense used by PreviewModal/FileInfoPanel lazy
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listen } from '@tauri-apps/api/event';
 import { save, open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -9,49 +8,23 @@ import { TelegramFile } from '../types';
 import { formatBytes, resolveFileFolderId, isTextPreviewFile, isSvgFile, isImageFile } from '../utils';
 import { tauriApi } from '../api/tauri';
 
-// Components — always needed (static imports)
+// Components
 import { Sidebar, RECENT_FOLDER_ID } from './dashboard/Sidebar';
 import { TopBar } from './dashboard/TopBar';
-import { RenameModal } from './dashboard/RenameModal';
-
-// Components — lazy-loaded (only when first opened, dramatically reduces startup bundle)
-const SettingsModal = lazy(() => import('./dashboard/SettingsModal').then(m => ({ default: m.SettingsModal })));
-const ShareModal = lazy(() => import('./dashboard/ShareModal').then(m => ({ default: m.ShareModal })));
-import { useAutoSync } from '../hooks/useAutoSync';
-// Static — always visible or lightweight
 import { FileExplorer } from './dashboard/FileExplorer';
 import { UploadQueue } from './dashboard/UploadQueue';
 import { DownloadQueue } from './dashboard/DownloadQueue';
-import { DragDropOverlay } from './dashboard/DragDropOverlay';
 import { ExternalDropBlocker } from './dashboard/ExternalDropBlocker';
-import { DuplicateDialog } from './dashboard/DuplicateDialog';
-import { BackupConflictDialog } from './dashboard/BackupConflictDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { VaultLockScreen } from './dashboard/VaultLockScreen';
-import { WipeConfirmModal } from './dashboard/WipeConfirmModal';
-// Lazy — loaded on first user interaction
-const MoveToFolderModal = lazy(() => import('./dashboard/MoveToFolderModal').then(m => ({ default: m.MoveToFolderModal })));
-const PreviewModal       = lazy(() => import('./dashboard/PreviewModal').then(m => ({ default: m.PreviewModal })));
-const MediaPlayer        = lazy(() => import('./dashboard/MediaPlayer').then(m => ({ default: m.MediaPlayer })));
-const PdfViewer          = lazy(() => import('./dashboard/PdfViewer').then(m => ({ default: m.PdfViewer })));
-const VaultModal         = lazy(() => import('./dashboard/VaultModal').then(m => ({ default: m.VaultModal })));
-const ShareLinksDashboard= lazy(() => import('./dashboard/ShareLinksDashboard').then(m => ({ default: m.ShareLinksDashboard })));
-const BatchRenameModal   = lazy(() => import('./dashboard/BatchRenameModal').then(m => ({ default: m.BatchRenameModal })));
-const TextPreviewModal   = lazy(() => import('./dashboard/TextPreviewModal').then(m => ({ default: m.TextPreviewModal })));
-const FileInfoPanel      = lazy(() => import('./dashboard/FileInfoPanel').then(m => ({ default: m.FileInfoPanel })));
-const KeyboardShortcutsOverlay = lazy(() => import('./dashboard/KeyboardShortcutsOverlay').then(m => ({ default: m.KeyboardShortcutsOverlay })));
-const ImageCompressDialog= lazy(() => import('./dashboard/ImageCompressDialog').then(m => ({ default: m.ImageCompressDialog })));
-const OnboardingWizard   = lazy(() => import('./dashboard/OnboardingWizard').then(m => ({ default: m.OnboardingWizard })));
-const FolderStatsModal   = lazy(() => import('./dashboard/FolderStatsModal').then(m => ({ default: m.FolderStatsModal })));
-const VersionHistoryModal= lazy(() => import('./dashboard/VersionHistoryModal').then(m => ({ default: m.VersionHistoryModal })));
-const SyncHistoryPanel   = lazy(() => import('./dashboard/SyncHistoryPanel').then(m => ({ default: m.SyncHistoryPanel })));
-const DuplicatesPanel    = lazy(() => import('./dashboard/DuplicatesPanel').then(m => ({ default: m.DuplicatesPanel })));
-const CrossAccountCopyModal = lazy(() => import('./dashboard/CrossAccountCopyModal').then(m => ({ default: m.CrossAccountCopyModal })));
-const WebAccessModal     = lazy(() => import('./dashboard/WebAccessModal').then(m => ({ default: m.WebAccessModal })));
-const TotpSetupModal     = lazy(() => import('./dashboard/TotpSetupModal').then(m => ({ default: m.TotpSetupModal })));
-const ExportKeyModal     = lazy(() => import('./dashboard/ExportKeyModal').then(m => ({ default: m.ExportKeyModal })));
-const ConfigExportModal  = lazy(() => import('./dashboard/ConfigExportModal').then(m => ({ default: m.ConfigExportModal })));
-const CloudImportWizard  = lazy(() => import('./dashboard/CloudImportWizard').then(m => ({ default: m.CloudImportWizard })));
+import { DuplicateDialog } from './dashboard/DuplicateDialog';
+import { BackupConflictDialog } from './dashboard/BackupConflictDialog';
+import { DashboardModals } from './DashboardModals';
+
+import { useAutoSync } from '../hooks/useAutoSync';
+const FileInfoPanel = lazy(() => import('./dashboard/FileInfoPanel').then(m => ({ default: m.FileInfoPanel })));
+const PreviewModal = lazy(() => import('./dashboard/PreviewModal').then(m => ({ default: m.PreviewModal })));
+const FolderStatsModal = lazy(() => import('./dashboard/FolderStatsModal').then(m => ({ default: m.FolderStatsModal })));
 
 // Hooks
 import { useTelegramConnection } from '../hooks/useTelegramConnection';
@@ -1316,283 +1289,52 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
 
         <ExternalDropBlocker onUploadClick={handleManualUpload} />
 
-            {/* Suspense wraps AnimatePresence so lazy chunks load transparently.
-                Chunks are preloaded on idle (see useEffect below) so suspension is rare. */}
-            <Suspense fallback={null}>
-            <AnimatePresence>
-                {showSettings && (
-                    <SettingsModal
-                        key="settings-modal"
-                        onClose={() => setShowSettings(false)}
-                        autoSyncInterval={autoSyncInterval}
-                        onAutoSyncChange={setAutoSyncInterval}
-                        encryptionEnabled={encryptionEnabled}
-                        onEncryptionToggle={(enabled) => {
-                            setEncryptionEnabled(enabled);
-                            if (store) store.set('encryptionEnabled', enabled).then(() => store.save());
-                        }}
-                        folders={folders}
-                        files={allIndexedRaw.filter((file) => file.icon_type !== 'folder')}
-                        activity={activity}
-                        shortcuts={organization.shortcuts}
-                        onShortcutsChange={organization.setShortcuts}
-                        onExportActivity={handleExportActivity}
-                    />
-                )}
-                {showLinksDashboard && (
-                    <ShareLinksDashboard
-                        key="links-dashboard"
-                        onClose={() => setShowLinksDashboard(false)}
-                    />
-                )}
-                {showWebAccess && (
-                    <WebAccessModal
-                        key="web-access-modal"
-                        onClose={() => setShowWebAccess(false)}
-                    />
-                )}
-
-                {showWipeConfirm && (
-                    <WipeConfirmModal
-                        key="wipe-confirm-modal"
-                        onCancel={() => setShowWipeConfirm(false)}
-                        onConfirm={async () => { await tauriApi.executeWipe(); }}
-                    />
-                )}
-
-                {showTotpSetup && (
-                    <TotpSetupModal
-                        key="totp-setup-modal"
-                        onClose={() => setShowTotpSetup(false)}
-                        onEnabled={() => setShowTotpSetup(false)}
-                    />
-                )}
-
-                {exportKeyTarget && (
-                    <ExportKeyModal
-                        key="export-key-modal"
-                        folderId={exportKeyTarget.id}
-                        folderName={exportKeyTarget.name}
-                        onClose={() => setExportKeyTarget(null)}
-                    />
-                )}
-
-                {showConfigModal && (
-                    <ConfigExportModal
-                        key="config-modal"
-                        shortcuts={organization.shortcuts}
-                        onImport={(cfg) => {
-                            // Apply imported settings to localStorage
-                            if (cfg.classificationRules) localStorage.setItem('sharkdrive.classificationRules.v1', JSON.stringify(cfg.classificationRules));
-                            if (cfg.uploadNamingPattern !== undefined) localStorage.setItem('sharkdrive.uploadNamingPattern.v1', String(cfg.uploadNamingPattern));
-                            if (cfg.wifiOnlySync !== undefined) localStorage.setItem('sharkdrive.wifiOnlySync.v1', String(cfg.wifiOnlySync));
-                            if (cfg.webhookUrl !== undefined) localStorage.setItem('sharkdrive.webhookUrl.v1', String(cfg.webhookUrl));
-                            if (cfg.webhookEnabled !== undefined) localStorage.setItem('sharkdrive.webhookEnabled.v1', String(cfg.webhookEnabled));
-                            if (cfg.shortcuts && typeof cfg.shortcuts === 'object') organization.setShortcuts(cfg.shortcuts as Record<string, string>);
-                        }}
-                        onClose={() => setShowConfigModal(false)}
-                    />
-                )}
-
-                {showCloudImport && (
-                    <CloudImportWizard
-                        key="cloud-import"
-                        onClose={() => setShowCloudImport(false)}
-                        onFilesReady={(paths) => {
-                            queueUploadCandidatesRef.current(paths.map(path => ({ path })));
-                        }}
-                    />
-                )}
-
-                {showSyncHistory && (
-                    <SyncHistoryPanel
-                        key="sync-history-panel"
-                        onClose={() => setShowSyncHistory(false)}
-                    />
-                )}
-                {showDuplicates && (
-                    <DuplicatesPanel
-                        key="duplicates-panel"
-                        folders={folders.map(f => ({ id: f.id, name: f.name }))}
-                        onClose={() => setShowDuplicates(false)}
-                        onDeleted={refreshFiles}
-                    />
-                )}
-                {crossCopyFiles && (
-                    <CrossAccountCopyModal
-                        key="cross-copy-modal"
-                        files={crossCopyFiles}
-                        activeFolderId={activeFolderId}
-                        accounts={accounts}
-                        activeAccountId={activeAccountId}
-                        onClose={() => setCrossCopyFiles(null)}
-                        onSwitchAndUpload={handleCrossCopyAndSwitch}
-                    />
-                )}
-
-                {versionHistoryFile && (
-                    <VersionHistoryModal
-                        key="version-history-modal"
-                        filename={versionHistoryFile.name}
-                        folderId={resolveFileFolderId(versionHistoryFile, activeFolderId)}
-                        versions={allFiles
-                            .filter(f => f.type !== 'folder' && f.name.toLowerCase() === versionHistoryFile.name.toLowerCase())
-                            .sort((a, b) => (b.id as number) - (a.id as number))}
-                        onClose={() => setVersionHistoryFile(null)}
-                        onRestored={refreshFiles}
-                    />
-                )}
-                {showShortcutsOverlay && (
-                    <KeyboardShortcutsOverlay
-                        key="shortcuts-overlay"
-                        shortcuts={organization.shortcuts}
-                        onClose={() => setShowShortcutsOverlay(false)}
-                    />
-                )}
-                {pendingImagePaths && (
-                    <ImageCompressDialog
-                        key="compress-dialog"
-                        files={pendingImagePaths.map(p => ({ path: p, name: p.split(/[/\\]/).pop() ?? p, size: 0 }))}
-                        onClose={() => setPendingImagePaths(null)}
-                        onSkip={() => {
-                            queueUploadCandidates(pendingImagePaths.map(path => ({ path })));
-                            setPendingImagePaths(null);
-                            toast.info(`Queued ${pendingImagePaths.length} image${pendingImagePaths.length !== 1 ? 's' : ''} for upload`);
-                        }}
-                        onConfirm={async (quality, maxDimension) => {
-                            const paths = pendingImagePaths;
-                            setPendingImagePaths(null);
-                            toast.info('Compressing images…');
-                            const results: string[] = [];
-                            for (const p of paths) {
-                                try {
-                                    const compressed = await tauriApi.compressImage(p, quality, maxDimension);
-                                    results.push(compressed);
-                                } catch {
-                                    results.push(p); // fallback to original
-                                }
-                            }
-                            queueUploadCandidates(results.map(path => ({ path })));
-                            toast.info(`Queued ${results.length} compressed image${results.length !== 1 ? 's' : ''}`);
-                        }}
-                    />
-                )}
-                {showOnboarding && (
-                    <OnboardingWizard
-                        key="onboarding-wizard"
-                        onClose={() => setShowOnboarding(false)}
-                        onCreateFolder={(name) => handleCreateFolder(name, null)}
-                        onEncryptionEnabled={() => setEncryptionEnabled(true)}
-                    />
-                )}
-                {showVault && (
-                    <VaultModal
-                        key="vault-modal"
-                        files={allIndexedRaw.filter(f => f.icon_type !== 'folder')}
-                        folders={folders}
-                        activity={activity}
-                        onClose={() => setShowVault(false)}
-                    />
-                )}
-                {batchRenameFiles && (
-                    <BatchRenameModal
-                        key="batch-rename-modal"
-                        files={batchRenameFiles}
-                        activeFolderId={activeFolderId}
-                        onClose={() => setBatchRenameFiles(null)}
-                        onDone={() => queryClient.invalidateQueries({ queryKey: ['files', activeFolderId] })}
-                    />
-                )}
-                {textPreviewFile && (
-                    <TextPreviewModal
-                        key="text-preview-modal"
-                        file={textPreviewFile}
-                        activeFolderId={activeFolderId}
-                        onClose={() => setTextPreviewFile(null)}
-                    />
-                )}
-                {shareTarget && (
-                    <ShareModal
-                        key="share-modal"
-                        file={shareTarget}
-                        activeFolderId={shareTarget.type === 'folder' ? shareTarget.id : activeFolderId}
-                        onClose={() => setShareTarget(null)}
-                    />
-                )}
-                {bulkShareTargets && (
-                    <ShareModal
-                        key="bulk-share-modal"
-                        files={bulkShareTargets}
-                        activeFolderId={activeFolderId}
-                        onClose={() => setBulkShareTargets(null)}
-                    />
-                )}
-                {renameTarget && (
-                    <RenameModal
-                        key="rename-modal"
-                        currentName={renameTarget.name}
-                        isFolder={renameTarget.type === 'folder'}
-                        onConfirm={handleRename}
-                        onClose={() => setRenameTarget(null)}
-                    />
-                )}
-                {showMoveModal && (
-                    <MoveToFolderModal
-                        folders={folders}
-                        onClose={() => setShowMoveModal(false)}
-                        onSelect={handleDestinationSelect}
-                        activeFolderId={activeFolderId}
-                        mode={destinationAction}
-                        key="move-modal"
-                    />
-                )}
-                {movingFolderId !== null && (
-                    <MoveToFolderModal
-                        folders={folders.filter((f) => f.id !== movingFolderId)}
-                        onClose={() => setMovingFolderId(null)}
-                        onSelect={async (targetParentId) => {
-                            await handleSetFolderParent(movingFolderId, targetParentId);
-                            setMovingFolderId(null);
-                        }}
-                        activeFolderId={null}
-                        mode="move"
-                        key="move-folder-modal"
-                    />
-                )}
-                {playingFile && (
-                    <ErrorBoundary onDismiss={() => setPlayingFile(null)} key="media-player-boundary">
-                        <MediaPlayer
-                            file={playingFile}
-                            onClose={() => setPlayingFile(null)}
-                            onNext={handleNextPreview}
-                            onPrev={handlePrevPreview}
-                            currentIndex={previewContextIndex}
-                            totalItems={previewContextFiles.length}
-                            activeFolderId={activeFolderId}
-                            playlist={previewContextFiles}
-                            onSelectTrack={(track) => handlePreview(track, previewContextFiles)}
-                            key="media-player"
-                        />
-                    </ErrorBoundary>
-                )}
-                {pdfFile && (
-                    <ErrorBoundary onDismiss={() => setPdfFile(null)} key="pdf-viewer-boundary">
-                        <PdfViewer
-                            file={pdfFile}
-                            onClose={() => setPdfFile(null)}
-                            onNext={handleNextPreview}
-                            onPrev={handlePrevPreview}
-                            currentIndex={previewContextIndex}
-                            totalItems={previewContextFiles.length}
-                            activeFolderId={activeFolderId}
-                            key="pdf-viewer"
-                        />
-                    </ErrorBoundary>
-                )}
-                {isDragging && !isDraggingInternally && <DragDropOverlay key="drag-drop-overlay" />}
-            </AnimatePresence>
-            </Suspense>
-            {/* End of lazy-loaded modal region */}
+            {/* All modals extracted to DashboardModals — reduces Dashboard.tsx by ~300 lines */}
+            <DashboardModals
+                state={{
+                    showSettings, showLinksDashboard, showWebAccess, showWipeConfirm,
+                    showTotpSetup, showConfigModal, showCloudImport, showSyncHistory,
+                    showDuplicates, showShortcutsOverlay, showOnboarding, showVault,
+                    showMoveModal, isDragging, isDraggingInternally,
+                }}
+                data={{
+                    exportKeyTarget, crossCopyFiles, versionHistoryFile, pendingImagePaths,
+                    batchRenameFiles, textPreviewFile, shareTarget, bulkShareTargets,
+                    renameTarget, playingFile, pdfFile, previewFile, movingFolderId,
+                    activeFolderId, folders, allFiles, allIndexedRaw, activity,
+                    accounts, activeAccountId, encryptionEnabled, autoSyncInterval,
+                    destinationAction, previewContextFiles, previewContextIndex,
+                    previewNeighborState, shortcuts: organization.shortcuts,
+                }}
+                callbacks={{
+                    close: (modal) => {
+                        const setters: Record<string, (v: any) => void> = {
+                            showSettings: setShowSettings, showLinksDashboard: setShowLinksDashboard,
+                            showWebAccess: setShowWebAccess, showWipeConfirm: setShowWipeConfirm,
+                            showTotpSetup: setShowTotpSetup, showConfigModal: setShowConfigModal,
+                            showCloudImport: setShowCloudImport, showSyncHistory: setShowSyncHistory,
+                            showDuplicates: setShowDuplicates, showShortcutsOverlay: setShowShortcutsOverlay,
+                            showOnboarding: setShowOnboarding, showVault: setShowVault,
+                            showMoveModal: setShowMoveModal,
+                        };
+                        const setter = setters[modal];
+                        if (setter) setter(false);
+                        // Also clear data targets
+                        setExportKeyTarget(null); setCrossCopyFiles(null); setVersionHistoryFile(null);
+                        setPendingImagePaths(null); setBatchRenameFiles(null); setTextPreviewFile(null);
+                        setShareTarget(null); setBulkShareTargets(null); setRenameTarget(null);
+                        setPlayingFile(null); setPdfFile(null); setMovingFolderId(null);
+                    },
+                    setAutoSyncInterval, setEncryptionEnabled,
+                    setShortcuts: organization.setShortcuts,
+                    handleExportActivity, handleRename, handleDestinationSelect,
+                    handleSetFolderParent, handleNextPreview, handlePrevPreview,
+                    handlePreview, handleCreateFolder, handleCrossCopyAndSwitch,
+                    refreshFiles,
+                    queueUploadCandidates: (candidates) => queueUploadCandidatesRef.current(candidates),
+                    store,
+                }}
+            />
 
             <Sidebar
                 folders={folders}
@@ -1788,6 +1530,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                 />
             </main>
 
+            <Suspense fallback={null}>
             {infoFile && (
                 <FileInfoPanel
                     file={infoFile}
@@ -1845,6 +1588,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     />
                 </ErrorBoundary>
             )}
+            </Suspense>
             <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex max-h-[calc(100vh-2rem)] flex-col gap-3">
                 <div className="pointer-events-auto">
                     <UploadQueue

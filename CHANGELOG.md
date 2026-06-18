@@ -4,6 +4,41 @@ All notable changes to SharkDrive are documented here.
 
 ---
 
+## [4.1.0] - 2026-06-18
+
+### Refactor Arquitectónico
+
+**Dashboard.tsx particionado** — Las ~280 líneas de renderizado de modales (20+ componentes dentro de `<AnimatePresence>`) se extrajeron a `DashboardModals.tsx`. Dashboard bajó de 1,872 → 1,616 líneas. `DashboardModals` recibe 3 props tipadas (`ModalState`, `ModalData`, `ModalCallbacks`) en lugar de 30+ props individuales. Todos los lazy imports de modales ahora viven en `DashboardModals.tsx`.
+
+**Design tokens extraídos a CSS variables:**
+- Shadows: `--shadow-elevation-1` (2px, sutil), `--shadow-elevation-2` (8px, medio), `--shadow-elevation-3` (24px, modal) — con variantes light mode
+- Transitions: `--transition-fast` (120ms), `--transition-normal` (200ms), `--transition-slow` (300ms)
+- Danger colors: `--color-danger`, `--color-danger-hover`, `--color-danger-dim`, `--color-danger-muted` — con variantes light mode ajustadas
+- Success/warning: `--color-success` (#22c55e), `--color-warning` (#f59e0b)
+
+**Sistema de elevación (3 niveles):**
+- `.elevation-1` → cards, panels (shadow suave)
+- `.elevation-2` → dropdowns, floating elements (shadow medio)
+- `.elevation-3` → modals, overlays (shadow profundo)
+- CSS override global: `.shadow-2xl → elevation-2`, `.shadow-lg → elevation-1`
+- Modals con `z-50`/`z-[100]`/`z-[200]` usan automáticamente elevation-3
+
+**Danger patterns estandarizados:**
+- `.sd-danger-banner` → borde + background + texto con colores de `--color-danger`
+- `.sd-danger-button` → fondo + hover + disabled con tokens
+- Aplicado a `WipeConfirmModal` — eliminados 6 colores hardcodeados (`red-500`, `red-400`, `red-300`, `red-600`) reemplazados con clases de design system
+
+**SettingsModal ya solo renderiza el tab activo** — confirmado que usa `{tab === 'general' && (...)}` (no los 7 tabs simultáneamente). No requirió cambios.
+
+### Cambios técnicos
+- `DashboardModals.tsx` — nuevo componente con 219 líneas, tipado completo
+- `Dashboard.tsx` — 1,872 → 1,616 líneas (-14%), sin lazy imports de modales
+- `App.css` — 16 nuevos design tokens (shadows, transitions, colors), elevation system, danger patterns
+- `WipeConfirmModal.tsx` — migrado a design tokens (`elevation-3`, `sd-danger-banner`, `sd-danger-button`)
+- VERSION → 4.1.0
+
+---
+
 ## [4.0.0] - 2026-06-18
 
 ### Diseño Sonoro + Micro-interacciones

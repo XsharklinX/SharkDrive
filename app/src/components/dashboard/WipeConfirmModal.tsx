@@ -23,15 +23,15 @@ export function WipeConfirmModal({ onCancel, onConfirm }: WipeConfirmModalProps)
 
     return (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-            <div className="mx-4 w-full max-w-sm rounded-2xl border border-red-500/40 bg-telegram-surface p-6 shadow-2xl">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/15">
-                    <AlertTriangle className="h-6 w-6 text-red-400" />
+            <div className="mx-4 w-full max-w-sm rounded-2xl border border-danger/40 bg-telegram-surface p-6 elevation-3">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-danger/15">
+                    <AlertTriangle className="h-6 w-6 text-danger-dim" />
                 </div>
-                <h2 className="text-xl font-bold text-red-400">Remote Wipe Triggered</h2>
+                <h2 className="text-xl font-bold text-danger-dim">Remote Wipe Triggered</h2>
                 <p className="mt-2 text-sm leading-6 text-telegram-subtext">
                     A remote wipe command was detected in your Saved Messages. All local SharkDrive data will be permanently deleted.
                 </p>
-                <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-300">
+                <div className="mt-4 sd-danger-banner rounded-lg px-4 py-3 text-sm">
                     This action is <strong>irreversible</strong>. Your Telegram account and cloud data are NOT affected — only local app data.
                 </div>
                 <div className="mt-5 flex gap-3">
@@ -44,7 +44,7 @@ export function WipeConfirmModal({ onCancel, onConfirm }: WipeConfirmModalProps)
                     <button
                         onClick={handleConfirm}
                         disabled={countdown > 0 || confirming}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-red-500 py-2.5 text-sm font-bold text-white hover:bg-red-600 disabled:opacity-50"
+                        className="sd-danger-button flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold disabled:opacity-50"
                     >
                         <Trash2 className="h-4 w-4" />
                         {countdown > 0 ? `Wipe (${countdown}s)` : confirming ? 'Wiping…' : 'Wipe Now'}
