@@ -9,7 +9,7 @@
     }
   },
   "productName": "SharkDrive",
-  "version": "2.9.0",
+  "version": "4.1.0",
   "identifier": "com.sharkdrive.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -38,6 +38,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
+    "publisher": "SharkDrive",
     "targets": "all",
     "windows": {
       "nsis": {

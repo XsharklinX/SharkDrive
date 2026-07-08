@@ -91,9 +91,10 @@ function useGridColumns(containerRef: React.RefObject<HTMLDivElement | null>) {
             setContainerWidth(width);
             if (width < 640) setColumns(2);
             else if (width < 980) setColumns(3);
-            else if (width < 1320) setColumns(4);
-            else if (width < 1700) setColumns(5);
-            else setColumns(6);
+            else if (width < 1180) setColumns(4);
+            else if (width < 1500) setColumns(5);
+            else if (width < 1850) setColumns(6);
+            else setColumns(7);
         };
 
         updateColumns();
@@ -190,7 +191,7 @@ export function FileExplorer({
 
     const gap = 12;
     const cardWidth = (containerWidth - (gap * (columns - 1))) / columns;
-    const cardHeight = Math.max(cardWidth * 0.5, 132);
+    const cardHeight = Math.max(cardWidth * 0.42, 112);
     const rowHeight = cardHeight + gap;
 
     const handleContextMenu = useCallback((e: React.MouseEvent, file: TelegramFile) => {
@@ -382,7 +383,7 @@ export function FileExplorer({
     return (
         <div
             ref={parentRef}
-            className="flex-1 overflow-auto custom-scrollbar px-6 py-5"
+            className="flex-1 overflow-auto custom-scrollbar px-4 py-4"
             role="region"
             aria-label="File browser"
             onClick={(e) => {
@@ -415,16 +416,13 @@ export function FileExplorer({
                 {selectedIds.length >= 2 && onBatchRename && (
                     <button
                         onClick={() => {
-                            const selected = sortedFiles.filter(f => selectedIds.includes(f.id) && f.type !== 'folder');
+                            const selected = sortedFiles.filter((file) => selectedIds.includes(file.id) && file.type !== 'folder');
                             if (selected.length > 0) onBatchRename(selected);
                         }}
                         className="rounded-md px-2 py-1 text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
-                        title={lang === 'es' ? 'Renombrar archivos seleccionados' : 'Batch rename selected files'}
+                        title={lang === 'es' ? 'Renombrar seleccionados' : 'Batch rename selected'}
                     >
-                        <span className="flex items-center gap-1.5">
-                            <Pencil className="h-3.5 w-3.5" />
-                            {lang === 'es' ? `Renombrar ${selectedIds.length}` : `Rename ${selectedIds.length}`}
-                        </span>
+                        <Pencil className="h-3.5 w-3.5" />
                     </button>
                 )}
 

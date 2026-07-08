@@ -8,6 +8,7 @@ export type SmartCollectionId = 'images' | 'videos' | 'documents' | 'large' | 'r
 export interface SmartCollection {
     id: SmartCollectionId;
     label: string;
+    description: string;
     count: number;
     kind: SmartCollectionKind;
 }
@@ -47,17 +48,17 @@ export function useSmartCollections(
 
     const collections = useMemo<SmartCollection[]>(() => {
         const base: SmartCollection[] = [
-            { id: 'images', label: 'Images', kind: 'images', count: files.filter((file) => matchesSmartCollection(file, 'images')).length },
-            { id: 'videos', label: 'Videos', kind: 'videos', count: files.filter((file) => matchesSmartCollection(file, 'videos')).length },
-            { id: 'documents', label: 'Documents', kind: 'documents', count: files.filter((file) => matchesSmartCollection(file, 'documents')).length },
-            { id: 'large', label: 'Large files', kind: 'large', count: files.filter((file) => matchesSmartCollection(file, 'large')).length },
-            { id: 'recent-7d', label: 'Last 7 days', kind: 'recent', count: files.filter((file) => matchesSmartCollection(file, 'recent-7d')).length },
+            { id: 'images', label: 'Images', description: 'Local image filter', kind: 'images', count: files.filter((file) => matchesSmartCollection(file, 'images')).length },
+            { id: 'videos', label: 'Videos', description: 'Local video filter', kind: 'videos', count: files.filter((file) => matchesSmartCollection(file, 'videos')).length },
+            { id: 'documents', label: 'Documents', description: 'PDF, Office, text and books', kind: 'documents', count: files.filter((file) => matchesSmartCollection(file, 'documents')).length },
+            { id: 'large', label: 'Large files', description: 'Files above 100 MB', kind: 'large', count: files.filter((file) => matchesSmartCollection(file, 'large')).length },
+            { id: 'recent-7d', label: 'Last 7 days', description: 'Recently added files', kind: 'recent', count: files.filter((file) => matchesSmartCollection(file, 'recent-7d')).length },
         ];
         const tagCounts = new Map<string, number>();
         files.forEach((file) => file.tags?.forEach((tag) => tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1)));
         const byTag = Array.from(tagCounts.entries())
             .sort(([left], [right]) => left.localeCompare(right))
-            .map<SmartCollection>(([tag, count]) => ({ id: `tag:${tag}`, label: `Tag: ${tag}`, kind: 'tag', count }));
+            .map<SmartCollection>(([tag, count]) => ({ id: `tag:${tag}`, label: `Tag: ${tag}`, description: 'Files with this tag', kind: 'tag', count }));
         return [...base, ...byTag];
     }, [files]);
 

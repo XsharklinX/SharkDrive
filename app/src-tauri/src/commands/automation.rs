@@ -188,12 +188,12 @@ pub async fn cmd_is_wifi_connected() -> bool {
     #[cfg(target_os = "windows")]
     {
         use tokio::process::Command;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         // netsh wlan show interfaces — if "State" line contains "connected" → WiFi is up
-        if let Ok(output) = Command::new("netsh")
-            .args(["wlan", "show", "interfaces"])
-            .output()
-            .await
-        {
+        let mut netsh = Command::new("netsh");
+        netsh.args(["wlan", "show", "interfaces"]);
+        netsh.creation_flags(CREATE_NO_WINDOW);
+        if let Ok(output) = netsh.output().await {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let wifi_connected = stdout.lines().any(|line| {
                 let lower = line.to_lowercase();
@@ -204,14 +204,13 @@ pub async fn cmd_is_wifi_connected() -> bool {
             }
         }
         // Fallback: check if Ethernet is active via netstat
-        if let Ok(output) = Command::new("powershell")
-            .args([
-                "-NoProfile", "-NonInteractive", "-Command",
-                "Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and $_.MediaType -eq '802.3'} | Measure-Object | Select-Object -ExpandProperty Count",
-            ])
-            .output()
-            .await
-        {
+        let mut powershell = Command::new("powershell");
+        powershell.args([
+            "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command",
+            "Get-NetAdapter | Where-Object {$_.Status -eq 'Up' -and $_.MediaType -eq '802.3'} | Measure-Object | Select-Object -ExpandProperty Count",
+        ]);
+        powershell.creation_flags(CREATE_NO_WINDOW);
+        if let Ok(output) = powershell.output().await {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let count: u32 = stdout.trim().parse().unwrap_or(0);
             if count > 0 {

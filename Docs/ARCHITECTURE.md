@@ -1,6 +1,6 @@
 # SharkDrive - Architecture and Handoff
 
-> **Version:** 2.9.0
+> **Version:** 4.1.0
 > **Last updated:** 2026-05-30
 > **Purpose:** Quick handoff for continuing development without dragging old fork details forward.
 

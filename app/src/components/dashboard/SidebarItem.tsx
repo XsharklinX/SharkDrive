@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BarChart3, ChevronRight, FolderOpen, FolderUp, Link, Lock, LockOpen, Paintbrush, Pencil, Pin, PinOff, Plus, Trash2, FolderInput } from 'lucide-react';
 import { FOLDER_COLOR_PALETTE } from '../../hooks/useOrganization';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface SidebarItemProps {
     icon: React.ElementType;
@@ -51,6 +52,7 @@ interface FolderContextMenuProps {
 function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, onToggleEncryption, onCreateChild, onMoveToRoot, onMoveFolderTo, isPinned, folderColor, onTogglePinned, onSetFolderColor, onViewStats, onDelete, onClose }: FolderContextMenuProps) {
     const menuRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
+    const { lang, t } = useLanguage();
 
     useEffect(() => {
         if (menuRef.current) {
@@ -104,36 +106,36 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
             onContextMenu={(e) => e.preventDefault()}
         >
             <div className="mb-1 rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-3">
-                <p className="text-[10px] uppercase tracking-[0.22em] text-telegram-subtext">Folder</p>
+                <p className="text-[10px] uppercase tracking-[0.22em] text-telegram-subtext">{lang === 'es' ? 'Carpeta' : 'Folder'}</p>
                 <div className="mt-1 flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-telegram-text">Folder Options</p>
+                    <p className="text-sm font-semibold text-telegram-text">{lang === 'es' ? 'Opciones' : 'Folder Options'}</p>
                     {isEncrypted && <Lock className="h-3.5 w-3.5 text-yellow-300" />}
                 </div>
             </div>
             <button onClick={onOpen} className={`${btn} text-telegram-text`}>
                 <FolderOpen className="w-4 h-4 text-yellow-400" />
-                Open
+                {lang === 'es' ? 'Abrir' : 'Open'}
             </button>
             <button onClick={onRename} className={`${btn} text-telegram-text`}>
                 <Pencil className="w-4 h-4 text-telegram-primary" />
-                Rename
+                {t('rename')}
             </button>
             {onTogglePinned && (
                 <button onClick={onTogglePinned} className={`${btn} text-telegram-text`}>
                     {isPinned ? <PinOff className="w-4 h-4 text-telegram-secondary" /> : <Pin className="w-4 h-4 text-telegram-secondary" />}
-                    {isPinned ? 'Unpin Folder' : 'Pin Folder'}
+                    {isPinned ? (lang === 'es' ? 'Desfijar carpeta' : 'Unpin Folder') : (lang === 'es' ? 'Fijar carpeta' : 'Pin Folder')}
                 </button>
             )}
             {onCreateChild && (
                 <button onClick={onCreateChild} className={`${btn} text-telegram-text`}>
                     <Plus className="w-4 h-4 text-telegram-secondary" />
-                    Create Subfolder
+                    {t('createSubfolder')}
                 </button>
             )}
             {onMoveToRoot && (
                 <button onClick={onMoveToRoot} className={`${btn} text-telegram-text`}>
                     <FolderUp className="w-4 h-4 text-telegram-secondary" />
-                    Move to Root
+                    {t('moveToRoot')}
                 </button>
             )}
             {onMoveFolderTo && (
@@ -144,25 +146,25 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
             )}
             <button onClick={onShareLink} className={`${btn} text-telegram-text`}>
                 <Link className="w-4 h-4 text-emerald-400" />
-                Share Folder
+                {t('shareFolder')}
             </button>
             {onViewStats && (
                 <button onClick={onViewStats} className={`${btn} text-telegram-text`}>
                     <BarChart3 className="w-4 h-4 text-telegram-primary" />
-                    View Statistics
+                    {lang === 'es' ? 'Ver estadisticas' : 'View Statistics'}
                 </button>
             )}
             <button onClick={onToggleEncryption} className={`${btn} ${isEncrypted ? 'text-yellow-300' : 'text-telegram-text'}`}>
                 {isEncrypted
-                    ? <><LockOpen className="w-4 h-4" /> Turn off auto-encrypt</>
-                    : <><Lock className="w-4 h-4 text-yellow-300" /> Turn on auto-encrypt</>
+                    ? <><LockOpen className="w-4 h-4" /> {lang === 'es' ? 'Desactivar auto-cifrado' : 'Turn off auto-encrypt'}</>
+                    : <><Lock className="w-4 h-4 text-yellow-300" /> {lang === 'es' ? 'Activar auto-cifrado' : 'Turn on auto-encrypt'}</>
                 }
             </button>
             {onSetFolderColor && (
                 <div className="rounded-lg border border-telegram-border/70 bg-white/[0.02] px-3 py-2">
                     <div className="mb-2 flex items-center gap-2 text-xs text-telegram-subtext">
                         <Paintbrush className="h-3.5 w-3.5" />
-                        Folder color
+                        {lang === 'es' ? 'Color de carpeta' : 'Folder color'}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                         {FOLDER_COLOR_PALETTE.map((color) => (
@@ -180,7 +182,7 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
                             onClick={() => onSetFolderColor(null)}
                             className="h-5 rounded-full border border-telegram-border px-2 text-[10px] text-telegram-subtext transition hover:text-telegram-text"
                         >
-                            Reset
+                            {lang === 'es' ? 'Restablecer' : 'Reset'}
                         </button>
                     </div>
                 </div>
@@ -188,7 +190,7 @@ function FolderContextMenu({ x, y, isEncrypted, onOpen, onRename, onShareLink, o
             <div className="h-px bg-telegram-border my-1" />
             <button onClick={onDelete} className={`${btn} text-red-400 hover:bg-red-500/10`}>
                 <Trash2 className="w-4 h-4" />
-                Delete Folder
+                {lang === 'es' ? 'Eliminar carpeta' : 'Delete Folder'}
             </button>
         </div>
     );

@@ -4,7 +4,7 @@
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Version](https://img.shields.io/badge/version-2.9.0-brightgreen)
+![Version](https://img.shields.io/badge/version-4.1.0-brightgreen)
 
 ---
 
@@ -62,6 +62,8 @@ SharkDrive uses the Telegram MTProto API to store, organize, and manage your fil
 - Optional 6-digit PIN protection for the saved Telegram session file
 - Encrypted files clearly marked in the UI (badge, icon)
 - Share links protected by a 64-char random token
+
+Read [Docs/SECURITY.md](Docs/SECURITY.md) for the honest security model: what SharkDrive protects, what it does not protect, and what happens if an encryption password is lost.
 
 ### Sharing
 

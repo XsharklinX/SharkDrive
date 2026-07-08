@@ -5,6 +5,7 @@ type EmptyVariant = 'folder' | 'search' | 'favorites';
 
 interface EmptyStateProps {
     onUpload: () => void;
+    onCreateFolder?: () => void;
     variant?: EmptyVariant;
     searchTerm?: string;
 }
@@ -27,11 +28,13 @@ const VARIANTS = {
     },
 };
 
-export function EmptyState({ onUpload, variant = 'folder', searchTerm }: EmptyStateProps) {
-    const { t } = useLanguage();
+export function EmptyState({ onUpload, onCreateFolder, variant = 'folder', searchTerm }: EmptyStateProps) {
+    const { lang, t } = useLanguage();
     const { Icon, titleKey, subKey } = VARIANTS[variant];
-    const title = t(titleKey);
-    const sub = t(subKey);
+    const title = variant === 'folder' && lang === 'es' ? 'Arrastra archivos aqui' : t(titleKey);
+    const sub = variant === 'folder' && lang === 'es'
+        ? 'Suelta archivos en esta ventana o usa el boton para subirlos.'
+        : t(subKey);
 
     return (
         <div className="flex min-h-[22rem] flex-col items-center justify-center rounded-lg border border-telegram-border bg-white/[0.015] px-8 py-12 text-center">
@@ -47,13 +50,24 @@ export function EmptyState({ onUpload, variant = 'folder', searchTerm }: EmptySt
             </div>
 
             {variant === 'folder' && (
-                <button
-                    onClick={onUpload}
-                    className="mt-6 inline-flex items-center gap-2 rounded-lg bg-telegram-primary px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
-                >
-                    <Upload className="w-4 h-4" />
-                    {t('addFiles')}
-                </button>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+                    <button
+                        onClick={onUpload}
+                        className="inline-flex items-center gap-2 rounded-lg bg-telegram-primary px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
+                    >
+                        <Upload className="w-4 h-4" />
+                        {t('addFiles')}
+                    </button>
+                    {onCreateFolder && (
+                        <button
+                            onClick={onCreateFolder}
+                            className="inline-flex items-center gap-2 rounded-lg border border-telegram-border px-4 py-2.5 text-sm font-semibold text-telegram-text transition hover:bg-white/[0.04]"
+                        >
+                            <FolderPlus className="w-4 h-4" />
+                            {lang === 'es' ? 'Crear primera carpeta' : t('createFolder')}
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );

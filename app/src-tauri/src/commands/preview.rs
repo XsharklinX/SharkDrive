@@ -3,6 +3,7 @@ use crate::commands::encryption::{decrypt_file, derive_folder_key, EncryptionSta
 use crate::commands::fs::caption::{display_name_from_metadata, parse_caption_metadata};
 use crate::commands::utils::resolve_peer;
 use crate::models::BookCardData;
+use crate::performance::PerformanceMetrics;
 use crate::TelegramState;
 use base64::{engine::general_purpose, Engine as _};
 use grammers_client::types::media::Document;
@@ -18,6 +19,32 @@ use zip::ZipArchive;
 const PREVIEW_CACHE_MAX_FILES: usize = 30;
 const PREVIEW_CACHE_MAX_TOTAL_BYTES: u64 = 80 * 1024 * 1024;
 const VIDEO_THUMB_MAX_BYTES: i64 = 120 * 1024 * 1024;
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CacheStats {
+    pub preview_files: usize,
+    pub preview_bytes: u64,
+    pub thumbnail_files: usize,
+    pub thumbnail_bytes: u64,
+    pub book_card_files: usize,
+    pub book_card_bytes: u64,
+}
+
+fn directory_stats(path: &std::path::Path) -> (usize, u64) {
+    let mut files = 0usize;
+    let mut bytes = 0u64;
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    files += 1;
+                    bytes += meta.len();
+                }
+            }
+        }
+    }
+    (files, bytes)
+}
 
 fn prune_preview_cache(cache_dir: &std::path::Path) {
     let read_dir = match std::fs::read_dir(cache_dir) {
@@ -76,7 +103,9 @@ pub async fn cmd_get_preview(
     state: State<'_, TelegramState>,
     bw_state: State<'_, BandwidthManager>,
     enc_state: State<'_, EncryptionState>,
+    metrics: State<'_, PerformanceMetrics>,
 ) -> Result<String, String> {
+    let started = std::time::Instant::now();
     let cache_dir = app_handle
         .path()
         .app_cache_dir()
@@ -213,10 +242,26 @@ pub async fn cmd_get_preview(
                     }
                 }
                 log::info!("Returning path preview: {}", save_path_str);
+                metrics.record(
+                    "preview.get_preview",
+                    started.elapsed().as_millis(),
+                    true,
+                    Some(1),
+                    None,
+                    Some(if save_path.exists() { "cache_or_download" } else { "telegram" }),
+                );
                 return Ok(save_path_str);
             }
         }
     }
+    metrics.record(
+        "preview.get_preview",
+        started.elapsed().as_millis(),
+        false,
+        None,
+        None,
+        Some("telegram"),
+    );
     Err("File or media not found in Telegram".to_string())
 }
 
@@ -517,7 +562,9 @@ pub async fn cmd_get_thumbnail(
     app_handle: tauri::AppHandle,
     state: State<'_, TelegramState>,
     enc_state: State<'_, EncryptionState>,
+    metrics: State<'_, PerformanceMetrics>,
 ) -> Result<String, String> {
+    let started = std::time::Instant::now();
     // Check if thumbnail already in cache
     let cache_dir = app_handle
         .path()
@@ -535,6 +582,14 @@ pub async fn cmd_get_thumbnail(
     if cached_path.exists() {
         if let Ok(bytes) = std::fs::read(&cached_path) {
             let b64 = general_purpose::STANDARD.encode(&bytes);
+            metrics.record(
+                "preview.get_thumbnail",
+                started.elapsed().as_millis(),
+                true,
+                Some(1),
+                Some(bytes.len() as u64),
+                Some("cache"),
+            );
             return Ok(format!("data:image/png;base64,{}", b64));
         }
     }
@@ -714,7 +769,40 @@ pub async fn cmd_get_thumbnail(
         }
     }
 
+    metrics.record(
+        "preview.get_thumbnail",
+        started.elapsed().as_millis(),
+        false,
+        None,
+        None,
+        Some("telegram_or_generated"),
+    );
     Ok("".to_string())
+}
+
+#[tauri::command]
+pub fn cmd_get_cache_stats(app_handle: tauri::AppHandle) -> Result<CacheStats, String> {
+    let cache_dir = app_handle
+        .path()
+        .app_cache_dir()
+        .map_err(|e: tauri::Error| e.to_string())?;
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e: tauri::Error| e.to_string())?;
+
+    let (preview_files, preview_bytes) = directory_stats(&cache_dir.join("previews"));
+    let (thumbnail_files, thumbnail_bytes) = directory_stats(&data_dir.join("thumbnails"));
+    let (book_card_files, book_card_bytes) = directory_stats(&cache_dir.join("book_cards"));
+
+    Ok(CacheStats {
+        preview_files,
+        preview_bytes,
+        thumbnail_files,
+        thumbnail_bytes,
+        book_card_files,
+        book_card_bytes,
+    })
 }
 
 #[tauri::command]

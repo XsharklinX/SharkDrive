@@ -6,6 +6,8 @@ interface UpdateBannerProps {
     version: string | null;
     downloading: boolean;
     progress: number;
+    error: string | null;
+    onRetry: () => void;
     onUpdate: () => void;
     onDismiss: () => void;
 }
@@ -15,6 +17,8 @@ export function UpdateBanner({
     version,
     downloading,
     progress,
+    error,
+    onRetry,
     onUpdate,
     onDismiss
 }: UpdateBannerProps) {
@@ -31,6 +35,8 @@ export function UpdateBanner({
                         <span className="text-sm font-medium text-white">
                             {downloading ? (
                                 <>Downloading SharkDrive update... {progress}%</>
+                            ) : error ? (
+                                <>Update failed: {error}</>
                             ) : (
                                 <>SharkDrive {version} is available.</>
                             )}
@@ -49,11 +55,11 @@ export function UpdateBanner({
                             </div>
                         ) : (
                             <button
-                                onClick={onUpdate}
+                                onClick={error ? onRetry : onUpdate}
                                 className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5 font-semibold text-telegram-primary transition-colors hover:bg-white/90 shadow-md"
                             >
                                 <Download className="w-4 h-4" />
-                                Update
+                                {error ? 'Retry' : 'Update'}
                             </button>
                         )}
 

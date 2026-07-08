@@ -4,6 +4,48 @@ import type { AccountMeta, ActivityEntry, AutomationConfig, BandwidthStats, Book
 type FileRecord = TelegramFile;
 let streamTokenPromise: Promise<string> | null = null;
 
+export interface IndexStats {
+    folder_count: number;
+    indexed_folder_count: number;
+    indexed_file_count: number;
+    total_indexed_bytes: number;
+    folders_synced_at_ms: number;
+    oldest_file_sync_at_ms: number | null;
+    newest_file_sync_at_ms: number | null;
+}
+
+export interface CacheStats {
+    preview_files: number;
+    preview_bytes: number;
+    thumbnail_files: number;
+    thumbnail_bytes: number;
+    book_card_files: number;
+    book_card_bytes: number;
+}
+
+export interface PerformanceSample {
+    name: string;
+    duration_ms: number;
+    at_ms: number;
+    ok: boolean;
+    items?: number | null;
+    bytes?: number | null;
+    source?: string | null;
+}
+
+export interface PerformanceSummary {
+    name: string;
+    count: number;
+    failures: number;
+    avg_ms: number;
+    max_ms: number;
+}
+
+export interface PerformanceSnapshot {
+    recent: PerformanceSample[];
+    summary: PerformanceSummary[];
+}
+
 export const tauriApi = {
     connect(apiId: number) {
         return invoke<boolean>('cmd_connect', { apiId });
@@ -49,6 +91,18 @@ export const tauriApi = {
     },
     getAllIndexedFiles() {
         return invoke<FileRecord[]>('cmd_get_all_indexed_files');
+    },
+    getIndexStats() {
+        return invoke<IndexStats>('cmd_get_index_stats');
+    },
+    getCacheStats() {
+        return invoke<CacheStats>('cmd_get_cache_stats');
+    },
+    getPerformanceSnapshot() {
+        return invoke<PerformanceSnapshot>('cmd_get_performance_snapshot');
+    },
+    clearPerformanceMetrics() {
+        return invoke<void>('cmd_clear_performance_metrics');
     },
     moveFiles(messageIds: number[], sourceFolderId: number | null, targetFolderId: number | null) {
         return invoke('cmd_move_files', { messageIds, sourceFolderId, targetFolderId });

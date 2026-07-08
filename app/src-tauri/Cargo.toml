@@ -1,8 +1,8 @@
 [package]
 name = "app"
-version = "2.9.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "4.1.0"
+description = "SharkDrive desktop app"
+authors = ["SharkDrive"]
 edition = "2021"
 
 [lib]
@@ -58,3 +58,9 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.52"
+
+[profile.release]
+codegen-units = 4
+lto = "thin"
+opt-level = 2
+strip = "debuginfo"

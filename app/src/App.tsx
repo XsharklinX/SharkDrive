@@ -29,7 +29,7 @@ function AppContent() {
   const [sessionPinUnlocking, setSessionPinUnlocking] = useState(false);
   const [savedApiId, setSavedApiId] = useState<number | null>(null);
   const { theme } = useTheme();
-  const { available, version, downloading, progress, downloadAndInstall, dismissUpdate } = useUpdateCheck();
+  const { available, version, downloading, progress, error: updateError, checkForUpdates, downloadAndInstall, dismissUpdate } = useUpdateCheck();
 
   useEffect(() => {
     const tryAutoLogin = async () => {
@@ -136,6 +136,8 @@ function AppContent() {
         version={version}
         downloading={downloading}
         progress={progress}
+        error={updateError}
+        onRetry={checkForUpdates}
         onUpdate={downloadAndInstall}
         onDismiss={dismissUpdate}
       />

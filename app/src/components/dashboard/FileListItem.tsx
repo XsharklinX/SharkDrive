@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Check, Folder, Eye, HardDrive, Trash2 } from 'lucide-react';
+import { Check, Folder, Eye, HardDrive, Trash2, Shield } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { TelegramFile } from '../../types';
 import { FileTypeIcon } from '../FileTypeIcon';
 import { formatBytes } from '../../utils';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface FileListItemProps {
     file: TelegramFile;
@@ -26,6 +27,7 @@ export function FileListItem({
     onDragStart, onDragEnd, onDrop,
     onPreview, onDownload, onDelete, onInlineRename, folderColor
 }: FileListItemProps) {
+    const { lang } = useLanguage();
     const isFolder = file.type === 'folder';
     const isSelected = selectedIds.includes(file.id);
     const [isDragOver, setIsDragOver] = useState(false);
@@ -50,33 +52,28 @@ export function FileListItem({
             draggable={!isFolder}
             onDragStart={(e) => {
                 if (onDragStart) onDragStart(file.id);
-                e.dataTransfer.setData("application/x-telegram-file-id", file.id.toString());
+                e.dataTransfer.setData('application/x-telegram-file-id', file.id.toString());
                 e.dataTransfer.effectAllowed = 'move';
             }}
-            onDragEnd={() => {
-                if (onDragEnd) onDragEnd();
-            }}
+            onDragEnd={() => onDragEnd?.()}
             onDragOver={(e) => {
-                if (isFolder) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!isDragOver) setIsDragOver(true);
-                }
+                if (!isFolder) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (!isDragOver) setIsDragOver(true);
             }}
             onDragLeave={(e) => {
-                if (isFolder) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDragOver(false);
-                }
+                if (!isFolder) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
             }}
             onDrop={(e) => {
-                if (isFolder && onDrop) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsDragOver(false);
-                    onDrop(e, file.id);
-                }
+                if (!isFolder || !onDrop) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragOver(false);
+                onDrop(e, file.id);
             }}
             className={`group grid grid-cols-[2.5rem_minmax(0,1fr)_6rem_7rem] items-center gap-3 rounded-md border px-2.5 py-1.5 transition-all
                 ${isSelected ? 'border-telegram-primary/35 bg-telegram-primary/10' : 'border-transparent hover:bg-white/[0.03]'}
@@ -95,16 +92,17 @@ export function FileListItem({
                     className="flex h-7 w-7 items-center justify-center rounded-md border border-telegram-border bg-white/[0.03]"
                     style={isFolder && folderColor ? { color: folderColor, borderColor: `${folderColor}55`, backgroundColor: `${folderColor}14` } : undefined}
                 >
-                    {isFolder ? <Folder className="w-4 h-4" /> : <FileTypeIcon filename={file.name} className="w-4 h-4" />}
+                    {isFolder ? <Folder className="h-4 w-4" /> : <FileTypeIcon filename={file.name} className="h-4 w-4" />}
                 </div>
             </div>
-            <div className="truncate text-sm text-telegram-text font-medium relative pr-8">
+
+            <div className="relative truncate pr-8 text-sm font-medium text-telegram-text">
                 <div className="flex items-center gap-2">
                     {isRenaming ? (
                         <input
                             ref={renameInputRef}
                             autoFocus
-                            className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none border-b border-telegram-primary/70"
+                            className="min-w-0 flex-1 border-b border-telegram-primary/70 bg-transparent text-sm font-medium outline-none"
                             value={renameDraft}
                             onChange={(e) => setRenameDraft(e.target.value)}
                             onBlur={() => {
@@ -115,8 +113,8 @@ export function FileListItem({
                             }}
                             onKeyDown={(e) => {
                                 e.stopPropagation();
-                                if (e.key === 'Enter') { e.currentTarget.blur(); }
-                                else if (e.key === 'Escape') { setIsRenaming(false); }
+                                if (e.key === 'Enter') e.currentTarget.blur();
+                                else if (e.key === 'Escape') setIsRenaming(false);
                             }}
                             onClick={(e) => e.stopPropagation()}
                         />
@@ -130,25 +128,34 @@ export function FileListItem({
                                 setIsRenaming(true);
                                 setTimeout(() => renameInputRef.current?.select(), 0);
                             }}
-                        >{file.name}</span>
+                        >
+                            {file.name}
+                        </span>
                     )}
-                    {file.is_encrypted && <span className="text-[10px] text-yellow-200">Encrypted</span>}
+                    {file.is_encrypted && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-yellow-400/20 bg-yellow-400/10 px-1.5 py-0.5 text-[10px] text-yellow-200">
+                            <Shield className="h-3 w-3" />
+                            {lang === 'es' ? 'Cifrado' : 'Encrypted'}
+                        </span>
+                    )}
                 </div>
+
                 <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center rounded-md border border-telegram-border bg-telegram-bg/90 px-0.5 py-0.5 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
-                    <button onClick={(e) => { e.stopPropagation(); onPreview(file) }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text" title="Preview"><Eye className="w-3.5 h-3.5" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); onDownload(file) }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text" title="Download"><HardDrive className="w-3.5 h-3.5" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); onDelete(file) }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-400" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); onPreview(file); }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text" title="Preview"><Eye className="h-3.5 w-3.5" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); onDownload(file); }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text" title="Download"><HardDrive className="h-3.5 w-3.5" /></button>
+                    <button onClick={(e) => { e.stopPropagation(); onDelete(file); }} className="rounded-md p-1 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-400" title="Delete"><Trash2 className="h-3.5 w-3.5" /></button>
                 </div>
             </div>
-            <div className="text-right text-xs text-telegram-subtext truncate">
+
+            <div className="truncate text-right text-xs text-telegram-subtext">
                 {isFolder
                     ? folderSize
-                        ? `${folderSize.count} file${folderSize.count !== 1 ? 's' : ''} · ${formatBytes(folderSize.bytes)}`
-                        : <span className="opacity-40">—</span>
+                        ? `${folderSize.count} file${folderSize.count !== 1 ? 's' : ''} - ${formatBytes(folderSize.bytes)}`
+                        : <span className="opacity-40">-</span>
                     : file.sizeStr
                 }
             </div>
-            <div className="text-right text-xs text-telegram-subtext font-mono opacity-50 truncate">{file.created_at || '-'}</div>
+            <div className="truncate text-right font-mono text-xs text-telegram-subtext opacity-50">{file.created_at || '-'}</div>
         </div>
     );
 }

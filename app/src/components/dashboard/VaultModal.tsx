@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { TelegramFile, TelegramFolder } from '../../types';
 import { formatBytes, isImageFile, isVideoFile, isAudioFile, isPdfFile } from '../../utils';
 import { tauriApi } from '../../api/tauri';
+import { useLanguage } from '../../context/LanguageContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,7 @@ function TrendChart({ dailyCounts }: { dailyCounts: Map<string, number> }) {
 
 export function VaultModal({ files, folders, activity, onClose }: VaultModalProps) {
     const [exporting, setExporting] = useState(false);
+    const { lang } = useLanguage();
 
     const folderNameMap = useMemo(() => {
         const m = new Map<number, string>();
@@ -237,9 +239,9 @@ export function VaultModal({ files, folders, activity, onClose }: VaultModalProp
             if (!path) return;
             setExporting(true);
             await tauriApi.exportCsv(path);
-            toast.success('Exported to ' + path.split(/[/\\]/).pop());
+            toast.success((lang === 'es' ? 'Exportado a ' : 'Exported to ') + path.split(/[/\\]/).pop());
         } catch (e) {
-            toast.error('Export failed: ' + String(e));
+            toast.error((lang === 'es' ? 'Falló la exportación: ' : 'Export failed: ') + String(e));
         } finally {
             setExporting(false);
         }
@@ -290,9 +292,9 @@ export function VaultModal({ files, folders, activity, onClose }: VaultModalProp
                     })),
             };
             await tauriApi.exportManifestJson(path, JSON.stringify(manifest, null, 2));
-            toast.success('Manifest exported to ' + path.split(/[/\\]/).pop());
+            toast.success((lang === 'es' ? 'Manifest exportado a ' : 'Manifest exported to ') + path.split(/[/\\]/).pop());
         } catch (e) {
-            toast.error('Manifest export failed: ' + String(e));
+            toast.error((lang === 'es' ? 'Falló el manifest: ' : 'Manifest export failed: ') + String(e));
         } finally {
             setExporting(false);
         }
@@ -308,7 +310,7 @@ export function VaultModal({ files, folders, activity, onClose }: VaultModalProp
                 <div className="flex items-center justify-between border-b border-telegram-border px-6 py-4">
                     <div className="flex items-center gap-3">
                         <HardDrive className="h-5 w-5 text-telegram-primary" />
-                        <h2 className="text-base font-semibold text-telegram-text">Vault Dashboard</h2>
+                        <h2 className="text-base font-semibold text-telegram-text">{lang === 'es' ? 'Resumen del Drive' : 'Vault Dashboard'}</h2>
                     </div>
                     <button
                         onClick={onClose}
@@ -410,10 +412,12 @@ export function VaultModal({ files, folders, activity, onClose }: VaultModalProp
                             className="ml-2 inline-flex items-center gap-2 rounded-lg border border-telegram-border bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-telegram-text transition hover:bg-white/[0.07] disabled:opacity-50"
                         >
                             <FileText className="h-4 w-4" />
-                            Manifest JSON
+                            {lang === 'es' ? 'Exportar manifest JSON' : 'Manifest JSON'}
                         </button>
                         <p className="mt-1.5 text-xs text-telegram-subtext/60">
-                            CSV exports tabular data. Manifest JSON includes folder tree, file ids, size, hash, date and encryption metadata.
+                            {lang === 'es'
+                                ? 'CSV exporta una tabla simple. Manifest JSON incluye árbol de carpetas, IDs, tamaño, hash, fecha y estado de cifrado para auditoría o migración.'
+                                : 'CSV exports tabular data. Manifest JSON includes folder tree, file ids, size, hash, date and encryption metadata.'}
                         </p>
                     </section>
                 </div>

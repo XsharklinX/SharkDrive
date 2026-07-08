@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
+import { formatError } from '../utils';
 
 const SHARKDRIVE_UPDATES_ENABLED = true;
 
@@ -38,13 +39,14 @@ export function useUpdateCheck() {
                     ...s,
                     checking: false,
                     available: true,
+                    error: null,
                     version: updateInfo.version,
                 }));
             } else {
                 setState(s => ({ ...s, checking: false, available: false }));
             }
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to check for updates';
+            const message = formatError(err);
             setState(s => ({
                 ...s,
                 checking: false,
@@ -57,7 +59,7 @@ export function useUpdateCheck() {
         if (!SHARKDRIVE_UPDATES_ENABLED) return;
         if (!update) return;
 
-        setState(s => ({ ...s, downloading: true, progress: 0 }));
+        setState(s => ({ ...s, downloading: true, progress: 0, error: null }));
         let downloaded = 0;
         let contentLength = 0;
 
@@ -78,7 +80,7 @@ export function useUpdateCheck() {
 
             await relaunch();
         } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Failed to install update';
+            const message = formatError(err);
             setState(s => ({
                 ...s,
                 downloading: false,

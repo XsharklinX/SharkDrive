@@ -7,13 +7,13 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Ban, CheckCircle as CheckCircleIcon, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, RefreshCw, Settings, Shield, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Ban, BarChart3, CheckCircle as CheckCircleIcon, Clock, Copy, Download, Eye, EyeOff, FolderOpen, FolderSync, History, Keyboard, Link2, LogIn, Monitor, Palette, Plus, RefreshCw, Search, Settings, Shield, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ActivityEntry, BackupFolder, ClassificationRule, CleanupRule, ShareLinkInfo, TelegramFile, TelegramFolder } from '../../types';
 import { CLASSIFICATION_RULES_KEY } from '../../utils';
 import { DEFAULT_SHORTCUTS, SHORTCUT_LABELS, normalizeShortcut, shortcutFromEvent, type KeyboardShortcutMap, type ShortcutAction } from '../../hooks/useKeyboardShortcuts';
-import { tauriApi } from '../../api/tauri';
-import { applyUploadNamingPattern, UPLOAD_NAMING_PATTERN_KEY } from '../../utils';
+import { tauriApi, type CacheStats, type IndexStats, type PerformanceSnapshot } from '../../api/tauri';
+import { applyUploadNamingPattern, formatBytes, UPLOAD_NAMING_PATTERN_KEY } from '../../utils';
 import QRCode from 'qrcode';
 
 interface SettingsModalProps {
@@ -55,6 +55,103 @@ function estimatePasswordStrength(password: string) {
         crackTime: `Estimated offline brute force: ${crackTime}`,
         width: Math.min(100, Math.max(5, bits)),
     };
+}
+
+function EncryptionRecoveryNotice({ lang }: { lang: Lang }) {
+    return (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+            <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+                <div className="space-y-1 text-xs leading-5 text-amber-100/90">
+                    <p className="font-medium text-amber-100">
+                        {lang === 'es' ? 'Recuperación de cifrado' : 'Encryption recovery'}
+                    </p>
+                    <p>
+                        {lang === 'es'
+                            ? 'SharkDrive no guarda ni puede recuperar tu contraseña. Si la pierdes, Telegram conservará los archivos, pero SharkDrive no podrá descifrarlos.'
+                            : 'SharkDrive does not store or recover your password. If you lose it, Telegram will keep the files, but SharkDrive will not be able to decrypt them.'}
+                    </p>
+                    <p>
+                        {lang === 'es'
+                            ? 'Antes de activar cifrado, rotar claves o cifrar archivos existentes, guarda la contraseña en un gestor seguro.'
+                            : 'Before enabling encryption, rotating keys, or encrypting existing files, save the password in a secure password manager.'}
+                    </p>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                        <div className="rounded-lg bg-black/10 px-3 py-2">
+                            <span className="block font-medium">{lang === 'es' ? 'Qué se cifra' : 'What is encrypted'}</span>
+                            <span>{lang === 'es' ? 'El contenido del archivo antes de subirlo.' : 'File contents before upload.'}</span>
+                        </div>
+                        <div className="rounded-lg bg-black/10 px-3 py-2">
+                            <span className="block font-medium">{lang === 'es' ? 'Qué no se recupera' : 'What cannot recover'}</span>
+                            <span>{lang === 'es' ? 'Contraseñas olvidadas o claves antiguas perdidas.' : 'Forgotten passwords or lost old keys.'}</span>
+                        </div>
+                        <div className="rounded-lg bg-black/10 px-3 py-2">
+                            <span className="block font-medium">{lang === 'es' ? 'Rotación segura' : 'Safe rotation'}</span>
+                            <span>{lang === 'es' ? 'Descifra, recifra y reemplaza archivo por archivo.' : 'Decrypts, re-encrypts and replaces file by file.'}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function SecurityPlainLanguageGuide({ lang }: { lang: Lang }) {
+    const items = lang === 'es'
+        ? [
+            ['Archivo cifrado', 'El archivo se protege antes de subirlo. Telegram recibe datos cifrados.'],
+            ['Carpeta auto-cifrada', 'Los nuevos archivos que subas ahí se marcan para cifrado automáticamente.'],
+            ['Auto-lock', 'Si dejas SharkDrive abierto, la clave en memoria se borra tras el tiempo elegido.'],
+            ['PIN de sesión', 'Protege el archivo local de sesión de Telegram; no reemplaza tu contraseña de cifrado.'],
+        ]
+        : [
+            ['Encrypted file', 'The file is protected before upload. Telegram receives encrypted data.'],
+            ['Auto-encrypted folder', 'New files uploaded there are marked for encryption automatically.'],
+            ['Auto-lock', 'If SharkDrive stays open, the in-memory key is cleared after the selected time.'],
+            ['Session PIN', 'Protects the local Telegram session file; it does not replace your encryption password.'],
+        ];
+
+    return (
+        <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+            <p className="text-sm font-medium text-telegram-text">
+                {lang === 'es' ? 'Seguridad en lenguaje simple' : 'Security in plain language'}
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {items.map(([title, description]) => (
+                    <div key={title} className="rounded-lg border border-telegram-border bg-white/[0.025] px-3 py-2">
+                        <p className="text-xs font-medium text-telegram-text">{title}</p>
+                        <p className="mt-1 text-xs leading-5 text-telegram-subtext">{description}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function SecurityBoundaryGuide({ lang }: { lang: Lang }) {
+    const protects = lang === 'es'
+        ? ['Contenido de archivos cifrados antes de subir.', 'Clave de cifrado solo en memoria local.', 'Sesión local de Telegram si activas PIN.', 'Links compartidos con expiración, token y contraseña si la configuras.']
+        : ['Encrypted file contents before upload.', 'Encryption key only in local memory.', 'Local Telegram session when Session PIN is enabled.', 'Share links with expiry, token and password when configured.'];
+    const doesNotProtect = lang === 'es'
+        ? ['Nombres de archivos o carpetas si los dejas visibles.', 'Tu cuenta de Telegram si alguien tiene acceso a ella.', 'Contraseñas perdidas: SharkDrive no puede recuperarlas.', 'Dispositivos infectados o capturas de pantalla mientras el archivo está abierto.']
+        : ['File or folder names if you keep them visible.', 'Your Telegram account if someone has access to it.', 'Lost passwords: SharkDrive cannot recover them.', 'Compromised devices or screenshots while a file is open.'];
+
+    return (
+        <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                <p className="text-sm font-medium text-emerald-200">{lang === 'es' ? 'Qué protege' : 'What it protects'}</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-emerald-100/85">
+                    {protects.map((item) => <li key={item}>- {item}</li>)}
+                </ul>
+            </div>
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+                <p className="text-sm font-medium text-amber-100">{lang === 'es' ? 'Qué no protege' : 'What it does not protect'}</p>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-amber-100/85">
+                    {doesNotProtect.map((item) => <li key={item}>- {item}</li>)}
+                </ul>
+            </div>
+        </div>
+    );
 }
 
 export function SettingsModal({
@@ -123,6 +220,7 @@ export function SettingsModal({
     // v3.9 Settings search
     const [settingsSearch, setSettingsSearch] = useState('');
     const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
+    const [activitySearch, setActivitySearch] = useState('');
     const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction | null>(null);
     const [shareLinks, setShareLinks] = useState<ShareLinkInfo[]>([]);
     const [shareLinksLoading, setShareLinksLoading] = useState(false);
@@ -138,6 +236,28 @@ export function SettingsModal({
     const [auditPassword, setAuditPassword] = useState('');
     const [auditLoading, setAuditLoading] = useState(false);
     const [auditWizardOpen, setAuditWizardOpen] = useState(false);
+    const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
+    const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+    const [performanceSnapshot, setPerformanceSnapshot] = useState<PerformanceSnapshot | null>(null);
+    const [performanceLoading, setPerformanceLoading] = useState(false);
+
+    const refreshPerformanceStats = async () => {
+        setPerformanceLoading(true);
+        try {
+            const [index, cache, perf] = await Promise.all([
+                tauriApi.getIndexStats(),
+                tauriApi.getCacheStats(),
+                tauriApi.getPerformanceSnapshot(),
+            ]);
+            setIndexStats(index);
+            setCacheStats(cache);
+            setPerformanceSnapshot(perf);
+        } catch (error) {
+            toast.error(`${lang === 'es' ? 'No se pudieron cargar metricas' : 'Could not load metrics'}: ${String(error)}`);
+        } finally {
+            setPerformanceLoading(false);
+        }
+    };
 
     useEffect(() => {
         invoke<boolean>('cmd_get_close_to_tray').then(setCloseToTray).catch(() => {});
@@ -158,6 +278,7 @@ export function SettingsModal({
         setOpenAfterDownload(localStorage.getItem(OPEN_AFTER_DOWNLOAD_KEY) === 'true');
         setSecureDelete(localStorage.getItem(SECURE_DELETE_KEY) === 'true');
         setUploadNamingPattern(localStorage.getItem(UPLOAD_NAMING_PATTERN_KEY) || '');
+        void refreshPerformanceStats();
     }, []);
 
     useEffect(() => {
@@ -357,7 +478,31 @@ export function SettingsModal({
         { id: 'shortcuts', label: t('shortcuts'), icon: Keyboard, description: lang === 'es' ? 'Acciones de teclado y comprobación de conflictos' : 'Keyboard actions and conflict checks' },
         { id: 'activity', label: t('activityTab'), icon: History, description: lang === 'es' ? 'Historial local de acciones de la aplicación' : 'Local history of app actions' },
     ];
-    const visibleActivity = activityFilter === 'all' ? activity : activity.filter((entry) => entry.type === activityFilter);
+    const visibleActivity = (activityFilter === 'all' ? activity : activity.filter((entry) => entry.type === activityFilter))
+        .filter((entry) => {
+            const query = activitySearch.trim().toLowerCase();
+            if (!query) return true;
+            return [entry.type, entry.message, entry.fileName ?? ''].some((value) => value.toLowerCase().includes(query));
+        });
+    const recentBackupEvents = activity.filter((entry) => entry.type === 'backup').slice(0, 4);
+    const activeShareLinks = shareLinks.filter((link) => !link.expires_at_epoch_ms || link.expires_at_epoch_ms > Date.now());
+    const expiredShareLinks = shareLinks.filter((link) => link.expires_at_epoch_ms && link.expires_at_epoch_ms <= Date.now());
+    const activityFilterLabel = (filter: ActivityFilter) => {
+        const labels: Record<ActivityFilter, string> = {
+            all: lang === 'es' ? 'Todo' : 'All',
+            upload: lang === 'es' ? 'Subidas' : 'Uploads',
+            download: lang === 'es' ? 'Descargas' : 'Downloads',
+            preview: lang === 'es' ? 'Previews' : 'Previews',
+            share: lang === 'es' ? 'Compartir' : 'Shares',
+            rename: lang === 'es' ? 'Renombrar' : 'Renames',
+            move: lang === 'es' ? 'Mover' : 'Moves',
+            copy: lang === 'es' ? 'Copias' : 'Copies',
+            delete: lang === 'es' ? 'Borrados' : 'Deletes',
+            backup: lang === 'es' ? 'Backup' : 'Backup',
+            security: lang === 'es' ? 'Seguridad' : 'Security',
+        };
+        return labels[filter];
+    };
     const downloadDestinationRows: { key: DownloadDestinationKey; label: string; description: string }[] = [
         { key: 'images', label: lang === 'es' ? 'Imágenes' : 'Images', description: lang === 'es' ? 'Fotos, capturas de pantalla e ilustraciones' : 'Photos, screenshots and artwork' },
         { key: 'videos', label: lang === 'es' ? 'Videos' : 'Videos', description: lang === 'es' ? 'Archivos MP4, WebM, MOV y similares' : 'MP4, WebM, MOV and similar files' },
@@ -497,22 +642,22 @@ export function SettingsModal({
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [files, folders]);
     const formatShareExpiry = (value?: number | null) => {
-        if (!value) return 'Never';
+        if (!value) return lang === 'es' ? 'Nunca' : 'Never';
         const diff = value - Date.now();
-        if (diff <= 0) return 'Expired';
+        if (diff <= 0) return lang === 'es' ? 'Expirado' : 'Expired';
         const minutes = Math.ceil(diff / 60_000);
-        if (minutes < 60) return `${minutes}m`;
+        if (minutes < 60) return lang === 'es' ? `${minutes} min` : `${minutes}m`;
         const hours = Math.ceil(minutes / 60);
-        if (hours < 48) return `${hours}h`;
-        return `${Math.ceil(hours / 24)}d`;
+        if (hours < 48) return lang === 'es' ? `${hours} h` : `${hours}h`;
+        return lang === 'es' ? `${Math.ceil(hours / 24)} d` : `${Math.ceil(hours / 24)}d`;
     };
     const revokeShareLink = async (token: string) => {
         try {
             await tauriApi.revokeShareLink(token);
             setShareLinks((links) => links.filter((link) => link.token !== token));
-            toast.info('Share link revoked');
+            toast.info(lang === 'es' ? 'Enlace revocado' : 'Share link revoked');
         } catch (error) {
-            toast.error(`Failed to revoke link: ${error}`);
+            toast.error(`${lang === 'es' ? 'No se pudo revocar el enlace' : 'Failed to revoke link'}: ${error}`);
         }
     };
     const activityVirtualizer = useVirtualizer({
@@ -728,6 +873,72 @@ export function SettingsModal({
                                 </SectionCard>
 
                                 <SectionCard
+                                    title={lang === 'es' ? 'Rendimiento' : 'Performance'}
+                                    icon={<BarChart3 className="w-4 h-4" />}
+                                    description={lang === 'es' ? 'Index local, cache y operaciones recientes.' : 'Local index, cache and recent operations.'}
+                                >
+                                    <div className="grid gap-3 md:grid-cols-3">
+                                        <MetricCard
+                                            label={lang === 'es' ? 'Archivos indexados' : 'Indexed files'}
+                                            value={indexStats ? indexStats.indexed_file_count.toLocaleString() : '-'}
+                                            detail={indexStats ? formatBytes(indexStats.total_indexed_bytes) : ''}
+                                        />
+                                        <MetricCard
+                                            label={lang === 'es' ? 'Carpetas' : 'Folders'}
+                                            value={indexStats ? indexStats.folder_count.toLocaleString() : '-'}
+                                            detail={indexStats ? `${indexStats.indexed_folder_count} ${lang === 'es' ? 'con cache' : 'cached'}` : ''}
+                                        />
+                                        <MetricCard
+                                            label={lang === 'es' ? 'Cache media' : 'Media cache'}
+                                            value={cacheStats ? formatBytes(cacheStats.preview_bytes + cacheStats.thumbnail_bytes + cacheStats.book_card_bytes) : '-'}
+                                            detail={cacheStats ? `${cacheStats.thumbnail_files} thumbnails` : ''}
+                                        />
+                                    </div>
+
+                                    <div className="rounded-xl border border-telegram-border bg-black/10 p-3">
+                                        <div className="mb-2 flex items-center justify-between gap-3">
+                                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-telegram-subtext">
+                                                {lang === 'es' ? 'Operaciones recientes' : 'Recent operations'}
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => void refreshPerformanceStats()}
+                                                    className="rounded-lg border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-subtext transition hover:text-telegram-text"
+                                                    disabled={performanceLoading}
+                                                >
+                                                    {performanceLoading ? (lang === 'es' ? 'Cargando...' : 'Loading...') : t('sync')}
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        await tauriApi.clearPerformanceMetrics();
+                                                        await refreshPerformanceStats();
+                                                    }}
+                                                    className="rounded-lg border border-telegram-border px-2.5 py-1.5 text-xs text-telegram-subtext transition hover:text-telegram-text"
+                                                >
+                                                    {t('clear')}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {performanceSnapshot?.summary.length ? (
+                                            <div className="space-y-1">
+                                                {performanceSnapshot.summary.slice(0, 6).map((item) => (
+                                                    <div key={item.name} className="grid grid-cols-[minmax(0,1fr)_5rem_5rem_4rem] items-center gap-2 rounded-lg bg-white/[0.025] px-3 py-2 text-xs">
+                                                        <span className="truncate text-telegram-text">{item.name}</span>
+                                                        <span className="text-right text-telegram-subtext">{item.avg_ms} ms</span>
+                                                        <span className="text-right text-telegram-subtext">max {item.max_ms}</span>
+                                                        <span className={item.failures > 0 ? 'text-right text-red-300' : 'text-right text-telegram-subtext'}>{item.count}x</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-telegram-subtext">
+                                                {lang === 'es' ? 'Aun no hay metricas. Usa sync, busqueda o preview y vuelve a refrescar.' : 'No metrics yet. Use sync, search or preview and refresh again.'}
+                                            </p>
+                                        )}
+                                    </div>
+                                </SectionCard>
+
+                                <SectionCard
                                     title={t('desktopBehavior')}
                                     icon={<Monitor className="w-4 h-4" />}
                                     description={t('desktopBehaviorDesc')}
@@ -860,8 +1071,10 @@ export function SettingsModal({
                                 icon={<Shield className="w-4 h-4" />}
                                 description={t('localEncryptionDesc')}
                             >
+                                <SecurityPlainLanguageGuide lang={lang} />
                                 {encryptionEnabled ? (
                                     <div className="space-y-4">
+                                        <EncryptionRecoveryNotice lang={lang} />
                                         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
                                             <div className="flex items-center gap-2 text-sm font-medium text-emerald-300">
                                                 <Shield className="w-4 h-4" />
@@ -894,9 +1107,19 @@ export function SettingsModal({
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
                                             <div className="flex items-center justify-between gap-3">
                                                 <div>
-                                                    <p className="text-sm font-medium text-telegram-text">{t('rotateKey')}</p>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <p className="text-sm font-medium text-telegram-text">{t('rotateKey')}</p>
+                                                        <span className="rounded-md border border-amber-400/20 bg-amber-400/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                                                            {lang === 'es' ? 'Avanzado' : 'Advanced'}
+                                                        </span>
+                                                    </div>
                                                     <p className="mt-1 text-xs leading-5 text-telegram-subtext">
                                                         {t('rotateKeyDesc')}
+                                                    </p>
+                                                    <p className="mt-1 text-xs leading-5 text-amber-200/80">
+                                                        {lang === 'es'
+                                                            ? 'Úsalo solo si conoces la clave anterior y has guardado la nueva. Es una operación archivo por archivo.'
+                                                            : 'Use only if you know the old key and have saved the new one. This is a file-by-file operation.'}
                                                     </p>
                                                 </div>
                                                 {!rotationWizardOpen && (
@@ -914,29 +1137,35 @@ export function SettingsModal({
                                             </div>
                                             {rotationWizardOpen && (
                                                 <div className="mt-4 rounded-xl border border-telegram-border bg-white/[0.02] p-3">
-                                                    <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">Step {rotationStep} of 3</p>
+                                                    <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">
+                                                        {lang === 'es' ? `Paso ${rotationStep} de 3` : `Step ${rotationStep} of 3`}
+                                                    </p>
                                                     {rotationStep === 1 && (
                                                         <div className="mt-2">
-                                                            <p className="text-xs text-telegram-subtext">Enter the current password to decrypt indexed encrypted files.</p>
+                                                            <p className="text-xs text-telegram-subtext">
+                                                                {lang === 'es' ? 'Introduce la contraseña actual para descifrar los archivos cifrados del índice.' : 'Enter the current password to decrypt indexed encrypted files.'}
+                                                            </p>
                                                             <input
                                                                 autoFocus
                                                                 type="password"
                                                                 value={rotationOldPassword}
                                                                 onChange={(event) => setRotationOldPassword(event.target.value)}
-                                                                placeholder="Current password"
+                                                                placeholder={lang === 'es' ? 'Contraseña actual' : 'Current password'}
                                                                 className="mt-3 w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
                                                             />
                                                         </div>
                                                     )}
                                                     {rotationStep === 2 && (
                                                         <div className="mt-2">
-                                                            <p className="text-xs text-telegram-subtext">Choose the new local encryption password.</p>
+                                                            <p className="text-xs text-telegram-subtext">
+                                                                {lang === 'es' ? 'Elige la nueva contraseña local de cifrado.' : 'Choose the new local encryption password.'}
+                                                            </p>
                                                             <input
                                                                 autoFocus
                                                                 type="password"
                                                                 value={rotationNewPassword}
                                                                 onChange={(event) => setRotationNewPassword(event.target.value)}
-                                                                placeholder="New password"
+                                                                placeholder={lang === 'es' ? 'Nueva contraseña' : 'New password'}
                                                                 className="mt-3 w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-sm text-telegram-text outline-none focus:border-telegram-primary/70"
                                                             />
                                                             {rotationNewPassword && (
@@ -949,10 +1178,10 @@ export function SettingsModal({
                                                     {rotationStep === 3 && (
                                                         <div className="mt-2">
                                                             <p className="text-xs text-telegram-subtext">
-                                                                Downloading, decrypting, re-encrypting and uploading replacements sequentially.
+                                                                {lang === 'es' ? 'Descargando, descifrando, recifrando y subiendo reemplazos de forma secuencial.' : 'Downloading, decrypting, re-encrypting and uploading replacements sequentially.'}
                                                             </p>
                                                             <p className="mt-3 truncate text-xs font-medium text-telegram-primary">
-                                                                {rotationProgress || `0/${encryptedCount}: preparing`}
+                                                                {rotationProgress || `0/${encryptedCount}: ${lang === 'es' ? 'preparando' : 'preparing'}`}
                                                             </p>
                                                         </div>
                                                     )}
@@ -971,7 +1200,7 @@ export function SettingsModal({
                                                                 }}
                                                                 className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-subtext transition hover:text-telegram-text"
                                                             >
-                                                                {rotationStep === 1 ? 'Cancel' : 'Back'}
+                                                                {rotationStep === 1 ? (lang === 'es' ? 'Cancelar' : 'Cancel') : (lang === 'es' ? 'Atrás' : 'Back')}
                                                             </button>
                                                         )}
                                                         {rotationStep === 1 && (
@@ -980,7 +1209,7 @@ export function SettingsModal({
                                                                 disabled={!rotationOldPassword}
                                                                 className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90 disabled:opacity-50"
                                                             >
-                                                                Continue
+                                                                {lang === 'es' ? 'Continuar' : 'Continue'}
                                                             </button>
                                                         )}
                                                         {rotationStep === 2 && (
@@ -989,7 +1218,7 @@ export function SettingsModal({
                                                                 disabled={rotationNewPassword.length < 8 || rotationNewPassword === rotationOldPassword}
                                                                 className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90 disabled:opacity-50"
                                                             >
-                                                                Start rotation
+                                                                {lang === 'es' ? 'Iniciar rotación' : 'Start rotation'}
                                                             </button>
                                                         )}
                                                     </div>
@@ -999,16 +1228,22 @@ export function SettingsModal({
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
                                             <div className="flex items-center justify-between gap-3">
                                                 <div>
-                                                    <p className="text-sm font-medium text-telegram-text">Encryption audit</p>
-                                                    <p className="mt-1 text-xs text-telegram-subtext">{encryptedCount} encrypted / {plainFiles.length} plain files indexed locally.</p>
+                                                    <p className="text-sm font-medium text-telegram-text">{lang === 'es' ? 'Auditoría de cifrado' : 'Encryption audit'}</p>
+                                                    <p className="mt-1 text-xs text-telegram-subtext">
+                                                        {lang === 'es'
+                                                            ? `${encryptedCount} cifrados / ${plainFiles.length} sin cifrar en el índice local.`
+                                                            : `${encryptedCount} encrypted / ${plainFiles.length} plain files indexed locally.`}
+                                                    </p>
                                                 </div>
-                                                <span className="rounded-md bg-telegram-primary/10 px-2 py-1 text-xs text-telegram-primary">{files.length} total</span>
+                                                <span className="rounded-md bg-telegram-primary/10 px-2 py-1 text-xs text-telegram-primary">{files.length} {lang === 'es' ? 'total' : 'total'}</span>
                                             </div>
                                             <div className="mt-3 max-h-36 space-y-1 overflow-y-auto">
                                                 {folderAuditRows.map((row) => (
                                                     <div key={row.id ?? 'home'} className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.025] px-3 py-2 text-xs">
                                                         <span className="truncate text-telegram-text">{row.name}</span>
-                                                        <span className="shrink-0 text-telegram-subtext">{row.encrypted} encrypted / {row.plain} plain</span>
+                                                        <span className="shrink-0 text-telegram-subtext">
+                                                            {lang === 'es' ? `${row.encrypted} cifrados / ${row.plain} planos` : `${row.encrypted} encrypted / ${row.plain} plain`}
+                                                        </span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -1019,18 +1254,20 @@ export function SettingsModal({
                                                             onClick={() => setAuditWizardOpen(true)}
                                                             className="rounded-lg border border-telegram-primary/25 bg-telegram-primary/10 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/16"
                                                         >
-                                                            Encrypt all plain files
+                                                            {lang === 'es' ? 'Cifrar archivos planos' : 'Encrypt all plain files'}
                                                         </button>
                                                     ) : (
                                                         <div className="rounded-xl border border-telegram-border bg-white/[0.02] p-3">
                                                             <p className="text-xs leading-5 text-telegram-subtext">
-                                                                Encrypt {plainFiles.length} indexed plain file{plainFiles.length === 1 ? '' : 's'} sequentially. Originals remain until replacements upload successfully.
+                                                                {lang === 'es'
+                                                                    ? `Cifra ${plainFiles.length} archivo${plainFiles.length === 1 ? '' : 's'} sin cifrar del índice, uno por uno. Los originales se mantienen hasta que el reemplazo suba correctamente.`
+                                                                    : `Encrypt ${plainFiles.length} indexed plain file${plainFiles.length === 1 ? '' : 's'} sequentially. Originals remain until replacements upload successfully.`}
                                                             </p>
                                                             <input
                                                                 type="password"
                                                                 value={auditPassword}
                                                                 onChange={(event) => setAuditPassword(event.target.value)}
-                                                                placeholder="Encryption password"
+                                                                placeholder={lang === 'es' ? 'Contraseña de cifrado' : 'Encryption password'}
                                                                 className="mt-3 w-full rounded-lg border border-telegram-border bg-white/[0.03] px-3 py-2 text-xs text-telegram-text outline-none focus:border-telegram-primary/70"
                                                             />
                                                             {auditLoading && <p className="mt-2 truncate text-xs text-telegram-primary">{rotationProgress}</p>}
@@ -1041,9 +1278,9 @@ export function SettingsModal({
                                                                             setAuditPassword('');
                                                                             setAuditWizardOpen(false);
                                                                         }}
-                                                                        className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-subtext transition hover:text-telegram-text"
-                                                                    >
-                                                                        Cancel
+                                                                    className="rounded-lg border border-telegram-border px-3 py-2 text-xs font-medium text-telegram-subtext transition hover:text-telegram-text"
+                                                                >
+                                                                        {lang === 'es' ? 'Cancelar' : 'Cancel'}
                                                                     </button>
                                                                 )}
                                                                 <button
@@ -1051,7 +1288,7 @@ export function SettingsModal({
                                                                     disabled={auditLoading || auditPassword.length < 8}
                                                                     className="rounded-lg bg-telegram-primary px-3 py-2 text-xs font-medium text-black transition hover:opacity-90 disabled:opacity-50"
                                                                 >
-                                                                    {auditLoading ? 'Encrypting...' : 'Encrypt files'}
+                                                                    {auditLoading ? (lang === 'es' ? 'Cifrando...' : 'Encrypting...') : (lang === 'es' ? 'Cifrar archivos' : 'Encrypt files')}
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -1060,9 +1297,11 @@ export function SettingsModal({
                                             )}
                                         </div>
                                         <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                            <label className="mb-2 block text-xs font-medium text-telegram-text">Protected Telegram session PIN</label>
+                                            <label className="mb-2 block text-xs font-medium text-telegram-text">{lang === 'es' ? 'PIN de sesión protegida de Telegram' : 'Protected Telegram session PIN'}</label>
                                             <p className="mb-3 text-xs text-telegram-subtext">
-                                                Encrypts the saved Telegram session file with a 6-digit PIN. If enabled, SharkDrive asks for it before auto-login.
+                                                {lang === 'es'
+                                                    ? 'Cifra la sesión guardada de Telegram con un PIN de 6 dígitos. Si está activo, SharkDrive lo pedirá antes del inicio automático.'
+                                                    : 'Encrypts the saved Telegram session file with a 6-digit PIN. If enabled, SharkDrive asks for it before auto-login.'}
                                             </p>
                                             <input
                                                 inputMode="numeric"
@@ -1078,7 +1317,7 @@ export function SettingsModal({
                                                     disabled={sessionPin.length !== 6}
                                                     className="flex-1 rounded-lg bg-telegram-primary/12 px-3 py-2 text-xs font-medium text-telegram-primary transition hover:bg-telegram-primary/18 disabled:opacity-50"
                                                 >
-                                                    {sessionProtected ? 'Update PIN' : 'Protect Session'}
+                                                    {sessionProtected ? (lang === 'es' ? 'Actualizar PIN' : 'Update PIN') : (lang === 'es' ? 'Proteger sesión' : 'Protect Session')}
                                                 </button>
                                                 {sessionProtected && (
                                                     <button
@@ -1086,7 +1325,7 @@ export function SettingsModal({
                                                         disabled={sessionPin.length !== 6}
                                                         className="flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/18 disabled:opacity-50"
                                                     >
-                                                        Remove PIN
+                                                        {lang === 'es' ? 'Quitar PIN' : 'Remove PIN'}
                                                     </button>
                                                 )}
                                             </div>
@@ -1094,18 +1333,18 @@ export function SettingsModal({
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-100/90">
-                                            If an encrypted file fails to open later, load the same password here and retry preview or download.
-                                        </div>
+                                        <EncryptionRecoveryNotice lang={lang} />
                                         <div>
-                                            <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-telegram-subtext">Encryption Password</label>
+                                            <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-telegram-subtext">
+                                                {lang === 'es' ? 'Contraseña de cifrado' : 'Encryption Password'}
+                                            </label>
                                             <div className="relative">
                                                 <input
                                                     type={showPass ? 'text' : 'password'}
                                                     value={password}
                                                     onChange={(e) => setPassword(e.target.value)}
                                                     onKeyDown={(e) => e.key === 'Enter' && handleSetEncryption()}
-                                                    placeholder="Enter a strong password..."
+                                                    placeholder={lang === 'es' ? 'Introduce una contraseña fuerte...' : 'Enter a strong password...'}
                                                     className={`w-full rounded-xl border bg-white/[0.03] px-4 py-3 pr-11 text-sm text-telegram-text focus:outline-none transition ${
                                                         password.length > 0 && password.length < 8
                                                             ? 'border-red-500/60 focus:border-red-500/80'
@@ -1120,7 +1359,11 @@ export function SettingsModal({
                                                 </button>
                                             </div>
                                             {password.length > 0 && password.length < 8 && (
-                                                <p className="mt-1.5 text-xs text-red-400">{8 - password.length} more character{8 - password.length !== 1 ? 's' : ''} needed</p>
+                                                <p className="mt-1.5 text-xs text-red-400">
+                                                    {lang === 'es'
+                                                        ? `Faltan ${8 - password.length} caracter${8 - password.length !== 1 ? 'es' : ''}`
+                                                        : `${8 - password.length} more character${8 - password.length !== 1 ? 's' : ''} needed`}
+                                                </p>
                                             )}
                                             {password.length > 0 && (
                                                 <div className="mt-3">
@@ -1136,20 +1379,27 @@ export function SettingsModal({
                                             disabled={loading || !password.trim()}
                                             className="rounded-xl bg-telegram-primary px-4 py-3 text-sm font-medium text-black transition hover:opacity-90 disabled:opacity-50"
                                         >
-                                            {loading ? 'Setting up...' : 'Enable Encryption'}
+                                            {loading ? (lang === 'es' ? 'Configurando...' : 'Setting up...') : (lang === 'es' ? 'Activar cifrado' : 'Enable Encryption')}
                                         </button>
                                     </div>
                                 )}
                             </SectionCard>
                             <SectionCard
-                                title="Secure Delete"
+                                title={lang === 'es' ? 'Límites de protección' : 'Protection limits'}
+                                icon={<AlertTriangle className="w-4 h-4" />}
+                                description={lang === 'es' ? 'Documentación honesta dentro de la app: qué cubre SharkDrive y qué no.' : 'Honest in-app documentation: what SharkDrive covers and what it does not.'}
+                            >
+                                <SecurityBoundaryGuide lang={lang} />
+                            </SectionCard>
+                            <SectionCard
+                                title={lang === 'es' ? 'Borrado seguro' : 'Secure Delete'}
                                 icon={<Trash2 className="w-4 h-4" />}
-                                description="Reduce recoverable metadata when deleting remote files."
+                                description={lang === 'es' ? 'Reduce metadatos recuperables al borrar archivos remotos.' : 'Reduce recoverable metadata when deleting remote files.'}
                             >
                                 <ToggleRow
                                     icon={<Trash2 className="w-3.5 h-3.5" />}
-                                    title="Rewrite caption before deletion"
-                                    description="Replace the Telegram caption with [SD-DELETED-timestamp] before deleting the message. Telegram still controls server retention."
+                                    title={lang === 'es' ? 'Reescribir caption antes de borrar' : 'Rewrite caption before deletion'}
+                                    description={lang === 'es' ? 'Reemplaza el caption de Telegram por [SD-DELETED-timestamp] antes de borrar el mensaje. Telegram sigue controlando la retención del servidor.' : 'Replace the Telegram caption with [SD-DELETED-timestamp] before deleting the message. Telegram still controls server retention.'}
                                     checked={secureDelete}
                                     onChange={setSecureDeleteSetting}
                                 />
@@ -1167,23 +1417,29 @@ export function SettingsModal({
                         {tab === 'backup' && (
                             <>
                             <SectionCard
-                                title="Watched Folders"
+                                title={lang === 'es' ? 'Carpetas vigiladas' : 'Watched Folders'}
                                 icon={<FolderSync className="w-4 h-4" />}
-                                description="Auto-upload new and changed files. Duplicate events are ignored automatically."
+                                description={lang === 'es' ? 'Sube automáticamente archivos nuevos o modificados. Los duplicados se ignoran.' : 'Auto-upload new and changed files. Duplicate events are ignored automatically.'}
                             >
                                 <div className="grid gap-3 sm:grid-cols-3">
                                     <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                        <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">Watching</p>
+                                        <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">{lang === 'es' ? 'Vigilando' : 'Watching'}</p>
                                         <p className="mt-1 text-lg font-semibold text-telegram-text">{backupFolders.length}</p>
                                     </div>
                                     <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                        <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">Enabled</p>
+                                        <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">{lang === 'es' ? 'Activas' : 'Enabled'}</p>
                                         <p className="mt-1 text-lg font-semibold text-telegram-text">{backupFolders.filter((folder) => folder.enabled).length}</p>
                                     </div>
                                     <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
-                                        <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">Default</p>
+                                        <p className="text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">{lang === 'es' ? 'Destino base' : 'Default'}</p>
                                         <p className="mt-1 truncate text-sm font-semibold text-telegram-text">Saved Messages</p>
                                     </div>
+                                </div>
+
+                                <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3 text-xs leading-5 text-telegram-subtext">
+                                    {lang === 'es'
+                                        ? 'SharkDrive observa cambios locales y los manda a la cola de subida. Si el remoto también cambió, se muestra un diálogo de conflicto antes de sobrescribir.'
+                                        : 'SharkDrive watches local changes and sends them to the upload queue. If the remote changed too, a conflict dialog appears before overwriting.'}
                                 </div>
 
                                 <button
@@ -1191,11 +1447,13 @@ export function SettingsModal({
                                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-telegram-primary/25 bg-telegram-primary/10 py-3 text-sm font-medium text-telegram-primary transition hover:bg-telegram-primary/16"
                                 >
                                     <Plus className="w-4 h-4" />
-                                    Add Folder to Watch
+                                    {lang === 'es' ? 'Añadir carpeta local' : 'Add Folder to Watch'}
                                 </button>
 
                                 {backupFolders.length === 0 ? (
-                                    <p className="py-4 text-center text-xs text-telegram-subtext">No folders being watched yet.</p>
+                                    <p className="py-4 text-center text-xs text-telegram-subtext">
+                                        {lang === 'es' ? 'Aún no hay carpetas vigiladas.' : 'No folders being watched yet.'}
+                                    </p>
                                 ) : (
                                     <div className="space-y-3">
                                         {backupFolders.map((folder) => (
@@ -1203,8 +1461,13 @@ export function SettingsModal({
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-medium text-telegram-text">{folder.local_path}</p>
-                                                        <p className="mt-1 text-xs text-telegram-subtext">New and modified files will be queued automatically.</p>
+                                                        <p className="mt-1 text-xs text-telegram-subtext">
+                                                            {lang === 'es' ? 'Los archivos nuevos y modificados se enviarán a la cola automáticamente.' : 'New and modified files will be queued automatically.'}
+                                                        </p>
                                                     </div>
+                                                    <span className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-medium ${folder.enabled ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/[0.04] text-telegram-subtext'}`}>
+                                                        {folder.enabled ? (lang === 'es' ? 'Activa' : 'Active') : (lang === 'es' ? 'Pausada' : 'Paused')}
+                                                    </span>
                                                     <button
                                                         onClick={() => handleRemoveBackupFolder(folder.local_path)}
                                                         className="rounded-xl p-2 text-telegram-subtext transition hover:bg-red-500/10 hover:text-red-400"
@@ -1214,7 +1477,7 @@ export function SettingsModal({
                                                 </div>
 
                                                 <div className="mt-4">
-                                                    <label className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-telegram-subtext">Destination</label>
+                                                    <label className="mb-2 block text-[10px] uppercase tracking-[0.2em] text-telegram-subtext">{lang === 'es' ? 'Destino remoto' : 'Destination'}</label>
                                                     <select
                                                         value={folder.remote_folder_id ?? ''}
                                                         onChange={(event) => handleBackupDestinationChange(folder.local_path, event.target.value === '' ? null : Number(event.target.value))}
@@ -1228,6 +1491,21 @@ export function SettingsModal({
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+                                {recentBackupEvents.length > 0 && (
+                                    <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                        <p className="mb-2 text-[10px] uppercase tracking-[0.18em] text-telegram-subtext">
+                                            {lang === 'es' ? 'Últimos eventos de backup' : 'Recent backup events'}
+                                        </p>
+                                        <div className="space-y-1">
+                                            {recentBackupEvents.map((entry) => (
+                                                <div key={entry.id} className="flex items-center justify-between gap-3 text-xs">
+                                                    <span className="truncate text-telegram-text">{entry.message}</span>
+                                                    <span className="shrink-0 text-telegram-subtext">{new Date(entry.timestamp).toLocaleTimeString()}</span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                             </SectionCard>
@@ -1471,18 +1749,23 @@ export function SettingsModal({
 
                         {tab === 'sharing' && (
                             <SectionCard
-                                title="Active Share Links"
+                                title={lang === 'es' ? 'Enlaces compartidos' : 'Active Share Links'}
                                 icon={<Link2 className="w-4 h-4" />}
-                                description="Local expiring links currently available while SharkDrive is running."
+                                description={lang === 'es' ? 'Links LAN persistentes con expiración, contraseña y conteo de descargas.' : 'Durable LAN links with expiry, password and download counts.'}
                             >
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <MetricCard label={lang === 'es' ? 'Activos' : 'Active'} value={activeShareLinks.length.toLocaleString()} detail={lang === 'es' ? 'disponibles ahora' : 'available now'} />
+                                    <MetricCard label={lang === 'es' ? 'Expirados' : 'Expired'} value={expiredShareLinks.length.toLocaleString()} detail={lang === 'es' ? 'revocables' : 'revocable'} />
+                                    <MetricCard label={lang === 'es' ? 'Descargas' : 'Downloads'} value={shareLinks.reduce((sum, link) => sum + link.download_count, 0).toLocaleString()} detail={lang === 'es' ? 'totales' : 'total'} />
+                                </div>
                                 {shareLinksLoading ? (
-                                    <p className="py-4 text-center text-sm text-telegram-subtext">Loading links...</p>
+                                    <p className="py-4 text-center text-sm text-telegram-subtext">{lang === 'es' ? 'Cargando enlaces...' : 'Loading links...'}</p>
                                 ) : shareLinks.length === 0 ? (
-                                    <p className="py-4 text-center text-sm text-telegram-subtext">No active share links.</p>
+                                    <p className="py-4 text-center text-sm text-telegram-subtext">{lang === 'es' ? 'No hay enlaces compartidos.' : 'No active share links.'}</p>
                                 ) : (
                                     <div className="space-y-2">
                                         {shareLinks.map((link) => (
-                                            <div key={link.token} className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+                                            <div key={link.token} className={`rounded-xl border px-4 py-3 ${link.expires_at_epoch_ms && link.expires_at_epoch_ms <= Date.now() ? 'border-white/[0.04] bg-black/5 opacity-60' : 'border-telegram-border bg-black/10'}`}>
                                                 <div className="flex items-start justify-between gap-3">
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-medium text-telegram-text">{link.filename}</p>
@@ -1490,29 +1773,44 @@ export function SettingsModal({
                                                     </div>
                                                     <div className="flex shrink-0 items-center gap-1">
                                                         <button
-                                                            onClick={() => navigator.clipboard.writeText(link.url).then(() => toast.success('Copied'))}
+                                                            onClick={() => navigator.clipboard.writeText(link.url).then(() => toast.success(lang === 'es' ? 'Copiado' : 'Copied'))}
                                                             className="rounded-lg p-2 text-telegram-subtext transition hover:bg-white/[0.05] hover:text-telegram-text"
-                                                            title="Copy link"
+                                                            title={lang === 'es' ? 'Copiar enlace' : 'Copy link'}
                                                         >
                                                             <Copy className="h-4 w-4" />
                                                         </button>
                                                         <button
                                                             onClick={() => revokeShareLink(link.token)}
                                                             className="rounded-lg p-2 text-red-300 transition hover:bg-red-500/10"
-                                                            title="Revoke link"
+                                                            title={lang === 'es' ? 'Revocar enlace' : 'Revoke link'}
                                                         >
                                                             <Ban className="h-4 w-4" />
                                                         </button>
                                                     </div>
                                                 </div>
                                                 <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-telegram-subtext">
-                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">Expires: {formatShareExpiry(link.expires_at_epoch_ms)}</span>
-                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">Downloads: {link.download_count}</span>
+                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">{lang === 'es' ? 'Expira' : 'Expires'}: {formatShareExpiry(link.expires_at_epoch_ms)}</span>
+                                                    <span className="rounded-md bg-white/[0.04] px-2 py-1">{lang === 'es' ? 'Descargas' : 'Downloads'}: {link.download_count}{link.max_downloads ? ` / ${link.max_downloads}` : ''}</span>
+                                                    {link.is_password_protected && (
+                                                        <span className="rounded-md bg-yellow-400/10 px-2 py-1 text-yellow-300">{lang === 'es' ? 'Con contraseña' : 'Password protected'}</span>
+                                                    )}
                                                     <span className="rounded-md bg-white/[0.04] px-2 py-1">Token: {link.token.slice(0, 8)}...</span>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
+                                )}
+                                {expiredShareLinks.length > 0 && (
+                                    <button
+                                        onClick={async () => {
+                                            await Promise.all(expiredShareLinks.map((link) => tauriApi.revokeShareLink(link.token)));
+                                            setShareLinks((links) => links.filter((link) => !expiredShareLinks.some((expired) => expired.token === link.token)));
+                                            toast.info(lang === 'es' ? 'Enlaces expirados revocados' : 'Expired links revoked');
+                                        }}
+                                        className="self-start rounded-lg border border-red-500/20 px-3 py-2 text-xs text-red-300 transition hover:bg-red-500/10"
+                                    >
+                                        {lang === 'es' ? 'Revocar expirados' : 'Revoke expired'}
+                                    </button>
                                 )}
                             </SectionCard>
                         )}
@@ -1574,10 +1872,26 @@ export function SettingsModal({
 
                         {tab === 'activity' && (
                             <SectionCard
-                                title="Local Activity"
+                                title={lang === 'es' ? 'Actividad local' : 'Local Activity'}
                                 icon={<History className="w-4 h-4" />}
-                                description="Uploads, downloads, previews, shares, backups and encryption prompts."
+                                description={lang === 'es' ? 'Subidas, descargas, previews, shares, backups y eventos de seguridad.' : 'Uploads, downloads, previews, shares, backups and security events.'}
                             >
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <MetricCard label={lang === 'es' ? 'Eventos' : 'Events'} value={activity.length.toLocaleString()} detail={lang === 'es' ? 'historial local' : 'local history'} />
+                                    <MetricCard label={lang === 'es' ? 'Backups' : 'Backups'} value={activity.filter((entry) => entry.type === 'backup').length.toLocaleString()} detail={lang === 'es' ? 'automáticos' : 'automatic'} />
+                                    <MetricCard label={lang === 'es' ? 'Seguridad' : 'Security'} value={activity.filter((entry) => entry.type === 'security').length.toLocaleString()} detail={lang === 'es' ? 'cifrado/sesión' : 'encryption/session'} />
+                                </div>
+
+                                <div className="relative">
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-telegram-subtext" />
+                                    <input
+                                        value={activitySearch}
+                                        onChange={(event) => setActivitySearch(event.target.value)}
+                                        placeholder={lang === 'es' ? 'Buscar en actividad...' : 'Search activity...'}
+                                        className="w-full rounded-xl border border-telegram-border bg-white/[0.03] py-2.5 pl-10 pr-3 text-sm text-telegram-text outline-none transition focus:border-telegram-primary/70"
+                                    />
+                                </div>
+
                                 <div className="flex flex-wrap gap-1.5">
                                     {activityFilters.map((filter) => (
                                         <button
@@ -1589,7 +1903,7 @@ export function SettingsModal({
                                                     : 'text-telegram-subtext hover:bg-white/[0.04] hover:text-telegram-text'
                                             }`}
                                         >
-                                            {filter}
+                                            {activityFilterLabel(filter)}
                                         </button>
                                     ))}
                                 </div>
@@ -1613,7 +1927,11 @@ export function SettingsModal({
                                 )}
 
                                 {visibleActivity.length === 0 ? (
-                                    <p className="py-4 text-center text-xs text-telegram-subtext">No activity recorded yet.</p>
+                                    <p className="py-4 text-center text-xs text-telegram-subtext">
+                                        {activitySearch
+                                            ? (lang === 'es' ? 'No hay eventos que coincidan con la búsqueda.' : 'No events match your search.')
+                                            : (lang === 'es' ? 'Aún no hay actividad registrada.' : 'No activity recorded yet.')}
+                                    </p>
                                 ) : (
                                     <div
                                         ref={activityListRef}
@@ -1636,7 +1954,7 @@ export function SettingsModal({
                                                         className={`px-4 py-3${virtualItem.index < visibleActivity.length - 1 ? ' border-b border-telegram-border' : ''}`}
                                                     >
                                                         <div className="grid grid-cols-[6rem_minmax(0,1fr)_9rem] items-start gap-3">
-                                                            <span className="rounded-md bg-white/[0.04] px-2 py-1 text-center text-[11px] capitalize text-telegram-subtext">{entry.type}</span>
+                                                            <span className="rounded-md bg-white/[0.04] px-2 py-1 text-center text-[11px] text-telegram-subtext">{activityFilterLabel(entry.type)}</span>
                                                             <div className="min-w-0">
                                                                 <p className="truncate text-sm font-medium text-telegram-text">{entry.message}</p>
                                                                 {entry.fileName && <p className="mt-1 truncate text-xs text-telegram-subtext">{entry.fileName}</p>}
@@ -1887,6 +2205,16 @@ function SectionCard({
             </div>
             <div className="space-y-4">{children}</div>
         </section>
+    );
+}
+
+function MetricCard({ label, value, detail }: { label: string; value: string; detail?: string }) {
+    return (
+        <div className="rounded-xl border border-telegram-border bg-black/10 px-4 py-3">
+            <p className="text-xs text-telegram-subtext">{label}</p>
+            <p className="mt-1 text-lg font-semibold text-telegram-text">{value}</p>
+            {detail && <p className="mt-1 truncate text-xs text-telegram-subtext">{detail}</p>}
+        </div>
     );
 }
 

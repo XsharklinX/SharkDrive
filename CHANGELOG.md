@@ -35,6 +35,8 @@ All notable changes to SharkDrive are documented here.
 - `Dashboard.tsx` — 1,872 → 1,616 líneas (-14%), sin lazy imports de modales
 - `App.css` — 16 nuevos design tokens (shadows, transitions, colors), elevation system, danger patterns
 - `WipeConfirmModal.tsx` — migrado a design tokens (`elevation-3`, `sd-danger-banner`, `sd-danger-button`)
+- `scripts/release.ps1` — flujo reproducible de release: sincroniza versiones, valida TypeScript, compila frontend, compila Tauri y lista artefactos.
+- `Docs/RELEASE.md` / `Docs/RELEASE_NOTES_v4.1.0.md` — checklist de QA, updater signing, artefactos esperados y notas listas para GitHub.
 - VERSION → 4.1.0
 
 ---

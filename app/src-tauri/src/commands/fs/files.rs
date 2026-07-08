@@ -6,8 +6,9 @@ use crate::commands::fs::caption::{
     build_caption, display_name_from_metadata, parse_caption_metadata,
 };
 use crate::commands::utils::{is_retryable_error, map_error, resolve_peer};
-use crate::index_store::PersistentIndexState;
+use crate::index_store::{PersistentIndexState, PersistentIndexStats};
 use crate::models::FileMetadata;
+use crate::performance::PerformanceMetrics;
 use crate::TelegramState;
 
 #[derive(Default)]
@@ -385,7 +386,9 @@ pub async fn cmd_get_files(
     folder_id: Option<i64>,
     state: State<'_, TelegramState>,
     index_state: State<'_, PersistentIndexState>,
+    metrics: State<'_, PerformanceMetrics>,
 ) -> Result<Vec<FileMetadata>, String> {
+    let started = std::time::Instant::now();
     let client_opt = { state.client.lock().await.clone() };
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
 
@@ -430,8 +433,24 @@ pub async fn cmd_get_files(
             continue;
         }
         index_state.set_files(folder_id, files.clone());
+        metrics.record(
+            "fs.get_files",
+            started.elapsed().as_millis(),
+            true,
+            Some(files.len()),
+            Some(files.iter().map(|file| file.size).sum()),
+            Some("telegram_full"),
+        );
         return Ok(files);
     }
+    metrics.record(
+        "fs.get_files",
+        started.elapsed().as_millis(),
+        false,
+        None,
+        None,
+        Some("telegram_full"),
+    );
     Err(last_err)
 }
 
@@ -452,7 +471,9 @@ pub async fn cmd_get_files_paged(
     limit: i32,
     state: State<'_, TelegramState>,
     index_state: State<'_, PersistentIndexState>,
+    metrics: State<'_, PerformanceMetrics>,
 ) -> Result<PagedFiles, String> {
+    let started = std::time::Instant::now();
     let client_opt = { state.client.lock().await.clone() };
     let client = client_opt.ok_or("Telegram client not connected".to_string())?;
     let peer = resolve_peer(&client, folder_id, &state).await?;
@@ -493,6 +514,15 @@ pub async fn cmd_get_files_paged(
         files.pop(); // remove the extra look-ahead file
     }
 
+    metrics.record(
+        "fs.get_files_paged",
+        started.elapsed().as_millis(),
+        true,
+        Some(files.len()),
+        Some(files.iter().map(|file| file.size).sum()),
+        Some("telegram_page"),
+    );
+
     Ok(PagedFiles {
         next_offset_id: if has_more { last_msg_id } else { None },
         has_more,
@@ -505,7 +535,9 @@ pub async fn cmd_search_global(
     query: String,
     state: State<'_, TelegramState>,
     index_state: State<'_, PersistentIndexState>,
+    metrics: State<'_, PerformanceMetrics>,
 ) -> Result<Vec<FileMetadata>, String> {
+    let started = std::time::Instant::now();
     if query.trim().is_empty() {
         return Ok(Vec::new());
     }
@@ -607,6 +639,14 @@ pub async fn cmd_search_global(
             .cmp(&left.created_at)
             .then_with(|| left.name.cmp(&right.name))
     });
+    metrics.record(
+        "fs.search_global",
+        started.elapsed().as_millis(),
+        true,
+        Some(files.len()),
+        None,
+        Some("index_plus_telegram"),
+    );
     Ok(files)
 }
 
@@ -666,6 +706,13 @@ pub fn cmd_get_cached_files(
     index_state: State<'_, PersistentIndexState>,
 ) -> Vec<FileMetadata> {
     index_state.get_files(folder_id)
+}
+
+#[tauri::command]
+pub fn cmd_get_index_stats(
+    index_state: State<'_, PersistentIndexState>,
+) -> PersistentIndexStats {
+    index_state.stats()
 }
 
 #[tauri::command]

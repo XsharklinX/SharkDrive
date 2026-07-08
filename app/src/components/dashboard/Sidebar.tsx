@@ -8,14 +8,15 @@ import { AccountMeta, ActivityEntry, BandwidthStats, TelegramFolder } from '../.
 import { formatBytes } from '../../utils';
 import type { SmartCollection, SmartCollectionId, SmartCollectionKind } from '../../hooks/useSmartCollections';
 
-function timeAgo(isoTimestamp: string): string {
+function timeAgo(isoTimestamp: string, lang: 'en' | 'es'): string {
     const diff = Date.now() - new Date(isoTimestamp).getTime();
     const minutes = Math.floor(diff / 60_000);
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 1) return lang === 'es' ? 'ahora' : 'just now';
+    if (minutes < 60) return lang === 'es' ? `hace ${minutes} min` : `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
+    if (hours < 24) return lang === 'es' ? `hace ${hours} h` : `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return lang === 'es' ? `hace ${days} d` : `${days}d ago`;
 }
 
 export const RECENT_FOLDER_ID = -1;
@@ -112,7 +113,7 @@ export function Sidebar({
     const [createParentId, setCreateParentId] = useState<number | null>(null);
     const [showActivity, setShowActivity] = useState(false);
     const [showSmartFolders, setShowSmartFolders] = useState(true);
-    const { t } = useLanguage();
+    const { lang, t } = useLanguage();
 
     const selectedFolder = folders.find((folder) => folder.id === activeFolderId) ?? null;
     const createTargetParentId = createParentId ?? (selectedFolder ? selectedFolder.id : null);
@@ -220,6 +221,17 @@ export function Sidebar({
 
     const rootPinnedCount = (groupedFolders.root ?? []).filter((folder) => pinnedSet.has(folder.id)).length;
     const rootNormalCount = (groupedFolders.root ?? []).length - rootPinnedCount;
+    const visibleSmartCollections = smartCollections.filter((collection) => collection.count > 0 || collection.kind !== 'tag');
+
+    const smartCollectionLabel = (collection: SmartCollection) => {
+        if (collection.id === 'images') return lang === 'es' ? 'Imágenes' : 'Images';
+        if (collection.id === 'videos') return lang === 'es' ? 'Videos' : 'Videos';
+        if (collection.id === 'documents') return lang === 'es' ? 'Documentos' : 'Documents';
+        if (collection.id === 'large') return lang === 'es' ? 'Grandes' : 'Large files';
+        if (collection.id === 'recent-7d') return lang === 'es' ? 'Últimos 7 días' : 'Last 7 days';
+        if (collection.id.startsWith('tag:')) return `${lang === 'es' ? 'Etiqueta' : 'Tag'}: ${collection.id.slice(4)}`;
+        return collection.label;
+    };
 
     // ── Drag-to-resize ────────────────────────────────────────────────────────
     const SIDEBAR_WIDTH_KEY = 'sharkdrive.sidebarWidth.v1';
@@ -272,14 +284,14 @@ export function Sidebar({
                                     {vaultBadge.fileCount.toLocaleString()} files · {formatBytes(vaultBadge.totalBytes)}
                                 </span>
                             ) : (
-                                <span className="block text-xs text-telegram-subtext">Telegram cloud drive</span>
+                                <span className="block text-xs text-telegram-subtext">{lang === 'es' ? 'Drive personal en Telegram' : 'Personal Telegram drive'}</span>
                             )}
                         </div>
                     </div>
                     {onOpenVault && (
                         <button
                             onClick={onOpenVault}
-                            title="Vault Dashboard"
+                            title={lang === 'es' ? 'Resumen del drive' : 'Drive dashboard'}
                             className="rounded-lg p-1.5 text-telegram-subtext transition hover:bg-white/[0.06] hover:text-telegram-primary"
                         >
                             <BarChart2 className="h-4 w-4" />
@@ -346,22 +358,25 @@ export function Sidebar({
                         folderId={null}
                     />
                 )}
-                {smartCollections.length > 0 && onSelectSmartCollection && (
+                {visibleSmartCollections.length > 0 && onSelectSmartCollection && (
                     <div className="mt-3">
                         <button
                             onClick={() => setShowSmartFolders((visible) => !visible)}
                             className="flex w-full items-center justify-between px-3 py-2 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext transition hover:text-telegram-text"
                         >
-                            <span className="flex items-center gap-1.5"><Sparkles className="h-3 w-3" />Smart folders</span>
+                            <span className="flex items-center gap-1.5"><Sparkles className="h-3 w-3" />{t('smartFolders')}</span>
                             <ChevronDown className={`h-3 w-3 transition-transform ${showSmartFolders ? 'rotate-180' : ''}`} />
                         </button>
                         {showSmartFolders && (
                             <div className="space-y-0.5">
-                                {smartCollections.map((collection) => (
+                                <p className="px-3 pb-1 text-[10px] leading-4 text-telegram-subtext/75">
+                                    {lang === 'es' ? 'Filtros locales, no crean carpetas en Telegram.' : 'Local filters, no Telegram folders created.'}
+                                </p>
+                                {visibleSmartCollections.map((collection) => (
                                     <SidebarItem
                                         key={collection.id}
                                         icon={smartCollectionIcons[collection.kind]}
-                                        label={collection.label}
+                                        label={smartCollectionLabel(collection)}
                                         active={activeSmartCollectionId === collection.id}
                                         onClick={() => onSelectSmartCollection(collection.id)}
                                         onDrop={() => {}}
@@ -375,12 +390,12 @@ export function Sidebar({
                 )}
                 {rootPinnedCount > 0 && (
                     <>
-                        <div className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext">Pinned</div>
+                        <div className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext">{lang === 'es' ? 'Fijadas' : 'Pinned'}</div>
                         {renderFolderTree(null, 0, true)}
                     </>
                 )}
                 {rootNormalCount > 0 && (
-                    <div className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext">Folders</div>
+                    <div className="px-3 pt-4 pb-1 text-[11px] font-medium uppercase tracking-[0.18em] text-telegram-subtext">{lang === 'es' ? 'Carpetas' : 'Folders'}</div>
                 )}
                 {renderFolderTree(null, 0, rootPinnedCount > 0 ? false : undefined)}
 
@@ -392,7 +407,7 @@ export function Sidebar({
                         >
                             <span className="flex items-center gap-1.5">
                                 <Activity className="h-3 w-3" />
-                                Activity
+                                {t('activity')}
                             </span>
                             <ChevronDown className={`h-3 w-3 transition-transform ${showActivity ? 'rotate-180' : ''}`} />
                         </button>
@@ -403,7 +418,7 @@ export function Sidebar({
                                         <div className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-telegram-primary/60" />
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-xs text-telegram-text/80">{entry.message}</p>
-                                            <p className="text-[10px] text-telegram-subtext">{timeAgo(entry.timestamp)}</p>
+                                            <p className="text-[10px] text-telegram-subtext">{timeAgo(entry.timestamp, lang)}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -420,7 +435,7 @@ export function Sidebar({
                             autoFocus
                             type="text"
                             className="w-full rounded-lg border border-telegram-border bg-white/[0.04] px-3 py-2 text-sm text-telegram-text focus:outline-none focus:ring-1 focus:ring-telegram-primary"
-                            placeholder={createTargetParentId ? 'New subfolder name' : 'New folder name'}
+                            placeholder={createTargetParentId ? (lang === 'es' ? 'Nombre de subcarpeta' : 'New subfolder name') : (lang === 'es' ? 'Nombre de carpeta' : 'New folder name')}
                             value={newFolderName}
                             onChange={(e) => setNewFolderName(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && submitCreate()}
@@ -441,7 +456,7 @@ export function Sidebar({
                         className="mb-3 flex w-full items-center gap-2 rounded-lg border border-dashed border-telegram-border px-3 py-2.5 text-sm text-telegram-subtext transition hover:bg-telegram-hover hover:text-telegram-text"
                     >
                         <Plus className="h-4 w-4" />
-                        {selectedFolder ? 'Create Subfolder' : 'Create Folder'}
+                        {selectedFolder ? t('createSubfolder') : t('createFolder')}
                     </button>
                 )}
 
@@ -450,21 +465,21 @@ export function Sidebar({
                         onClick={onSync}
                         disabled={isSyncing}
                         className={`flex-1 rounded-lg px-3 py-2 text-sm transition ${isSyncing ? 'cursor-not-allowed bg-telegram-hover text-telegram-subtext opacity-60' : 'bg-telegram-primary/12 text-telegram-primary hover:bg-telegram-primary/20'}`}
-                        title="Scan for existing folders"
+                        title={lang === 'es' ? 'Buscar carpetas existentes' : 'Scan for existing folders'}
                     >
                         <span className="flex items-center justify-center gap-2">
                             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                            {isSyncing ? 'Syncing' : 'Sync'}
+                            {isSyncing ? (lang === 'es' ? 'Sincronizando' : 'Syncing') : t('sync')}
                         </span>
                     </button>
                     <button
                         onClick={onLogout}
                         className="flex-1 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
-                        title="Sign Out"
+                        title={lang === 'es' ? 'Cerrar sesion' : 'Sign out'}
                     >
                         <span className="flex items-center justify-center gap-2">
                             <LogOut className="h-3.5 w-3.5" />
-                            Logout
+                            {lang === 'es' ? 'Salir' : 'Logout'}
                         </span>
                     </button>
                 </div>

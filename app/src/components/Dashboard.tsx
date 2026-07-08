@@ -1452,6 +1452,7 @@ export function Dashboard({ onLogout }: { onLogout: () => void }) {
                     onOpenSyncHistory={() => setShowSyncHistory(true)}
                     onOpenDuplicates={() => setShowDuplicates(true)}
                     onOpenWebAccess={() => setShowWebAccess(true)}
+                    onOpenVault={() => setShowVault(true)}
                     onOpenConfigExport={() => setShowConfigModal(true)}
                     onOpenCloudImport={() => setShowCloudImport(true)}
                     nextSyncIn={autoSyncInterval > 0 ? nextSyncIn : null}

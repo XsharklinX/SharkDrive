@@ -21,6 +21,17 @@ struct PersistentIndexData {
     folder_size_cache: HashMap<String, (i64, u64)>,
 }
 
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct PersistentIndexStats {
+    pub folder_count: usize,
+    pub indexed_folder_count: usize,
+    pub indexed_file_count: usize,
+    pub total_indexed_bytes: u64,
+    pub folders_synced_at_ms: i64,
+    pub oldest_file_sync_at_ms: Option<i64>,
+    pub newest_file_sync_at_ms: Option<i64>,
+}
+
 pub struct PersistentIndexState {
     path: std::sync::Mutex<PathBuf>,
     inner: RwLock<PersistentIndexData>,
@@ -113,6 +124,42 @@ impl PersistentIndexState {
         self.inner
             .read()
             .map(|g| g.files_by_folder.values().flat_map(|e| e.items.clone()).collect())
+            .unwrap_or_default()
+    }
+
+    pub fn stats(&self) -> PersistentIndexStats {
+        self.inner
+            .read()
+            .map(|inner| {
+                let indexed_file_count = inner
+                    .files_by_folder
+                    .values()
+                    .map(|entry| entry.items.len())
+                    .sum();
+                let total_indexed_bytes = inner
+                    .files_by_folder
+                    .values()
+                    .flat_map(|entry| entry.items.iter())
+                    .map(|file| file.size)
+                    .sum();
+                let mut sync_times = inner
+                    .files_by_folder
+                    .values()
+                    .filter(|entry| entry.synced_at_ms > 0)
+                    .map(|entry| entry.synced_at_ms)
+                    .collect::<Vec<_>>();
+                sync_times.sort_unstable();
+
+                PersistentIndexStats {
+                    folder_count: inner.folders.len(),
+                    indexed_folder_count: inner.files_by_folder.len(),
+                    indexed_file_count,
+                    total_indexed_bytes,
+                    folders_synced_at_ms: inner.folders_synced_at_ms,
+                    oldest_file_sync_at_ms: sync_times.first().copied(),
+                    newest_file_sync_at_ms: sync_times.last().copied(),
+                }
+            })
             .unwrap_or_default()
     }
 

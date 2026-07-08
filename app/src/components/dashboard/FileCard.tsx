@@ -5,6 +5,7 @@ import { TelegramFile } from '../../types';
 import { tauriApi } from '../../api/tauri';
 import { isImageFile, isVideoFile, resolveFileFolderId } from '../../utils';
 import { FileTypeIcon } from '../FileTypeIcon';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface FileCardProps {
     file: TelegramFile;
@@ -66,6 +67,7 @@ export function FileCard({
     onNoteChange,
     hasContentMatch = false,
 }: FileCardProps) {
+    const { lang } = useLanguage();
     const isFolder = file.type === 'folder';
     const [isDragOver, setIsDragOver] = useState(false);
     const [isRenaming, setIsRenaming] = useState(false);
@@ -76,17 +78,10 @@ export function FileCard({
     const renameInputRef = useRef<HTMLInputElement>(null);
     const [thumbnail, setThumbnail] = useState<string | null>(null);
     const [thumbnailLoading, setThumbnailLoading] = useState(false);
-    const [streamToken, setStreamToken] = useState<string | null>(null);
-    const [videoReady, setVideoReady] = useState(false);
-    const [videoError, setVideoError] = useState(false);
     const createdLabel = getCreatedLabel(file.created_at);
-    // Videos use the LAN stream URL for preview — getThumbnail downloads the whole video, so skip it.
-    const supportsThumbnail = !isFolder && isImageFile(file.name);
+    const supportsThumbnail = !isFolder && (isImageFile(file.name) || isVideoFile(file.name));
     const isVideo = isVideoFile(file.name);
     const resolvedFolderId = resolveFileFolderId(file, activeFolderId ?? null);
-    const videoPreviewUrl = isVideo && streamToken
-        ? `http://localhost:14200/stream/${resolvedFolderId ?? 'home'}/${file.id}?token=${streamToken}`
-        : null;
 
     // IntersectionObserver: only load thumbnail when the card is actually visible
     const cardRef = useRef<HTMLDivElement>(null);
@@ -115,7 +110,7 @@ export function FileCard({
             if (cancelled) return;
             setThumbnailLoading(true);
             try {
-                const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 8000));
+                const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), isVideo ? 4500 : 8000));
                 const result = await Promise.race([tauriApi.getThumbnail(file.id, resolvedFolderId), timeout]);
                 if (!cancelled && result) setThumbnail(result);
             } catch {
@@ -129,23 +124,7 @@ export function FileCard({
             cancelled = true;
             clearTimeout(timer);
         };
-    }, [file.id, file.name, isFolder, resolvedFolderId, supportsThumbnail]);
-
-    useEffect(() => {
-        if (!isVideo || thumbnail) return;
-
-        let cancelled = false;
-        const tokenTimeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 5000));
-        Promise.race([tauriApi.getStreamToken(), tokenTimeout])
-            .then((token) => {
-                if (!cancelled && token) setStreamToken(token);
-            })
-            .catch(() => {});
-
-        return () => {
-            cancelled = true;
-        };
-    }, [isVideo, thumbnail]);
+    }, [file.id, file.name, isFolder, isVideo, resolvedFolderId, supportsThumbnail]);
 
     return (
         <div
@@ -214,22 +193,7 @@ export function FileCard({
                 {thumbnail ? (
                     <img src={thumbnail} alt={file.name} className="absolute inset-0 h-full w-full object-cover" />
                 ) : null}
-                {!thumbnail && isVideo && videoPreviewUrl && !videoError ? (
-                    <video
-                        src={videoPreviewUrl}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className={`absolute inset-0 h-full w-full object-cover transition-opacity ${videoReady ? 'opacity-100' : 'opacity-0'}`}
-                        onLoadedData={(event) => {
-                            event.currentTarget.pause();
-                            setVideoReady(true);
-                        }}
-                        onError={() => setVideoError(true)}
-                    />
-                ) : null}
                 {thumbnail ? <div className="absolute inset-0 bg-gradient-to-t from-telegram-bg/95 via-telegram-bg/60 to-transparent" /> : null}
-                {!thumbnail && videoReady ? <div className="absolute inset-0 bg-gradient-to-t from-telegram-bg/95 via-telegram-bg/60 to-transparent" /> : null}
 
                 {isDragOver && isFolder && (
                     <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-lg bg-telegram-primary/25 backdrop-blur-[2px]">
@@ -257,7 +221,7 @@ export function FileCard({
                 {file.is_encrypted && (
                     <span className="absolute right-2 top-9 z-10 flex items-center gap-0.5 rounded-md border border-yellow-400/25 bg-yellow-400/10 px-1.5 py-0.5 text-[10px] text-yellow-300">
                         <Shield className="h-2.5 w-2.5" />
-                        Enc
+                        {lang === 'es' ? 'Cifrado' : 'Encrypted'}
                     </span>
                 )}
                 {hasContentMatch && (
@@ -267,7 +231,7 @@ export function FileCard({
                 )}
 
                 <div className="absolute inset-0 flex flex-col justify-between p-2">
-                    {!thumbnail && !videoReady && (
+                    {!thumbnail && (
                         <div className="flex flex-1 items-center justify-center">
                             {isFolder ? (
                                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-telegram-border/80 bg-white/[0.03]" style={folderColor ? { color: folderColor, borderColor: `${folderColor}55`, backgroundColor: `${folderColor}18` } : undefined}>
@@ -280,7 +244,7 @@ export function FileCard({
                             )}
                         </div>
                     )}
-                    {(thumbnail || videoReady) && isVideo && (
+                    {isVideo && (
                         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white shadow-lg">
                                 <Play className="ml-0.5 h-4 w-4 fill-current" />

@@ -41,12 +41,29 @@ function Update-PackageLockVersion {
     Remove-Item Env:SHARKDRIVE_PACKAGE_LOCK
 }
 
+function Update-PnpmLockVersion {
+    $lockPath = Join-Path $root 'app\pnpm-lock.yaml'
+    if (-not (Test-Path -LiteralPath $lockPath)) {
+        return
+    }
+
+    $content = Get-Content -LiteralPath $lockPath -Raw
+    $updated = [regex]::Replace(
+        $content,
+        '(?ms)(importers:\s*\r?\n\s*\.:\s*\r?\n(?:.*?\r?\n)*?\s+version:\s*)[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?',
+        "`${1}$Version",
+        1
+    )
+    Set-Content -LiteralPath $lockPath -Value ($updated.TrimEnd() + [Environment]::NewLine) -NoNewline
+}
+
 Update-JsonVersion 'app\package.json'
 Update-PackageLockVersion
+Update-PnpmLockVersion
 Update-JsonVersion 'app\src-tauri\tauri.conf.json'
 Update-RegexVersion 'app\src-tauri\Cargo.toml' '(?m)^version = "[^"]+"' "version = `"$Version`""
 Update-RegexVersion 'app\src-tauri\Cargo.lock' '(?ms)(\[\[package\]\]\r?\nname = "app"\r?\nversion = ")[^"]+(")' "`${1}$Version`${2}"
-Update-RegexVersion 'README.md' 'version-[0-9]+\.[0-9]+\.[0-9]+-brightgreen' "version-$Version-brightgreen"
-Update-RegexVersion 'Docs\ARCHITECTURE.md' '> \*\*Version:\*\* [0-9]+\.[0-9]+\.[0-9]+' "> **Version:** $Version"
+Update-RegexVersion 'README.md' 'version-(?:[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?|-Version)-brightgreen' "version-$Version-brightgreen"
+Update-RegexVersion 'Docs\ARCHITECTURE.md' '> \*\*Version:\*\* (?:[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?|-Version)' "> **Version:** $Version"
 
 Write-Host "Synchronized version to $Version"

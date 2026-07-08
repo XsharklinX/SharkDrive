@@ -1,5 +1,28 @@
-import { useState } from 'react';
-import { ChevronRight, Copy, FolderOpen, HardDrive, Link2, Moon, Plus, Search, Settings, Star, Sun, Trash2, X, MoveRight, Download, CheckSquare, RefreshCw, GitFork, Smartphone, Cloud, Package } from 'lucide-react';
+import { useEffect, useRef, useState, type ElementType } from 'react';
+import {
+    CheckSquare,
+    ChevronRight,
+    Cloud,
+    Copy,
+    Download,
+    FolderOpen,
+    GitFork,
+    HardDrive,
+    Link2,
+    Moon,
+    MoreHorizontal,
+    MoveRight,
+    Package,
+    Plus,
+    RefreshCw,
+    Search,
+    Settings,
+    Smartphone,
+    Star,
+    Sun,
+    Trash2,
+    X,
+} from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -40,6 +63,7 @@ interface TopBarProps {
     onOpenSyncHistory?: () => void;
     onOpenDuplicates?: () => void;
     onOpenWebAccess?: () => void;
+    onOpenVault?: () => void;
     onOpenConfigExport?: () => void;
     onOpenCloudImport?: () => void;
     nextSyncIn?: number | null;
@@ -88,6 +112,7 @@ export function TopBar({
     onOpenSyncHistory,
     onOpenDuplicates,
     onOpenWebAccess,
+    onOpenVault,
     onOpenConfigExport,
     onOpenCloudImport,
     nextSyncIn,
@@ -101,16 +126,55 @@ export function TopBar({
     const { theme, toggleTheme } = useTheme();
     const { lang, t } = useLanguage();
     const [searchFocused, setSearchFocused] = useState(false);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const advancedMenuRef = useRef<HTMLDivElement>(null);
+
     const hasQueuedUploads = queuedUploadCount > 0;
     const showRecentSearches = searchFocused && recentSearches.length > 0;
     const shouldShowTransferHint = isDraggingFiles || hasQueuedUploads || failedUploadCount > 0;
+    const hasAdvancedTools = !!(
+        onOpenLinks ||
+        onOpenSyncHistory ||
+        onOpenDuplicates ||
+        onOpenWebAccess ||
+        onOpenVault ||
+        onOpenCloudImport ||
+        onOpenConfigExport ||
+        onToggleContentSearch ||
+        showFolderSearchScope ||
+        onDownloadFolderTree ||
+        onEncryptedFileUpload
+    );
+
     const transferStatusLabel = isDraggingFiles
         ? (lang === 'es' ? 'Arrastra archivos para subir' : 'Drop files to upload')
         : uploadingCount > 0
             ? (lang === 'es' ? `${uploadingCount} subiendo` : `${uploadingCount} uploading`)
             : failedUploadCount > 0
-                ? (lang === 'es' ? `${failedUploadCount} requieren atención` : `${failedUploadCount} need attention`)
+                ? (lang === 'es' ? `${failedUploadCount} requieren atencion` : `${failedUploadCount} need attention`)
                 : (lang === 'es' ? `${queuedUploadCount} en cola` : `${queuedUploadCount} queued`);
+
+    useEffect(() => {
+        if (!advancedOpen) return;
+        const close = (event: PointerEvent) => {
+            if (advancedMenuRef.current?.contains(event.target as Node)) return;
+            setAdvancedOpen(false);
+        };
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setAdvancedOpen(false);
+        };
+        document.addEventListener('pointerdown', close, true);
+        window.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', close, true);
+            window.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [advancedOpen]);
+
+    const runAdvancedAction = (action: () => void) => {
+        action();
+        setAdvancedOpen(false);
+    };
 
     return (
         <header className="sticky top-0 z-10 border-b border-telegram-border/80 bg-telegram-bg/95 px-5 py-3 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
@@ -124,11 +188,8 @@ export function TopBar({
                                     <span key={segment.id ?? 'root'} className="flex min-w-0 items-center gap-0.5">
                                         {i > 0 && <ChevronRight className="h-4 w-4 flex-shrink-0 text-telegram-subtext/40" />}
                                         {isLast ? (
-                                            <span className="truncate text-[1.3rem] font-semibold tracking-tight text-telegram-text inline-flex items-center gap-2">
+                                            <span className="inline-flex truncate text-[1.3rem] font-semibold tracking-tight text-telegram-text">
                                                 {segment.name}
-                                                {!isConnected && (
-                                                    <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs font-semibold text-red-400">Offline</span>
-                                                )}
                                             </span>
                                         ) : (
                                             <button
@@ -143,26 +204,23 @@ export function TopBar({
                             })}
                         </nav>
                     ) : (
-                        <h1 className="truncate text-[1.5rem] font-semibold tracking-tight text-telegram-text inline-flex items-center gap-2">
-                            {currentFolderName}
-                            {!isConnected && (
-                                <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-xs font-semibold text-red-400">Offline</span>
-                            )}
-                        </h1>
+                        <h1 className="truncate text-[1.45rem] font-semibold tracking-tight text-telegram-text">{currentFolderName}</h1>
                     )}
-                    {shouldShowTransferHint && (
-                        <div className="mt-1 max-w-56">
-                            <p className={`text-xs ${failedUploadCount > 0 ? 'text-amber-200' : 'text-telegram-subtext'}`}>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-telegram-subtext">
+                        {!isConnected && (
+                            <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-semibold text-red-300">
+                                {lang === 'es' ? 'Sin conexion' : 'Offline'}
+                            </span>
+                        )}
+                        {shouldShowTransferHint && (
+                            <span className={failedUploadCount > 0 ? 'text-amber-200' : ''}>
                                 {transferStatusLabel}{uploadProgress != null && uploadingCount > 0 ? ` | ${uploadProgress}%` : ''}
-                            </p>
-                            {uploadProgress != null && uploadingCount > 0 && (
-                                <div className="mt-1 h-1 overflow-hidden rounded-full bg-telegram-border">
-                                    <div
-                                        className="h-full rounded-full bg-telegram-primary transition-all duration-300"
-                                        style={{ width: `${uploadProgress}%` }}
-                                    />
-                                </div>
-                            )}
+                            </span>
+                        )}
+                    </div>
+                    {uploadProgress != null && uploadingCount > 0 && (
+                        <div className="mt-1 h-1 max-w-56 overflow-hidden rounded-full bg-telegram-border">
+                            <div className="h-full rounded-full bg-telegram-primary transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
                         </div>
                     )}
                 </div>
@@ -193,66 +251,6 @@ export function TopBar({
                         {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
                     </button>
 
-                    {onOpenLinks && (
-                        <button
-                            onClick={onOpenLinks}
-                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title={lang === 'es' ? 'Mis enlaces compartidos' : 'My Share Links'}
-                        >
-                            <Link2 className="h-4 w-4" />
-                        </button>
-                    )}
-
-                    {onOpenSyncHistory && (
-                        <button
-                            onClick={onOpenSyncHistory}
-                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title={lang === 'es' ? 'Historial de sync' : 'Sync History'}
-                        >
-                            <RefreshCw className="h-4 w-4" />
-                        </button>
-                    )}
-
-                    {onOpenDuplicates && (
-                        <button
-                            onClick={onOpenDuplicates}
-                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title={lang === 'es' ? 'Duplicados' : 'Find Duplicates'}
-                        >
-                            <GitFork className="h-4 w-4" />
-                        </button>
-                    )}
-
-                    {onOpenWebAccess && (
-                        <button
-                            onClick={onOpenWebAccess}
-                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title={lang === 'es' ? 'Acceso móvil' : 'Mobile Companion'}
-                        >
-                            <Smartphone className="h-4 w-4" />
-                        </button>
-                    )}
-
-                    {onOpenCloudImport && (
-                        <button
-                            onClick={onOpenCloudImport}
-                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title={lang === 'es' ? 'Importar desde nube' : 'Import from Cloud'}
-                        >
-                            <Cloud className="h-4 w-4" />
-                        </button>
-                    )}
-
-                    {onOpenConfigExport && (
-                        <button
-                            onClick={onOpenConfigExport}
-                            className="rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
-                            title={lang === 'es' ? 'Configuración' : 'Export/Import Config'}
-                        >
-                            <Package className="h-4 w-4" />
-                        </button>
-                    )}
-
                     <button
                         onClick={onOpenSettings}
                         className="relative rounded-lg border border-telegram-border px-2.5 py-2 text-telegram-subtext transition hover:text-telegram-text"
@@ -266,6 +264,67 @@ export function TopBar({
                             </span>
                         )}
                     </button>
+
+                    {hasAdvancedTools && (
+                        <div className="relative" ref={advancedMenuRef}>
+                            <button
+                                onClick={() => setAdvancedOpen((open) => !open)}
+                                className={`rounded-lg border px-2.5 py-2 transition ${advancedOpen ? 'border-telegram-primary/30 bg-telegram-primary/10 text-telegram-primary' : 'border-telegram-border text-telegram-subtext hover:text-telegram-text'}`}
+                                title={lang === 'es' ? 'Mas opciones' : 'More options'}
+                                aria-label={lang === 'es' ? 'Mas opciones' : 'More options'}
+                            >
+                                <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                            {advancedOpen && (
+                                <div className="absolute right-0 top-[calc(100%+0.4rem)] z-30 w-64 rounded-xl border border-telegram-border bg-telegram-surface p-2 shadow-2xl">
+                                    <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-telegram-subtext">
+                                        {lang === 'es' ? 'Mas opciones' : 'More options'}
+                                    </div>
+                                    <MenuButton icon={ShieldIcon} label={lang === 'es' ? 'Subir cifrado' : 'Upload encrypted'} onClick={() => runAdvancedAction(onEncryptedFileUpload)} />
+                                    {onDownloadFolderTree && <MenuButton icon={HardDrive} label={t('withSubfolders')} onClick={() => runAdvancedAction(onDownloadFolderTree)} />}
+                                    {onOpenLinks && <MenuButton icon={Link2} label={lang === 'es' ? 'Enlaces compartidos' : 'Share links'} onClick={() => runAdvancedAction(onOpenLinks)} />}
+                                    {onOpenSyncHistory && <MenuButton icon={RefreshCw} label={lang === 'es' ? 'Historial de sync' : 'Sync history'} onClick={() => runAdvancedAction(onOpenSyncHistory)} />}
+                                    {onOpenDuplicates && <MenuButton icon={GitFork} label={lang === 'es' ? 'Buscar duplicados' : 'Find duplicates'} onClick={() => runAdvancedAction(onOpenDuplicates)} />}
+                                    {onOpenWebAccess && <MenuButton icon={Smartphone} label={lang === 'es' ? 'Acceso movil' : 'Mobile access'} onClick={() => runAdvancedAction(onOpenWebAccess)} />}
+                                    {onOpenVault && <MenuButton icon={HardDrive} label={lang === 'es' ? 'Resumen y manifest' : 'Vault summary and manifest'} onClick={() => runAdvancedAction(onOpenVault)} />}
+                                    {onOpenCloudImport && <MenuButton icon={Cloud} label={lang === 'es' ? 'Importar desde nube' : 'Import from cloud'} onClick={() => runAdvancedAction(onOpenCloudImport)} />}
+                                    {onOpenConfigExport && <MenuButton icon={Package} label={lang === 'es' ? 'Exportar configuracion' : 'Export configuration'} onClick={() => runAdvancedAction(onOpenConfigExport)} />}
+                                    {(showFolderSearchScope || onToggleContentSearch) && (
+                                        <div className="mt-2 border-t border-telegram-border/70 pt-2">
+                                            {showFolderSearchScope && (
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={searchCurrentFolderOnly}
+                                                        onChange={(event) => onSearchCurrentFolderOnlyChange(event.target.checked)}
+                                                        className="accent-telegram-primary"
+                                                    />
+                                                    {t('searchOnlyThisFolder')}
+                                                </label>
+                                            )}
+                                            {onToggleContentSearch && (
+                                                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={contentSearchEnabled}
+                                                        onChange={onToggleContentSearch}
+                                                        className="accent-telegram-primary"
+                                                    />
+                                                    <span className="flex items-center gap-1.5">
+                                                        {lang === 'es' ? 'Buscar en contenido' : 'Search content'}
+                                                        {contentSearchScanning && <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-telegram-primary/40 border-t-telegram-primary" />}
+                                                        {!contentSearchScanning && contentSearchEnabled && contentSearchMatchCount > 0 && (
+                                                            <span className="rounded-full bg-telegram-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-telegram-primary">{contentSearchMatchCount}</span>
+                                                        )}
+                                                    </span>
+                                                </label>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -293,7 +352,7 @@ export function TopBar({
                             <button
                                 onClick={() => onSearchChange('')}
                                 className="rounded-md p-1 text-telegram-subtext transition hover:text-telegram-text"
-                                title={lang === 'es' ? 'Limpiar búsqueda' : 'Clear search'}
+                                title={lang === 'es' ? 'Limpiar busqueda' : 'Clear search'}
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -301,7 +360,7 @@ export function TopBar({
                     </div>
                     {showRecentSearches && (
                         <div className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-20 rounded-lg border border-telegram-border bg-telegram-surface p-1.5 shadow-2xl">
-                            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-telegram-subtext">{lang === 'es' ? 'Búsquedas recientes' : 'Recent searches'}</div>
+                            <div className="px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-telegram-subtext">{lang === 'es' ? 'Busquedas recientes' : 'Recent searches'}</div>
                             {recentSearches.map((term) => (
                                 <button
                                     key={term}
@@ -319,38 +378,6 @@ export function TopBar({
                             ))}
                         </div>
                     )}
-                    {showFolderSearchScope && (
-                        <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-2 px-1 text-xs text-telegram-subtext transition hover:text-telegram-text">
-                            <input
-                                type="checkbox"
-                                checked={searchCurrentFolderOnly}
-                                onChange={(event) => onSearchCurrentFolderOnlyChange(event.target.checked)}
-                                className="accent-telegram-primary"
-                            />
-                            {t('searchOnlyThisFolder')}
-                        </label>
-                    )}
-                    {onToggleContentSearch && (
-                        <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-2 px-1 text-xs text-telegram-subtext transition hover:text-telegram-text">
-                            <input
-                                type="checkbox"
-                                checked={contentSearchEnabled}
-                                onChange={onToggleContentSearch}
-                                className="accent-telegram-primary"
-                            />
-                            <span className="flex items-center gap-1">
-                                {lang === 'es' ? 'Buscar en contenido' : 'Search in content'}
-                                {contentSearchScanning && (
-                                    <span className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-telegram-primary/40 border-t-telegram-primary" />
-                                )}
-                                {!contentSearchScanning && contentSearchEnabled && contentSearchMatchCount > 0 && (
-                                    <span className="rounded-full bg-telegram-primary/20 px-1.5 py-0.5 text-[10px] font-medium text-telegram-primary">
-                                        {contentSearchMatchCount}
-                                    </span>
-                                )}
-                            </span>
-                        </label>
-                    )}
                 </div>
 
                 <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -361,7 +388,7 @@ export function TopBar({
                                 ? 'border-telegram-primary/30 bg-telegram-primary/10 text-telegram-primary'
                                 : 'border-telegram-border text-telegram-subtext hover:text-telegram-text'
                         }`}
-                        title={selectionMode ? (lang === 'es' ? 'Salir del modo de selección' : 'Exit selection mode') : (lang === 'es' ? 'Seleccionar múltiples archivos' : 'Select multiple files')}
+                        title={selectionMode ? (lang === 'es' ? 'Salir de seleccion' : 'Exit selection mode') : (lang === 'es' ? 'Seleccionar multiples archivos' : 'Select multiple files')}
                     >
                         <span className="flex items-center gap-2">
                             <CheckSquare className="h-4 w-4" />
@@ -402,16 +429,8 @@ export function TopBar({
                             <Plus className="h-4 w-4" />
                             {t('addFiles')}
                             {hasQueuedUploads && (
-                                <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold text-black">
-                                    {queuedUploadCount}
-                                </span>
+                                <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px] font-semibold text-black">{queuedUploadCount}</span>
                             )}
-                        </span>
-                    </button>
-                    <button onClick={onEncryptedFileUpload} className="rounded-lg border border-yellow-300/25 px-3 py-2 text-sm text-yellow-200 transition hover:bg-yellow-300/10" title={lang === 'es' ? 'Añadir archivos cifrados' : 'Add encrypted files'}>
-                        <span className="flex items-center gap-2">
-                            <ShieldIcon />
-                            {t('addEncrypted')}
                         </span>
                     </button>
                     <button onClick={onFolderUpload} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={t('uploadFolder')}>
@@ -420,23 +439,27 @@ export function TopBar({
                             {t('uploadFolder')}
                         </span>
                     </button>
-                    <button onClick={onDownloadFolder} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={lang === 'es' ? 'Descargar todos los archivos de esta carpeta (plano)' : 'Download all files in this folder (flat)'}>
+                    <button onClick={onDownloadFolder} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={lang === 'es' ? 'Descargar esta carpeta' : 'Download this folder'}>
                         <span className="flex items-center gap-2">
                             <HardDrive className="h-4 w-4" />
                             {t('downloadAll')}
                         </span>
                     </button>
-                    {onDownloadFolderTree && (
-                        <button onClick={onDownloadFolderTree} className="rounded-lg border border-telegram-border px-3 py-2 text-sm text-telegram-subtext transition hover:text-telegram-text" title={lang === 'es' ? 'Descargar esta carpeta y subcarpetas' : 'Download this folder and all subfolders'}>
-                            <span className="flex items-center gap-2">
-                                <HardDrive className="h-4 w-4" />
-                                {t('withSubfolders')}
-                            </span>
-                        </button>
-                    )}
                 </div>
             </div>
         </header>
+    );
+}
+
+function MenuButton({ icon: Icon, label, onClick }: { icon: ElementType; label: string; onClick: () => void }) {
+    return (
+        <button
+            onClick={onClick}
+            className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-telegram-subtext transition hover:bg-white/[0.04] hover:text-telegram-text"
+        >
+            <Icon className="h-4 w-4" />
+            <span className="truncate">{label}</span>
+        </button>
     );
 }
 

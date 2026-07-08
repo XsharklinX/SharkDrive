@@ -6,6 +6,7 @@ import { useConfirm } from '../context/ConfirmContext';
 import { TelegramFolder } from '../types';
 import { useNetworkStatus } from './useNetworkStatus';
 import { tauriApi } from '../api/tauri';
+import { formatError } from '../utils';
 
 export function useTelegramConnection(onLogoutParent: () => void) {
     const queryClient = useQueryClient();
@@ -145,6 +146,10 @@ export function useTelegramConnection(onLogoutParent: () => void) {
 
     const handleSyncFolders = async () => {
         if (!store) return;
+        if (isSyncing) {
+            toast.info('Sync already in progress.');
+            return;
+        }
         setIsSyncing(true);
         try {
             const foundFolders = await tauriApi.scanFolders();
@@ -182,8 +187,8 @@ export function useTelegramConnection(onLogoutParent: () => void) {
             } else {
                 toast.info("Sync complete. No folder changes found.");
             }
-        } catch {
-            toast.error("Sync failed");
+        } catch (error) {
+            toast.error(`Sync failed: ${formatError(error)}`);
         } finally {
             setIsSyncing(false);
         }
@@ -200,7 +205,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
             await store.save();
             toast.success(parentId ? `Subfolder "${name}" created.` : `Folder "${name}" created.`);
         } catch (e) {
-            toast.error("Failed to create folder: " + e);
+            toast.error(`Failed to create folder: ${formatError(e)}`);
             throw e;
         }
     };
@@ -242,7 +247,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
                     if (activeFolderId === folderId) setActiveFolderId(null);
                 }
             } else {
-                toast.error(`Failed to delete folder from Telegram: ${e}`);
+                toast.error(`Failed to delete folder: ${formatError(e)}`);
             }
         }
     };
@@ -259,7 +264,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
             }
             toast.success(`Renamed to "${newName}"`);
         } catch (e) {
-            toast.error(`Failed to rename folder: ${e}`);
+            toast.error(`Failed to rename folder: ${formatError(e)}`);
             throw e;
         }
     };
@@ -275,7 +280,7 @@ export function useTelegramConnection(onLogoutParent: () => void) {
             }
             toast.success(parentId ? 'Folder moved into collection.' : 'Folder moved to root.');
         } catch (e) {
-            toast.error(`Failed to move folder: ${e}`);
+            toast.error(`Failed to move folder: ${formatError(e)}`);
             throw e;
         }
     };

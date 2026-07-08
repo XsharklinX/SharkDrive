@@ -3,6 +3,7 @@ pub mod bandwidth;
 pub mod commands;
 pub mod index_store;
 pub mod models;
+pub mod performance;
 pub mod server;
 pub mod sync_log;
 pub mod web_auth;
@@ -18,6 +19,7 @@ use account_manager::AccountManager;
 use commands::cloud_import::DropboxState;
 use commands::security::{TotpState, WipeState};
 use index_store::PersistentIndexState;
+use performance::PerformanceMetrics;
 use sync_log::SyncLog;
 use web_auth::WebAuthState;
 use rand::Rng;
@@ -147,6 +149,7 @@ pub fn run() {
                 runner_count: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             });
             app.manage(bandwidth::BandwidthManager::new(app.handle()));
+            app.manage(PerformanceMetrics::new());
             app.manage(StreamToken(stream_token.clone()));
             app.manage(ActixServerHandle(server_handle_for_setup.clone()));
             app.manage(EncryptionState::new());
@@ -320,6 +323,7 @@ pub fn run() {
             commands::cmd_check_connection,
             commands::cmd_is_network_available,
             commands::cmd_clean_cache,
+            commands::cmd_get_cache_stats,
             commands::cmd_get_thumbnail,
             commands::cmd_get_stream_token,
             commands::cmd_rename_file,
@@ -368,6 +372,7 @@ pub fn run() {
             commands::cmd_batch_rename,
             commands::cmd_get_cached_files,
             commands::cmd_get_cached_folders,
+            commands::cmd_get_index_stats,
             commands::cmd_get_files_paged,
             commands::cmd_extract_zip,
             commands::cmd_compress_image,
@@ -428,6 +433,8 @@ pub fn run() {
             commands::cmd_clear_web_pin,
             commands::cmd_has_web_pin,
             commands::cmd_get_web_access_url,
+            commands::cmd_get_performance_snapshot,
+            commands::cmd_clear_performance_metrics,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
